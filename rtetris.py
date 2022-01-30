@@ -1,3 +1,9 @@
+# Usage:
+#
+#   $ stty raw
+#   $ nc localhost 12345
+#   $ stty cooked
+
 from __future__ import annotations
 import copy
 import time
@@ -13,6 +19,9 @@ from typing import Iterator
 #   - ask players names when joining, and display them below game
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
+#   - what to do about overlapping moving blocks of different players?
+#   - fast down
+#   - rotate
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -22,6 +31,13 @@ CLEAR_SCREEN = CSI + b"2J"
 MOVE_CURSOR = CSI + b"%d;%dH"
 COLOR = CSI + b"1;%dm"
 CLEAR_TO_END_OF_LINE = CSI + b"0K"
+
+# figured with trial and error
+CONTROL_C = b"\x03"
+UP_ARROW_KEY = CSI + b"A"
+DOWN_ARROW_KEY = CSI + b"B"
+RIGHT_ARROW_KEY = CSI + b"C"
+LEFT_ARROW_KEY = CSI + b"D"
 
 
 # Width varies as people join/leave
@@ -47,6 +63,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def setup(self) -> None:
         self.last_displayed_lines = [b""] * (HEIGHT + 2)
+        self.disconnecting = False
 
     def new_block(self) -> None:
         self.moving_block_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -96,8 +113,30 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 self.request.sendall(MOVE_CURSOR % (y + 1, 1))
                 self.request.sendall(new_line)
                 self.request.sendall(CLEAR_TO_END_OF_LINE)
-
         self.last_displayed_lines = lines.copy()
+
+        # TODO: not ideal
+        self.request.sendall(MOVE_CURSOR % (1, 1))
+
+    def _move_block_left(self) -> None:
+        if not any(
+            x-1 < 0
+            or self.server.landed_blocks[y][x-1] is not None
+            for x, y in self.get_moving_block_coords()
+        ):
+            x, y = self._moving_block_location
+            x -= 1
+            self._moving_block_location = (x, y)
+
+    def _move_block_right(self) -> None:
+        if not any(
+            x+1 >= self.server.get_width()
+            or self.server.landed_blocks[y][x+1] is not None
+            for x, y in self.get_moving_block_coords()
+        ):
+            x, y = self._moving_block_location
+            x += 1
+            self._moving_block_location = (x, y)
 
     def _move_block_down(self) -> None:
         if any(
@@ -127,6 +166,33 @@ class TetrisClient(socketserver.BaseRequestHandler):
             x -= right - self.server.get_width()
             self._moving_block_location = (x, y)
 
+    def _input_thread(self):
+        while True:
+            try:
+                chunk = self.request.recv(4096)
+            except OSError:
+                # Sending will error once it stops waiting.
+                # Just treat this same as a clean disconnect.
+                chunk = b""
+
+            if chunk == CONTROL_C or not chunk:
+                # User disconnected, stop waiting for timeout
+                print("Disconnect: received", chunk)
+                self.disconnecting = True
+                with self.server.state_change():
+                    pass
+                break
+
+            with self.server.state_change():
+                if chunk in (b"A", b"a", LEFT_ARROW_KEY):
+                    self._move_block_left()
+                if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
+                    self._move_block_right()
+                if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
+                    print("TODO: rotate")
+                if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
+                    print("TODO: fast down")
+
     def handle(self) -> None:
         with self.server.state_change():
             available_colors = PLAYER_COLORS.copy()
@@ -140,6 +206,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
             self.new_block()
 
         try:
+            threading.Thread(target=self._input_thread).start()
+
             self.request.sendall(CLEAR_SCREEN)
 
             next_move = time.monotonic()
@@ -149,7 +217,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     with self.server.state_change():
                         self._move_block_down()
                     next_move += 0.5
+                if self.disconnecting:
+                    break
                 self.render_game()
+        except OSError as e:
+            print("Disconnect:", e)
         finally:
             with self.server.state_change():
                 i = self.server.clients.index(self)
