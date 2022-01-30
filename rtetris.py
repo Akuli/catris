@@ -20,8 +20,8 @@ from typing import Iterator
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
-#   - rotate
 #   - clear full lines
+#   - mouse wheeling
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -62,6 +62,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
     server: TetrisServer
 
     def setup(self) -> None:
+        print(self.client_address, "New connection")
         self.last_displayed_lines = [b""] * (HEIGHT + 2)
         self.disconnecting = False
 
@@ -73,11 +74,23 @@ class TetrisClient(socketserver.BaseRequestHandler):
             WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
             -1,
         )
+        self._rotation = 0
 
-    def get_moving_block_coords(self) -> Iterator[tuple[int, int]]:
+    def get_moving_block_coords(
+        self, rotation: int | None = None
+    ) -> list[tuple[int, int]]:
+        if rotation is None:
+            rotation = self._rotation
+
+        result = []
+
         base_x, base_y = self._moving_block_location
         for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_shape_letter]:
-            yield (base_x + rel_x, base_y + rel_y)
+            for iteration in range(rotation):
+                rel_x, rel_y = -rel_y, rel_x
+            result.append((base_x + rel_x, base_y + rel_y))
+
+        return result
 
     def render_game(self) -> None:
         header_line = b"o"
@@ -118,17 +131,19 @@ class TetrisClient(socketserver.BaseRequestHandler):
         # TODO: not ideal
         self.request.sendall(MOVE_CURSOR % (1, 1))
 
+    def _moving_block_coords_are_possible(self, coords: list[tuple[int, int]]) -> bool:
+        return all(
+            0 <= x < self.server.get_width()
+            and y < HEIGHT
+            and (y < 0 or self.server.landed_blocks[y][x] is None)
+            for x, y in coords
+        )
+
     def _move_if_possible(self, dx: int, dy: int) -> bool:
-        for x, y in self.get_moving_block_coords():
-            x += dx
-            y += dy
-            if (
-                x < 0
-                or x >= self.server.get_width()
-                or y >= HEIGHT
-                or (y >= 0 and self.server.landed_blocks[y][x] is not None)
-            ):
-                return False
+        if not self._moving_block_coords_are_possible(
+            [(x + dx, y + dy) for x, y in self.get_moving_block_coords()]
+        ):
+            return False
 
         x, y = self._moving_block_location
         x += dx
@@ -161,7 +176,19 @@ class TetrisClient(socketserver.BaseRequestHandler):
             x -= right - self.server.get_width()
             self._moving_block_location = (x, y)
 
-    def _input_thread(self):
+    def _rotate(self) -> None:
+        if self.moving_block_shape_letter == "O":
+            return
+
+        new_rotation = self._rotation + 1
+        if self.moving_block_shape_letter in "ISZ":
+            new_rotation %= 2
+
+        new_coords = self.get_moving_block_coords(rotation=new_rotation)
+        if self._moving_block_coords_are_possible(new_coords):
+            self._rotation = new_rotation
+
+    def _input_thread(self) -> None:
         while True:
             try:
                 chunk = self.request.recv(4096)
@@ -172,7 +199,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
             if chunk == CONTROL_C or not chunk:
                 # User disconnected, stop waiting for timeout
-                print("Disconnect: received", chunk)
+                print(self.client_address, "Disconnect: received", chunk)
                 self.disconnecting = True
                 with self.server.state_change():
                     pass
@@ -184,7 +211,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
                     self._move_if_possible(dx=1, dy=0)
                 if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
-                    print("TODO: rotate")
+                    self._rotate()
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     self._move_block_down_all_the_way()
 
@@ -216,7 +243,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     break
                 self.render_game()
         except OSError as e:
-            print("Disconnect:", e)
+            print(self.client_address, "Disconnect:", e)
         finally:
             with self.server.state_change():
                 i = self.server.clients.index(self)
