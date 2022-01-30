@@ -26,7 +26,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
 
 # Width varies as people join/leave
-HEIGHT = 10
+HEIGHT = 20
 WIDTH_PER_PLAYER = 7
 
 SHAPE_LETTERS = "LIJOTZS"
@@ -65,8 +65,6 @@ class TetrisClient(socketserver.BaseRequestHandler):
             WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
             -max(y + 1 for x, y in BLOCK_SHAPES[self.moving_block_shape_letter]),
         )
-        print("***(1)", self._moving_block_location, self.moving_block_shape_letter)
-        print("***(2)", list(self.get_moving_block_coords()))
 
     def get_moving_block_coords(self) -> Iterator[tuple[int, int]]:
         base_x, base_y = self._moving_block_location
@@ -74,21 +72,31 @@ class TetrisClient(socketserver.BaseRequestHandler):
             yield (base_x + rel_x, base_y + rel_y)
 
     def render_game(self) -> None:
-        lines = []
-        lines.append(b"o" + b"--" * self.server.get_width() + b"o")
-        for y, row in enumerate(self.server.get_color_data()):
-            lines.append(
-                b"|%s|"
-                % b"".join(
-                    b"  "
-                    if item is None
-                    else ((COLOR % BLOCK_COLORS[item]) + b"  " + (COLOR % 0))
-                    for item in row
-                )
-            )
-        lines.append(b"o" + b"--" * self.server.get_width() + b"o")
+        header_line = b"o"
+        for client in self.server.clients:
+            if client == self:
+                header_line += b"XX" * WIDTH_PER_PLAYER
+            else:
+                header_line += b"--" * WIDTH_PER_PLAYER
+        header_line += b"o"
 
-        assert len(lines) == HEIGHT + 2
+        lines = []
+        lines.append(header_line)
+
+        for y, row in enumerate(self.server.get_color_data()):
+            line = b"|"
+            for item in row:
+                if item is not None:
+                    line += COLOR % BLOCK_COLORS[item]
+                line += b"  "
+                if item is not None:
+                    line += COLOR % 0
+            line += b"|"
+            lines.append(line)
+
+        lines.append(header_line)
+        assert len(lines) == len(self.last_displayed_lines)
+
         for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
             if old_line != new_line:
                 self.request.sendall(MOVE_CURSOR % (y + 1, 1))
@@ -131,7 +139,6 @@ class TetrisClient(socketserver.BaseRequestHandler):
             for row in self.server.landed_blocks:
                 row.extend([None] * WIDTH_PER_PLAYER)
             self.new_block()
-            print("Moving block coords", list(self.get_moving_block_coords()))
 
         try:
             self.request.sendall(CLEAR_SCREEN)
