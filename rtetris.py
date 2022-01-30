@@ -20,8 +20,8 @@ from typing import Iterator
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
-#   - clear full lines
 #   - mouse wheeling
+#   - flash full lines as they are cleared?
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -158,6 +158,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 if y < 0:
                     raise RuntimeError("game over")
                 self.server.landed_blocks[y][x] = self.color
+            self.server.clear_full_lines()
             self.new_block()
 
     def _move_block_down_all_the_way(self) -> None:
@@ -275,6 +276,12 @@ class TetrisServer(socketserver.ThreadingTCPServer):
             yield
         with self._needs_update:
             self._needs_update.notify_all()
+
+    # Assumes the lock is held
+    def clear_full_lines(self) -> None:
+        self.landed_blocks = [sublist for sublist in self.landed_blocks if None in sublist]
+        while len(self.landed_blocks) < HEIGHT:
+            self.landed_blocks.insert(0, [None] * self.get_width())
 
     def wait_for_update(self, timeout: float | None = None) -> bool:
         with self._needs_update:
