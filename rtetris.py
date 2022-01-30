@@ -9,7 +9,6 @@ from typing import Iterator
 
 
 # TODO:
-#   - mark current player
 #   - moving blocks: arrow keys / wasd / mouse wheel
 #   - ask players names when joining, and display them below game
 #   - better game over handling
