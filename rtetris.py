@@ -8,6 +8,14 @@ import random
 from typing import Iterator
 
 
+# TODO:
+#   - mark current player
+#   - moving blocks: arrow keys / wasd / mouse wheel
+#   - ask players names when joining, and display them below game
+#   - better game over handling
+#   - spectating: after your game over, you can still watch others play
+
+
 # https://en.wikipedia.org/wiki/ANSI_escape_code
 ESC = b"\x1b"
 CSI = ESC + b"["
@@ -18,20 +26,28 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
 
 # Width varies as people join/leave
-HEIGHT = 20
+HEIGHT = 10
 WIDTH_PER_PLAYER = 7
 
-SHAPE_LETTERS = ["L"]
+SHAPE_LETTERS = "LIJOTZS"
 BLOCK_SHAPES = {
-    "L": [
-        (0, -1),
-        (0, 0),
-        (0, 1),
-        (1, 1),
-    ]
+    "L": [(-1, 0), (0, 0), (1, 0), (1, -1)],
+    "I": [(-2, 0), (-1, 0), (0, 0), (1, 0)],
+    "J": [(-1, -1), (-1, 0), (0, 0), (1, 0)],
+    "O": [(-1, 0), (0, 0), (0, -1), (-1, -1)],
+    "T": [(-1, 0), (0, 0), (1, 0), (0, -1)],
+    "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
+    "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
 }
 BLOCK_COLORS = {
-    "L": 43,
+    # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
+    "L": 47,  # white, but should be orange (not available in standard ansi colors)
+    "I": 46,  # cyan
+    "J": 44,  # blue
+    "O": 43,  # yellow
+    "T": 45,  # purple
+    "Z": 41,  # red
+    "S": 42,  # green
 }
 
 
@@ -46,9 +62,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         index = self.server.clients.index(self)
         self._moving_block_location = (
-            WIDTH_PER_PLAYER // 2 + index*WIDTH_PER_PLAYER,
-            -max(y+1 for x, y in BLOCK_SHAPES[self.moving_block_shape_letter]),
+            WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
+            -max(y + 1 for x, y in BLOCK_SHAPES[self.moving_block_shape_letter]),
         )
+        print("***(1)", self._moving_block_location, self.moving_block_shape_letter)
+        print("***(2)", list(self.get_moving_block_coords()))
 
     def get_moving_block_coords(self) -> Iterator[tuple[int, int]]:
         base_x, base_y = self._moving_block_location
@@ -79,26 +97,15 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         self.last_displayed_lines = lines.copy()
 
-    # Assumes you hold the server's lock
-    def can_move(self, dx: int, dy: int) -> bool:
-        for x, y in self.get_moving_block_coords():
-            x += dx
-            y += dy
-            if (
-                x not in range(self.server.get_width())
-                or y not in range(HEIGHT)
-                or self.server.landed_blocks[y][x] is not None
-            ):
-                return False
-        return True
-
     def _move_block_down(self) -> None:
-        print(list(self.get_moving_block_coords()))
         if any(
-            y >= HEIGHT or self.server.landed_blocks[y + 1][x] is not None
+            y + 1 >= HEIGHT
+            or (y + 1 >= 0 and self.server.landed_blocks[y + 1][x] is not None)
             for x, y in self.get_moving_block_coords()
         ):
             for x, y in self.get_moving_block_coords():
+                if y < 0:
+                    raise RuntimeError("game over")
                 self.server.landed_blocks[y][x] = self.moving_block_shape_letter
             self.new_block()
         else:
@@ -136,7 +143,6 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     with self.server.state_change():
                         self._move_block_down()
                     next_move += 0.5
-                print("render" + str(id(self) % 10))
                 self.render_game()
         finally:
             with self.server.state_change():
@@ -156,11 +162,9 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         super().__init__(("", port), TetrisClient)
         self._needs_update = threading.Condition()
 
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # TODO: change back to Lock after debugging
         self.clients: list[TetrisClient] = []
-        self.landed_blocks: list[list[str | None]] = [
-            [None] * self.get_width() for y in range(HEIGHT)
-        ]
+        self.landed_blocks: list[list[str | None]] = [[] for y in range(HEIGHT)]
 
     def get_width(self) -> int:
         return WIDTH_PER_PLAYER * len(self.clients)
