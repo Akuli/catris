@@ -118,51 +118,36 @@ class TetrisClient(socketserver.BaseRequestHandler):
         # TODO: not ideal
         self.request.sendall(MOVE_CURSOR % (1, 1))
 
-    def _move_block_left(self) -> None:
-        if not any(
-            x-1 < 0
-            or self.server.landed_blocks[y][x-1] is not None
-            for x, y in self.get_moving_block_coords()
-        ):
-            x, y = self._moving_block_location
-            x -= 1
-            self._moving_block_location = (x, y)
+    def _move_if_possible(self, dx: int, dy: int) -> bool:
+        for x, y in self.get_moving_block_coords():
+            x += dx
+            y += dy
+            if (
+                x < 0
+                or x >= self.server.get_width()
+                or y >= HEIGHT
+                or (y >= 0 and self.server.landed_blocks[y][x] is not None)
+            ):
+                return False
 
-    def _move_block_right(self) -> None:
-        if not any(
-            x+1 >= self.server.get_width()
-            or self.server.landed_blocks[y][x+1] is not None
-            for x, y in self.get_moving_block_coords()
-        ):
-            x, y = self._moving_block_location
-            x += 1
-            self._moving_block_location = (x, y)
+        x, y = self._moving_block_location
+        x += dx
+        y += dy
+        self._moving_block_location = (x, y)
+        return True
 
     def _move_block_down(self) -> None:
-        if any(
-            y + 1 >= HEIGHT
-            or (y + 1 >= 0 and self.server.landed_blocks[y + 1][x] is not None)
-            for x, y in self.get_moving_block_coords()
-        ):
+        moved = self._move_if_possible(dx=0, dy=1)
+        if not moved:
             for x, y in self.get_moving_block_coords():
                 if y < 0:
                     raise RuntimeError("game over")
                 self.server.landed_blocks[y][x] = self.color
             self.new_block()
-        else:
-            x, y = self._moving_block_location
-            y += 1
-            self._moving_block_location = (x, y)
 
     def _move_block_down_all_the_way(self) -> None:
-        while not any(
-            y + 1 >= HEIGHT
-            or (y + 1 >= 0 and self.server.landed_blocks[y + 1][x] is not None)
-            for x, y in self.get_moving_block_coords()
-        ):
-            x, y = self._moving_block_location
-            y += 1
-            self._moving_block_location = (x, y)
+        while self._move_if_possible(dx=0, dy=1):
+            pass
 
     def keep_moving_block_between_walls(self) -> None:
         left = min(x for x, y in self.get_moving_block_coords())
@@ -195,9 +180,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
             with self.server.state_change():
                 if chunk in (b"A", b"a", LEFT_ARROW_KEY):
-                    self._move_block_left()
+                    self._move_if_possible(dx=-1, dy=0)
                 if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
-                    self._move_block_right()
+                    self._move_if_possible(dx=1, dy=0)
                 if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
                     print("TODO: rotate")
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
