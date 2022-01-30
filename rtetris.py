@@ -55,7 +55,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         index = self.server.clients.index(self)
         self._moving_block_location = (
             WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
-            -max(y + 1 for x, y in BLOCK_SHAPES[self.moving_block_shape_letter]),
+            -1,
         )
 
     def get_moving_block_coords(self) -> Iterator[tuple[int, int]]:
