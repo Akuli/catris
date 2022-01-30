@@ -20,8 +20,8 @@ from typing import Iterator
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
-#   - fast down
 #   - rotate
+#   - clear full lines
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -154,6 +154,16 @@ class TetrisClient(socketserver.BaseRequestHandler):
             y += 1
             self._moving_block_location = (x, y)
 
+    def _move_block_down_all_the_way(self) -> None:
+        while not any(
+            y + 1 >= HEIGHT
+            or (y + 1 >= 0 and self.server.landed_blocks[y + 1][x] is not None)
+            for x, y in self.get_moving_block_coords()
+        ):
+            x, y = self._moving_block_location
+            y += 1
+            self._moving_block_location = (x, y)
+
     def keep_moving_block_between_walls(self) -> None:
         left = min(x for x, y in self.get_moving_block_coords())
         right = max(x for x, y in self.get_moving_block_coords()) + 1
@@ -191,7 +201,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
                     print("TODO: rotate")
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-                    print("TODO: fast down")
+                    self._move_block_down_all_the_way()
 
     def handle(self) -> None:
         with self.server.state_change():
