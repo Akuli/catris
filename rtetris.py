@@ -162,7 +162,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         super().__init__(("", port), TetrisClient)
         self._needs_update = threading.Condition()
 
-        self._lock = threading.RLock()  # TODO: change back to Lock after debugging
+        self._lock = threading.Lock()
         self.clients: list[TetrisClient] = []
         self.landed_blocks: list[list[str | None]] = [[] for y in range(HEIGHT)]
 
