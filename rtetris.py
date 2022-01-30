@@ -29,7 +29,6 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 HEIGHT = 20
 WIDTH_PER_PLAYER = 7
 
-SHAPE_LETTERS = "LIJOTZS"
 BLOCK_SHAPES = {
     "L": [(-1, 0), (0, 0), (1, 0), (1, -1)],
     "I": [(-2, 0), (-1, 0), (0, 0), (1, 0)],
@@ -39,16 +38,9 @@ BLOCK_SHAPES = {
     "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
     "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
 }
-BLOCK_COLORS = {
-    # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
-    "L": 47,  # white, but should be orange (not available in standard ansi colors)
-    "I": 46,  # cyan
-    "J": 44,  # blue
-    "O": 43,  # yellow
-    "T": 45,  # purple
-    "Z": 41,  # red
-    "S": 42,  # green
-}
+
+# background colors
+PLAYER_COLORS = [41, 42, 43, 44, 45, 46, 47]
 
 
 class TetrisClient(socketserver.BaseRequestHandler):
@@ -58,7 +50,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.last_displayed_lines = [b""] * (HEIGHT + 2)
 
     def new_block(self) -> None:
-        self.moving_block_shape_letter = random.choice(SHAPE_LETTERS)
+        self.moving_block_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
 
         index = self.server.clients.index(self)
         self._moving_block_location = (
@@ -74,10 +66,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
     def render_game(self) -> None:
         header_line = b"o"
         for client in self.server.clients:
+            # e.g. 36 = cyan foreground, 46 = cyan background
+            header_line += COLOR % (client.color - 10)
             if client == self:
-                header_line += b"XX" * WIDTH_PER_PLAYER
+                header_line += b"==" * WIDTH_PER_PLAYER
             else:
                 header_line += b"--" * WIDTH_PER_PLAYER
+        header_line += COLOR % 0
         header_line += b"o"
 
         lines = []
@@ -85,11 +80,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         for y, row in enumerate(self.server.get_color_data()):
             line = b"|"
-            for item in row:
-                if item is not None:
-                    line += COLOR % BLOCK_COLORS[item]
+            for color in row:
+                if color is not None:
+                    line += COLOR % color
                 line += b"  "
-                if item is not None:
+                if color is not None:
                     line += COLOR % 0
             line += b"|"
             lines.append(line)
@@ -114,7 +109,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             for x, y in self.get_moving_block_coords():
                 if y < 0:
                     raise RuntimeError("game over")
-                self.server.landed_blocks[y][x] = self.moving_block_shape_letter
+                self.server.landed_blocks[y][x] = self.color
             self.new_block()
         else:
             x, y = self._moving_block_location
@@ -135,6 +130,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def handle(self) -> None:
         with self.server.state_change():
+            available_colors = PLAYER_COLORS.copy()
+            for client in self.server.clients:
+                available_colors.remove(client.color)
+            self.color: int = available_colors[0]
+
             self.server.clients.append(self)
             for row in self.server.landed_blocks:
                 row.extend([None] * WIDTH_PER_PLAYER)
@@ -171,7 +171,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
 
         self._lock = threading.Lock()
         self.clients: list[TetrisClient] = []
-        self.landed_blocks: list[list[str | None]] = [[] for y in range(HEIGHT)]
+        self.landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
 
     def get_width(self) -> int:
         return WIDTH_PER_PLAYER * len(self.clients)
@@ -187,14 +187,14 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         with self._needs_update:
             return self._needs_update.wait(timeout=timeout)
 
-    def get_color_data(self) -> list[list[str | None]]:
+    def get_color_data(self) -> list[list[int | None]]:
         result = copy.deepcopy(self.landed_blocks)
 
         with self._lock:
             for client in self.clients:
                 for x, y in client.get_moving_block_coords():
                     if y >= 0:
-                        result[y][x] = client.moving_block_shape_letter
+                        result[y][x] = client.color
 
         return result
 
