@@ -16,11 +16,10 @@ from typing import Iterator
 
 
 # TODO:
-#   - what to do about overlapping moving blocks of different players?
-#   - arrow down probably shouldn't be as damaging to what other people are doing
 #   - mouse wheeling
 #   - too many players error
 #   - avoid empty name
+#   - score
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -159,10 +158,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.request.sendall(MOVE_CURSOR % (1, 1))
 
     def _moving_block_coords_are_possible(self, coords: list[tuple[int, int]]) -> bool:
+        other_blocks = self.server.get_color_data(exclude_player=self)
         return all(
             0 <= x < self.server.get_width()
             and y < HEIGHT
-            and (y < 0 or self.server.landed_blocks[y][x] is None)
+            and (y < 0 or other_blocks[y][x] is None)
             for x, y in coords
         )
 
@@ -410,13 +410,13 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         with self._needs_update:
             return self._needs_update.wait(timeout=timeout)
 
-    def get_color_data(self) -> list[list[int | None]]:
+    def get_color_data(self, *, exclude_player: TetrisClient | None = None) -> list[list[int | None]]:
         result = copy.deepcopy(self.landed_blocks)
 
         with self._lock:
             for client in self.playing_clients:
                 for x, y in client.get_moving_block_coords():
-                    if y >= 0:
+                    if y >= 0 and client != exclude_player:
                         result[y][x] = BLOCK_COLORS[client.moving_block_letter]
 
         return result
