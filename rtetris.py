@@ -3,6 +3,12 @@
 #   $ stty raw
 #   $ nc localhost 12345
 #   $ stty cooked
+#
+# TODO:
+#   - mouse wheeling?
+#   - send queues, in case someone has slow internet?
+#   - duplicate names
+#   - When game ends, don't wipe score and game state in render
 
 from __future__ import annotations
 import copy
@@ -13,12 +19,6 @@ import threading
 import socket
 import random
 from typing import Iterator
-
-
-# TODO:
-#   - mouse wheeling
-#   - too many players error
-#   - send queues, in case someone has slow internet?
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -246,8 +246,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.request.sendall(CLEAR_SCREEN)
         self.request.sendall(MOVE_CURSOR % (5, 5))
 
-        message = f"Name (max {2*WIDTH_PER_PLAYER} letters): ".encode("ascii")
-        self.request.sendall(message)
+        message = f"Name (max {2*WIDTH_PER_PLAYER} letters): "
+        self.request.sendall(message.encode("ascii"))
         name_start_pos = (5, 5 + len(message))
 
         name = b""
@@ -306,7 +306,21 @@ class TetrisClient(socketserver.BaseRequestHandler):
         for other_client in self.server.playing_clients:
             other_client.keep_moving_block_between_walls()
 
+    def _handle_server_is_full_error(self) -> None:
+        try:
+            self.request.sendall(CLEAR_SCREEN)
+            self.request.sendall(MOVE_CURSOR % (2, 5))
+            self.request.sendall(b"The server is full. Please try again later.\r\n\n")
+            self.request.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        return
+
     def handle(self) -> None:
+        if len(self.server.playing_clients) == len(PLAYER_COLORS):
+            self._handle_server_is_full_error()
+            return
+
         name = self._prompt_name()
         if name is None:
             return
@@ -317,8 +331,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
             available_colors = PLAYER_COLORS.copy()
             for client in self.server.playing_clients + self.server.game_over_clients:
                 available_colors.remove(client.color)
-            self.color: int = available_colors[0]
 
+            # It's possible for more people to join while prompting name
+            if not available_colors:
+                self._handle_server_is_full_error()
+                return
+
+            self.color: int = available_colors[0]
             self.server.playing_clients.append(self)
             for row in self.server.landed_blocks:
                 row.extend([None] * WIDTH_PER_PLAYER)
