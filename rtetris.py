@@ -246,7 +246,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
         if result in {CONTROL_C, CONTROL_D, b''}:
-            self._handle_disconnect(f"received {result}")
+            self._handle_disconnect(f"received {result!r}")
             return None
 
         return result
@@ -268,7 +268,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             if name in (c.name for c in self.server.playing_clients):
                 return "This name in use. Try a different name."
 
-            self.name = name
+            self.name: str = name
             self.color: int = available_colors[0]
 
             self.server.playing_clients.append(self)
