@@ -18,7 +18,6 @@ from typing import Iterator
 # TODO:
 #   - mouse wheeling
 #   - too many players error
-#   - avoid empty name
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -237,18 +236,17 @@ class TetrisClient(socketserver.BaseRequestHandler):
             byte = self._receive_bytes(1)
             if byte is None:
                 return None
-            if byte == b"\r":
-                return _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
-
-            if byte == b"\n":
+            elif byte == b"\r":
+                if name:
+                    return _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
+            elif byte == b"\n":
                 self.request.sendall(MOVE_CURSOR % (8, 2))
                 self.request.sendall(COLOR % 31)  # red
                 self.request.sendall(
                     b"Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
                 )
                 self.request.sendall(COLOR % 0)
-
-            if byte == BACKSPACE:
+            elif byte == BACKSPACE:
                 # Don't just delete last byte, so that non-ascii can be erased
                 # with a single backspace press
                 name = _name_to_string(name)[:-1].encode("utf-8")
