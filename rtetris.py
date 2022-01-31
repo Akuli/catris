@@ -33,6 +33,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
 # figured with trial and error
 CONTROL_C = b"\x03"
+CONTROL_D = b"\x04"
 BACKSPACE = b"\x7f"
 UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
@@ -225,7 +226,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             self._handle_disconnect(str(e))
             return None
 
-        if result == CONTROL_C or result == ESC or not result:
+        if result in {ESC, CONTROL_C, CONTROL_D, b''}:
             self._handle_disconnect(f"received {result}")
             return None
 
