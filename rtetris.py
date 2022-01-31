@@ -19,7 +19,6 @@ from typing import Iterator
 #   - mouse wheeling
 #   - too many players error
 #   - avoid empty name
-#   - score
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -138,11 +137,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 if color is not None:
                     line += COLOR % 0
             line += b"|"
+            if y == 3:
+                line += f"  Score: {self.server.score}".encode("ascii")
             lines.append(line)
 
         lines.append(b"o" + b"--" * self.server.get_width() + b"o")
         if self in self.server.game_over_clients:
-            lines.append(b" GAME OVER ".center(2*self.server.get_width() + 2, b"="))
+            lines.append(b" GAME OVER ".center(2 * self.server.get_width() + 2, b"="))
         else:
             lines.append(b"")
 
@@ -343,6 +344,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         self.playing_clients: list[TetrisClient] = []
         self.game_over_clients: list[TetrisClient] = []
         self.landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
+        self.score = 0
 
         # TODO: relying on _threads isn't great
         if self._threads is None:  # type: ignore
@@ -351,14 +353,36 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         t.start()
         self._threads.append(t)
 
+    # Must be called from within state_change()
     def _clear_full_lines(self) -> None:
-        full_lines = [y for y, row in enumerate(self.landed_blocks) if None not in row]
+        full_lines = [
+            y for y, row in enumerate(self.landed_blocks) if row and None not in row
+        ]
         if full_lines:
             for color in [47, 0, 47, 0]:
                 # TODO: add lock for rendering?
                 for client in self.playing_clients + self.game_over_clients:
                     client.render_game(blink=full_lines, blink_color=color)
                 time.sleep(0.1)
+
+        if self.playing_clients:
+            # It's possible to get more than 4 lines cleared if a player leaves.
+            # Don't reward that too much, it's not a good thing if players mess up.
+            if len(full_lines) == 0:
+                single_player_score = 0
+            elif len(full_lines) == 1:
+                single_player_score = 10
+            elif len(full_lines) == 2:
+                single_player_score = 30
+            elif len(full_lines) == 3:
+                single_player_score = 60
+            else:
+                single_player_score = 100
+
+            # It's more difficult to get full lines with more players, so reward
+            self.score += len(self.playing_clients) * single_player_score
+        else:
+            self.score = 0
 
         self.landed_blocks = [row for row in self.landed_blocks if None in row]
         while len(self.landed_blocks) < HEIGHT:
@@ -410,7 +434,9 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         with self._needs_update:
             return self._needs_update.wait(timeout=timeout)
 
-    def get_color_data(self, *, exclude_player: TetrisClient | None = None) -> list[list[int | None]]:
+    def get_color_data(
+        self, *, exclude_player: TetrisClient | None = None
+    ) -> list[list[int | None]]:
         result = copy.deepcopy(self.landed_blocks)
 
         with self._lock:
