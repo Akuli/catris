@@ -7,6 +7,7 @@
 # TODO:
 #   - mouse wheeling?
 #   - send queues, in case someone has slow internet?
+#   - when player leaves, move the moving blocks of players on the right side
 
 from __future__ import annotations
 import copy
@@ -63,7 +64,9 @@ BLOCK_COLORS = {
     "Z": 41,  # red
     "S": 42,  # green
 }
-PLAYER_COLORS = [31, 32, 33, 34, 35, 36, 37]  # foreground colors
+
+# ANSI has many colors, but more than 4 players doesn't fit nicely on 80x24 terminal
+PLAYER_COLORS = [31, 32, 33, 34]  # foreground colors
 
 
 def _name_to_string(name_bytes: bytes) -> str:
@@ -258,7 +261,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         with self.server.state_change():
             available_colors = PLAYER_COLORS.copy()
-            for client in self.server.playing_clients + self.server.game_over_clients:
+            for client in self.server.playing_clients:
                 available_colors.remove(client.color)
 
             # It's possible for more people to join while prompting name
