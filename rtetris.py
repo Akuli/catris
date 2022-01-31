@@ -21,7 +21,6 @@ from typing import Iterator
 #   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
 #   - mouse wheeling
-#   - flash full lines as they are cleared?
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -55,7 +54,7 @@ BLOCK_SHAPES = {
 }
 
 # background colors
-PLAYER_COLORS = [41, 42, 43, 44, 45, 46, 47]
+PLAYER_COLORS = [41, 42, 43, 44, 45, 46]
 
 
 class TetrisClient(socketserver.BaseRequestHandler):
@@ -92,7 +91,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         return result
 
-    def render_game(self) -> None:
+    def render_game(self, blink: list[int] = []) -> None:
         header_line = b"o"
         for client in self.server.clients:
             # e.g. 36 = cyan foreground, 46 = cyan background
@@ -110,7 +109,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
         for y, row in enumerate(self.server.get_color_data()):
             line = b"|"
             for color in row:
-                if color is not None:
+                if y in blink:
+                    line += COLOR % 47  # white
+                elif color is not None:
                     line += COLOR % color
                 line += b"  "
                 if color is not None:
@@ -263,7 +264,8 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         super().__init__(("", port), TetrisClient)
         self._needs_update = threading.Condition()
 
-        self._lock = threading.Lock()
+        # TODO: I don't like how this has to be RLock just for the blinking feature
+        self._lock = threading.RLock()
         self.clients: list[TetrisClient] = []
         self.landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
 
@@ -279,7 +281,15 @@ class TetrisServer(socketserver.ThreadingTCPServer):
 
     # Assumes the lock is held
     def clear_full_lines(self) -> None:
-        self.landed_blocks = [sublist for sublist in self.landed_blocks if None in sublist]
+        full_lines = [y for y, row in enumerate(self.landed_blocks) if None not in row]
+        if full_lines:
+            for blink in [full_lines, [], full_lines, []]:
+                # TODO: add lock for rendering?
+                for client in self.clients:
+                    client.render_game(blink)
+                time.sleep(0.1)
+
+        self.landed_blocks = [row for row in self.landed_blocks if None in row]
         while len(self.landed_blocks) < HEIGHT:
             self.landed_blocks.insert(0, [None] * self.get_width())
 
