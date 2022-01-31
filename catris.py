@@ -86,10 +86,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.moving_block_letter = random.choice(list(BLOCK_SHAPES.keys()))
 
         index = self.server.playing_clients.index(self)
-        self.moving_block_location = (
-            WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
-            -1,
-        )
+        self.moving_block_x = WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER
+        self.moving_block_y = -1
         self._rotation = 0
 
     def get_moving_block_coords(
@@ -100,11 +98,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         result = []
 
-        base_x, base_y = self.moving_block_location
         for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_letter]:
             for iteration in range(rotation):
                 rel_x, rel_y = -rel_y, rel_x
-            result.append((base_x + rel_x, base_y + rel_y))
+            result.append((self.moving_block_x + rel_x, self.moving_block_y + rel_y))
 
         return result
 
@@ -156,7 +153,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             # Game over for everyone, keep displaying status when it wasn't over yet
             assert self.last_displayed_lines is not None
             lines = self.last_displayed_lines.copy()
-            if not lines[game_over_y].endswith(b"GAME OVER" ):
+            if not lines[game_over_y].endswith(b"GAME OVER"):
                 lines[game_over_y] += b"  GAME OVER"
 
         if self.last_displayed_lines is None:
@@ -190,10 +187,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
         ):
             return False
 
-        x, y = self.moving_block_location
-        x += dx
-        y += dy
-        self.moving_block_location = (x, y)
+        self.moving_block_x += dx
+        self.moving_block_y += dy
         return True
 
     def _move_block_down_all_the_way(self) -> None:
@@ -204,13 +199,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
         left = min(x for x, y in self.get_moving_block_coords())
         right = max(x for x, y in self.get_moving_block_coords()) + 1
         if left < 0:
-            x, y = self.moving_block_location
-            x += abs(left)
-            self.moving_block_location = (x, y)
+            self.moving_block_x += abs(left)
         elif right > self.server.get_width():
-            x, y = self.moving_block_location
-            x -= right - self.server.get_width()
-            self.moving_block_location = (x, y)
+            self.moving_block_x -= right - self.server.get_width()
 
     def _rotate(self) -> None:
         if self.moving_block_letter == "O":
@@ -246,7 +237,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         # Checking ESC key here is a bad idea.
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
-        if result in {CONTROL_C, CONTROL_D, b''}:
+        if result in {CONTROL_C, CONTROL_D, b""}:
             self._handle_disconnect(f"received {result!r}")
             return None
 
@@ -345,9 +336,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             del row[i * WIDTH_PER_PLAYER : (i + 1) * WIDTH_PER_PLAYER]
 
         for client_on_right in self.server.playing_clients[i:]:
-            x, y = client_on_right.moving_block_location
-            x -= WIDTH_PER_PLAYER
-            client_on_right.moving_block_location = (x, y)
+            client_on_right.moving_block_x -= WIDTH_PER_PLAYER
 
         for other_client in self.server.playing_clients:
             other_client.keep_moving_block_between_walls()
@@ -360,7 +349,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
             self._handle_disconnect(str(e))
             return
 
-        print(self.client_address, f"starting game: name {self.name!r}, color {self.color}")
+        print(
+            self.client_address,
+            f"starting game: name {self.name!r}, color {self.color}",
+        )
         threading.Thread(target=self._input_thread).start()
 
         try:
