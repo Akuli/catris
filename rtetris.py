@@ -158,6 +158,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 self.request.sendall(CLEAR_TO_END_OF_LINE)
         self.last_displayed_lines = lines.copy()
 
+        # Wipe bottom of terminal and leave cursor there.
+        # This way, if user types something, it will be wiped.
+        self.request.sendall(MOVE_CURSOR % (24, 1))
+        self.request.sendall(CLEAR_TO_END_OF_LINE)
+
     def _moving_block_coords_are_possible(self, coords: list[tuple[int, int]]) -> bool:
         other_blocks = self.server.get_color_data(exclude_player=self)
         return all(
