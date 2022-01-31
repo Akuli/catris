@@ -2,7 +2,7 @@
 
 This is a Tetris clone for multiple players that connect to a server with netcat.
 
-TODO: screenshot
+![Screenshot](screenshot.png)
 
 Instructions:
 1. Run server: `python3 catris.py`
