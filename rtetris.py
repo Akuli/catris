@@ -18,6 +18,7 @@ from typing import Iterator
 # TODO:
 #   - mouse wheeling
 #   - too many players error
+#   - send queues, in case someone has slow internet?
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -403,6 +404,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
             self.landed_blocks.insert(0, [None] * self.get_width())
 
     def _move_blocks_down_thread(self) -> None:
+        next_time = time.monotonic()
         while True:
             with self.state_change():
                 # Blocks of different users can be on each other's way, but should
@@ -432,7 +434,11 @@ class TetrisServer(socketserver.ThreadingTCPServer):
 
                 self._clear_full_lines()
 
-            time.sleep(0.5)
+            # time.sleep(constant) wouldn't be great because sending can be slow
+            next_time += 0.5
+            delay = next_time - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
 
     def get_width(self) -> int:
         return WIDTH_PER_PLAYER * len(self.playing_clients)
