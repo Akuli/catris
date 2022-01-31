@@ -226,7 +226,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
             self._handle_disconnect(str(e))
             return None
 
-        if result in {ESC, CONTROL_C, CONTROL_D, b''}:
+        # Checking ESC key here is a bad idea.
+        # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
+        # return only some of the sent data.
+        if result in {CONTROL_C, CONTROL_D, b''}:
             self._handle_disconnect(f"received {result}")
             return None
 
