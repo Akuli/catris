@@ -15,7 +15,6 @@ from typing import Iterator
 
 
 # TODO:
-#   - moving blocks: arrow keys / wasd / mouse wheel
 #   - ask players names when joining, and display them below game
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
