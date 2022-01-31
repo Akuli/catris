@@ -16,12 +16,11 @@ from typing import Iterator
 
 
 # TODO:
-#   - better game over handling
-#   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
 #   - arrow down probably shouldn't be as damaging to what other people are doing
 #   - mouse wheeling
 #   - too many players error
+#   - avoid empty name
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -79,13 +78,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def setup(self) -> None:
         print(self.client_address, "New connection")
-        self.last_displayed_lines = [b""] * (HEIGHT + 3)
+        self.last_displayed_lines = [b""] * (HEIGHT + 4)
         self.disconnecting = False
 
     def new_block(self) -> None:
         self.moving_block_letter = random.choice(list(BLOCK_SHAPES.keys()))
 
-        index = self.server.clients.index(self)
+        index = self.server.playing_clients.index(self)
         self._moving_block_location = (
             WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
             -1,
@@ -108,10 +107,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         return result
 
-    def render_game(self, blink: list[int] = []) -> None:
+    def render_game(self, *, blink: list[int] = [], blink_color: int = 0) -> None:
         header_line = b"o"
         name_line = b" "
-        for client in self.server.clients:
+        for client in self.server.playing_clients:
             header_line += COLOR % client.color
             if client == self:
                 header_line += b"==" * WIDTH_PER_PLAYER
@@ -133,7 +132,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             line = b"|"
             for color in row:
                 if y in blink:
-                    line += COLOR % 47  # white
+                    line += COLOR % blink_color
                 elif color is not None:
                     line += COLOR % color
                 line += b"  "
@@ -143,6 +142,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
             lines.append(line)
 
         lines.append(b"o" + b"--" * self.server.get_width() + b"o")
+        if self in self.server.game_over_clients:
+            lines.append(b" GAME OVER ".center(2*self.server.get_width() + 2, b"="))
+        else:
+            lines.append(b"")
 
         assert len(lines) == len(self.last_displayed_lines)
         for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
@@ -163,7 +166,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             for x, y in coords
         )
 
-    def _move_if_possible(self, dx: int, dy: int) -> bool:
+    def move_if_possible(self, dx: int, dy: int) -> bool:
         if not self._moving_block_coords_are_possible(
             [(x + dx, y + dy) for x, y in self.get_moving_block_coords()]
         ):
@@ -175,18 +178,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self._moving_block_location = (x, y)
         return True
 
-    def _move_block_down(self) -> None:
-        moved = self._move_if_possible(dx=0, dy=1)
-        if not moved:
-            for x, y in self.get_moving_block_coords():
-                if y < 0:
-                    raise RuntimeError("game over")
-                self.server.landed_blocks[y][x] = BLOCK_COLORS[self.moving_block_letter]
-            self.server.clear_full_lines()
-            self.new_block()
-
     def _move_block_down_all_the_way(self) -> None:
-        while self._move_if_possible(dx=0, dy=1):
+        while self.move_if_possible(dx=0, dy=1):
             pass
 
     def keep_moving_block_between_walls(self) -> None:
@@ -277,13 +270,23 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
             with self.server.state_change():
                 if chunk in (b"A", b"a", LEFT_ARROW_KEY):
-                    self._move_if_possible(dx=-1, dy=0)
+                    self.move_if_possible(dx=-1, dy=0)
                 if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
-                    self._move_if_possible(dx=1, dy=0)
+                    self.move_if_possible(dx=1, dy=0)
                 if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
                     self._rotate()
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     self._move_block_down_all_the_way()
+
+    def end_game(self) -> None:
+        i = self.server.playing_clients.index(self)
+        del self.server.playing_clients[i]
+        self.server.game_over_clients.append(self)
+
+        for row in self.server.landed_blocks:
+            del row[i * WIDTH_PER_PLAYER : (i + 1) * WIDTH_PER_PLAYER]
+        for other_client in self.server.playing_clients:
+            other_client.keep_moving_block_between_walls()
 
     def handle(self) -> None:
         name = self._prompt_name()
@@ -294,43 +297,38 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         with self.server.state_change():
             available_colors = PLAYER_COLORS.copy()
-            for client in self.server.clients:
+            for client in self.server.playing_clients + self.server.game_over_clients:
                 available_colors.remove(client.color)
             self.color: int = available_colors[0]
 
-            self.server.clients.append(self)
+            self.server.playing_clients.append(self)
             for row in self.server.landed_blocks:
                 row.extend([None] * WIDTH_PER_PLAYER)
             self.new_block()
 
-        try:
-            threading.Thread(target=self._input_thread).start()
+        threading.Thread(target=self._input_thread).start()
 
+        try:
             self.request.sendall(CLEAR_SCREEN)
 
-            next_move = time.monotonic()
             while True:
-                timeout = next_move - time.monotonic()
-                if timeout < 0 or not self.server.wait_for_update(timeout=timeout):
-                    with self.server.state_change():
-                        self._move_block_down()
-                    next_move += 0.5
+                self.render_game()
                 if self.disconnecting:
                     break
-                self.render_game()
+
+                self.server.wait_for_update()
+                if self.disconnecting:
+                    break
+
         except OSError as e:
             if not self.disconnecting:
                 print(self.client_address, "Disconnect:", e)
                 self.disconnecting = True
         finally:
             with self.server.state_change():
-                i = self.server.clients.index(self)
-                del self.server.clients[i]
-
-                for row in self.server.landed_blocks:
-                    del row[i * WIDTH_PER_PLAYER : (i + 1) * WIDTH_PER_PLAYER]
-                for other_client in self.server.clients:
-                    other_client.keep_moving_block_between_walls()
+                if self in self.server.playing_clients:
+                    self.end_game()
+                self.server.game_over_clients.remove(self)
 
 
 class TetrisServer(socketserver.ThreadingTCPServer):
@@ -342,11 +340,64 @@ class TetrisServer(socketserver.ThreadingTCPServer):
 
         # TODO: I don't like how this has to be RLock just for the blinking feature
         self._lock = threading.RLock()
-        self.clients: list[TetrisClient] = []
+        self.playing_clients: list[TetrisClient] = []
+        self.game_over_clients: list[TetrisClient] = []
         self.landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
 
+        # TODO: relying on _threads isn't great
+        if self._threads is None:  # type: ignore
+            self._threads = []
+        t = threading.Thread(target=self._move_blocks_down_thread)
+        t.start()
+        self._threads.append(t)
+
+    def _clear_full_lines(self) -> None:
+        full_lines = [y for y, row in enumerate(self.landed_blocks) if None not in row]
+        if full_lines:
+            for color in [47, 0, 47, 0]:
+                # TODO: add lock for rendering?
+                for client in self.playing_clients + self.game_over_clients:
+                    client.render_game(blink=full_lines, blink_color=color)
+                time.sleep(0.1)
+
+        self.landed_blocks = [row for row in self.landed_blocks if None in row]
+        while len(self.landed_blocks) < HEIGHT:
+            self.landed_blocks.insert(0, [None] * self.get_width())
+
+    def _move_blocks_down_thread(self) -> None:
+        while True:
+            with self.state_change():
+                # Blocks of different users can be on each other's way, but should
+                # still be moved if the bottommost block will move
+                todo = set(self.playing_clients)
+                while True:
+                    did_something = False
+                    for client in todo.copy():
+                        moved = client.move_if_possible(dx=0, dy=1)
+                        if moved:
+                            did_something = True
+                            todo.remove(client)
+                    if not did_something:
+                        break
+
+                # Blocks of remaining clients can't be moved, even if other clients move first
+                for client in todo:
+                    coords = client.get_moving_block_coords()
+                    if any(y < 0 for x, y in coords):
+                        client.end_game()
+                    else:
+                        for x, y in coords:
+                            self.landed_blocks[y][x] = BLOCK_COLORS[
+                                client.moving_block_letter
+                            ]
+                        client.new_block()
+
+                self._clear_full_lines()
+
+            time.sleep(0.5)
+
     def get_width(self) -> int:
-        return WIDTH_PER_PLAYER * len(self.clients)
+        return WIDTH_PER_PLAYER * len(self.playing_clients)
 
     @contextlib.contextmanager
     def state_change(self) -> Iterator[None]:
@@ -354,21 +405,6 @@ class TetrisServer(socketserver.ThreadingTCPServer):
             yield
         with self._needs_update:
             self._needs_update.notify_all()
-
-    # Assumes the lock is held
-    def clear_full_lines(self) -> None:
-        full_lines = [y for y, row in enumerate(self.landed_blocks) if None not in row]
-        if full_lines:
-            empty_list: list[int] = []  # mypy sucks?
-            for blink in [full_lines, empty_list, full_lines, empty_list]:
-                # TODO: add lock for rendering?
-                for client in self.clients:
-                    client.render_game(blink)
-                time.sleep(0.1)
-
-        self.landed_blocks = [row for row in self.landed_blocks if None in row]
-        while len(self.landed_blocks) < HEIGHT:
-            self.landed_blocks.insert(0, [None] * self.get_width())
 
     def wait_for_update(self, timeout: float | None = None) -> bool:
         with self._needs_update:
@@ -378,7 +414,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         result = copy.deepcopy(self.landed_blocks)
 
         with self._lock:
-            for client in self.clients:
+            for client in self.playing_clients:
                 for x, y in client.get_moving_block_coords():
                     if y >= 0:
                         result[y][x] = BLOCK_COLORS[client.moving_block_letter]
