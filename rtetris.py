@@ -10,6 +10,7 @@ import time
 import contextlib
 import socketserver
 import threading
+import socket
 import random
 from typing import Iterator
 
@@ -65,11 +66,29 @@ def _name_to_string(name_bytes: bytes) -> str:
 
 class TetrisClient(socketserver.BaseRequestHandler):
     server: TetrisServer
+    request: socket.socket
 
     def setup(self) -> None:
         print(self.client_address, "New connection")
         self.last_displayed_lines = [b""] * (HEIGHT + 3)
         self.disconnecting = False
+
+    def _receive_bytes(self, maxsize: int) -> bytes | None:
+        try:
+            result = self.request.recv(maxsize)
+        except OSError as e:
+            if not self.disconnecting:
+                print(self.client_address, "Disconnect:", e)
+            self.disconnecting = True
+            return None
+
+        if result == CONTROL_C or not result:
+            if not self.disconnecting:
+                print(self.client_address, "Disconnect: received", result)
+            self.disconnecting = True
+            return None
+
+        return result
 
     def new_block(self) -> None:
         self.moving_block_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -102,21 +121,23 @@ class TetrisClient(socketserver.BaseRequestHandler):
         name_line = b" "
         for client in self.server.clients:
             # e.g. 36 = cyan foreground, 46 = cyan background
-            color = COLOR % (client.color - 10)
+            color_bytes = COLOR % (client.color - 10)
 
-            header_line += color
+            header_line += color_bytes
             if client == self:
                 header_line += b"==" * WIDTH_PER_PLAYER
             else:
                 header_line += b"--" * WIDTH_PER_PLAYER
 
-            name_line += color
+            name_line += color_bytes
             name_line += client.name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
 
         header_line += COLOR % 0
         header_line += b"o"
+        name_line += COLOR % 0
 
         lines = []
+        lines.append(name_line)
         lines.append(header_line)
 
         for y, row in enumerate(self.server.get_color_data()):
@@ -132,8 +153,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             line += b"|"
             lines.append(line)
 
-        lines.append(header_line)
-        lines.append(name_line)
+        lines.append(b"o" + b"--" * self.server.get_width() + b"o")
 
         assert len(lines) == len(self.last_displayed_lines)
         for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
@@ -206,17 +226,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def _input_thread(self) -> None:
         while True:
-            try:
-                chunk = self.request.recv(4096)
-            except OSError:
-                # Sending will error once it stops waiting.
-                # Just treat this same as a clean disconnect.
-                chunk = b""
-
-            if chunk == CONTROL_C or not chunk:
-                # User disconnected, stop waiting for timeout
-                print(self.client_address, "Disconnect: received", chunk)
-                self.disconnecting = True
+            chunk = self._receive_bytes(10)
+            if chunk is None:
+                # User disconnected, stop waiting for timeout in handle()
                 with self.server.state_change():
                     pass
                 break
@@ -241,16 +253,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         name = b""
         while True:
-            try:
-                byte = self.request.recv(1)
-            except OSError as e:
-                print(self.client_address, "Disconnect:", e)
+            byte = self._receive_bytes(1)
+            if byte is None:
                 return None
-
-            if byte == CONTROL_C or not byte:
-                print(self.client_address, "Disconnect: received", byte)
-                break
-
             if byte == b"\r":
                 return _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
 
@@ -263,7 +268,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 self.request.sendall(COLOR % 0)
 
             if byte == BACKSPACE:
-                # Don't just delete last byte, so that non-ascii can be erased with backspace
+                # Don't just delete last byte, so that non-ascii can be erased
+                # with a single backspace press
                 name = _name_to_string(name)[:-1].encode("utf-8")
             else:
                 name += byte
@@ -307,7 +313,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     break
                 self.render_game()
         except OSError as e:
-            print(self.client_address, "Disconnect:", e)
+            if not self.disconnecting:
+                print(self.client_address, "Disconnect:", e)
+                self.disconnecting = True
         finally:
             with self.server.state_change():
                 i = self.server.clients.index(self)
@@ -345,7 +353,8 @@ class TetrisServer(socketserver.ThreadingTCPServer):
     def clear_full_lines(self) -> None:
         full_lines = [y for y, row in enumerate(self.landed_blocks) if None not in row]
         if full_lines:
-            for blink in [full_lines, [], full_lines, []]:
+            empty_list: list[int] = []  # mypy sucks?
+            for blink in [full_lines, empty_list, full_lines, empty_list]:
                 # TODO: add lock for rendering?
                 for client in self.clients:
                     client.render_game(blink)
