@@ -7,7 +7,6 @@
 # TODO:
 #   - mouse wheeling?
 #   - send queues, in case someone has slow internet?
-#   - when player leaves, move the moving blocks of players on the right side
 
 from __future__ import annotations
 import copy
@@ -39,7 +38,6 @@ UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
 LEFT_ARROW_KEY = CSI + b"D"
-
 
 # Width varies as people join/leave
 HEIGHT = 20
@@ -88,7 +86,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.moving_block_letter = random.choice(list(BLOCK_SHAPES.keys()))
 
         index = self.server.playing_clients.index(self)
-        self._moving_block_location = (
+        self.moving_block_location = (
             WIDTH_PER_PLAYER // 2 + index * WIDTH_PER_PLAYER,
             -1,
         )
@@ -102,7 +100,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         result = []
 
-        base_x, base_y = self._moving_block_location
+        base_x, base_y = self.moving_block_location
         for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_letter]:
             for iteration in range(rotation):
                 rel_x, rel_y = -rel_y, rel_x
@@ -192,10 +190,10 @@ class TetrisClient(socketserver.BaseRequestHandler):
         ):
             return False
 
-        x, y = self._moving_block_location
+        x, y = self.moving_block_location
         x += dx
         y += dy
-        self._moving_block_location = (x, y)
+        self.moving_block_location = (x, y)
         return True
 
     def _move_block_down_all_the_way(self) -> None:
@@ -206,13 +204,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
         left = min(x for x, y in self.get_moving_block_coords())
         right = max(x for x, y in self.get_moving_block_coords()) + 1
         if left < 0:
-            x, y = self._moving_block_location
+            x, y = self.moving_block_location
             x += abs(left)
-            self._moving_block_location = (x, y)
+            self.moving_block_location = (x, y)
         elif right > self.server.get_width():
-            x, y = self._moving_block_location
+            x, y = self.moving_block_location
             x -= right - self.server.get_width()
-            self._moving_block_location = (x, y)
+            self.moving_block_location = (x, y)
 
     def _rotate(self) -> None:
         if self.moving_block_letter == "O":
@@ -345,6 +343,12 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         for row in self.server.landed_blocks:
             del row[i * WIDTH_PER_PLAYER : (i + 1) * WIDTH_PER_PLAYER]
+
+        for client_on_right in self.server.playing_clients[i:]:
+            x, y = client_on_right.moving_block_location
+            x -= WIDTH_PER_PLAYER
+            client_on_right.moving_block_location = (x, y)
+
         for other_client in self.server.playing_clients:
             other_client.keep_moving_block_between_walls()
 
