@@ -82,6 +82,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         print(self.client_address, "New connection")
         self.last_displayed_lines: list[bytes] | None = None
         self.disconnecting = False
+        self._rotate_counter_clockwise = False
 
     def new_block(self) -> None:
         self.moving_block_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -100,7 +101,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         result = []
 
         for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_letter]:
-            for iteration in range(rotation):
+            for iteration in range(rotation % 4):
                 rel_x, rel_y = -rel_y, rel_x
             result.append((self.moving_block_x + rel_x, self.moving_block_y + rel_y))
 
@@ -108,7 +109,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def render_game(self, *, blink: list[int] = [], blink_color: int = 0) -> None:
         score_y = 5
-        game_over_y = 7
+        rotate_dir_y = 6
+        game_over_y = 8
 
         if self.server.playing_clients:
             header_line = b"o"
@@ -144,6 +146,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 line += b"|"
                 if len(lines) == score_y:
                     line += f"  Score: {self.server.score}".encode("ascii")
+                if len(lines) == rotate_dir_y:
+                    if self._rotate_counter_clockwise:
+                        line += b"  Counter-clockwise"
                 if len(lines) == game_over_y and self in self.server.game_over_clients:
                     line += b"  GAME OVER"
                 lines.append(line)
@@ -208,7 +213,11 @@ class TetrisClient(socketserver.BaseRequestHandler):
         if self.moving_block_letter == "O":
             return
 
-        new_rotation = self._rotation + 1
+        if self._rotate_counter_clockwise:
+            new_rotation = self._rotation - 1
+        else:
+            new_rotation = self._rotation + 1
+
         if self.moving_block_letter in "ISZ":
             new_rotation %= 2
 
@@ -323,10 +332,12 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     self.move_if_possible(dx=-1, dy=0)
                 if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
                     self.move_if_possible(dx=1, dy=0)
-                if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
+                if chunk in (b"W", b"w", UP_ARROW_KEY, b"\r"):
                     self._rotate()
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     self._move_block_down_all_the_way()
+                if chunk in (b"R", b"r"):
+                    self._rotate_counter_clockwise = not self._rotate_counter_clockwise
 
     def end_game(self) -> None:
         i = self.server.playing_clients.index(self)

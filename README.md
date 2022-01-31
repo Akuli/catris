@@ -48,3 +48,4 @@ you want to send something to the server.
 - If you use a firewall, you may need to tell it to allow listening on
     the port that catris uses.
     For example, for UFW this would be `sudo ufw allow in 12345 comment 'catris'`.
+- If you wish the blocks rotated in the opposite direction, press `r`.
