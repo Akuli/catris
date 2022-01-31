@@ -215,7 +215,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         if self._moving_block_coords_are_possible(new_coords):
             self._rotation = new_rotation
 
-    def _handle_disconnect(self, reason: str) -> None:
+    def handle_disconnect(self, reason: str) -> None:
         if not self.disconnecting:
             self.disconnecting = True
             print(self.client_address, "Disconnect:", reason)
@@ -231,14 +231,14 @@ class TetrisClient(socketserver.BaseRequestHandler):
         try:
             result = self.request.recv(maxsize)
         except OSError as e:
-            self._handle_disconnect(str(e))
+            self.handle_disconnect(str(e))
             return None
 
         # Checking ESC key here is a bad idea.
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
         if result in {CONTROL_C, CONTROL_D, b""}:
-            self._handle_disconnect(f"received {result!r}")
+            self.handle_disconnect(f"received {result!r}")
             return None
 
         return result
@@ -346,7 +346,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             if not self._prompt_name():
                 return
         except OSError as e:
-            self._handle_disconnect(str(e))
+            self.handle_disconnect(str(e))
             return
 
         print(
@@ -369,7 +369,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     break
 
         except OSError as e:
-            self._handle_disconnect(str(e))
+            self.handle_disconnect(str(e))
         finally:
             with self.server.state_change():
                 if self in self.server.playing_clients:
@@ -406,8 +406,11 @@ class TetrisServer(socketserver.ThreadingTCPServer):
         if full_lines:
             for color in [47, 0, 47, 0]:
                 # TODO: add lock for rendering?
-                for client in self.playing_clients + self.game_over_clients:
-                    client.render_game(blink=full_lines, blink_color=color)
+                for client in (self.playing_clients + self.game_over_clients).copy():
+                    try:
+                        client.render_game(blink=full_lines, blink_color=color)
+                    except OSError as e:
+                        client.handle_disconnect(str(e))
                 time.sleep(0.1)
 
         if self.playing_clients:
