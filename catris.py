@@ -502,4 +502,5 @@ class TetrisServer(socketserver.ThreadingTCPServer):
 
 
 server = TetrisServer(12345)
+print("Listening on port 12345...")
 server.serve_forever()
