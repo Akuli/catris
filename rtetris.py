@@ -31,7 +31,7 @@ HIDE_CURSOR = CSI + b"?25l"
 COLOR = CSI + b"1;%dm"
 CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
-# figured with trial and error
+# figured out with prints
 CONTROL_C = b"\x03"
 CONTROL_D = b"\x04"
 BACKSPACE = b"\x7f"
