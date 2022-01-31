@@ -7,7 +7,6 @@
 # TODO:
 #   - mouse wheeling?
 #   - send queues, in case someone has slow internet?
-#   - duplicate names
 
 from __future__ import annotations
 import copy
@@ -252,7 +251,34 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         return result
 
-    def _prompt_name(self) -> str | None:
+    # returns error message, or None for success
+    def _start_playing(self, name: str) -> str | None:
+        if not name:
+            return "Please write a name before pressing Enter."
+
+        with self.server.state_change():
+            available_colors = PLAYER_COLORS.copy()
+            for client in self.server.playing_clients + self.server.game_over_clients:
+                available_colors.remove(client.color)
+
+            # It's possible for more people to join while prompting name
+            if not available_colors:
+                return "Server is full. Please try again later."
+
+            if name in (c.name for c in self.server.playing_clients):
+                return "This name in use. Try a different name."
+
+            self.name = name
+            self.color: int = available_colors[0]
+
+            self.server.playing_clients.append(self)
+            for row in self.server.landed_blocks:
+                row.extend([None] * WIDTH_PER_PLAYER)
+            self.new_block()
+
+            return None
+
+    def _prompt_name(self) -> bool:
         self.request.sendall(CLEAR_SCREEN)
         self.request.sendall(MOVE_CURSOR % (5, 5))
 
@@ -264,17 +290,20 @@ class TetrisClient(socketserver.BaseRequestHandler):
         while True:
             byte = self._receive_bytes(1)
             if byte is None:
-                return None
-            elif byte == b"\r":
-                if name:
-                    return _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
-            elif byte == b"\n":
+                return False
+            elif byte == b"\r" or byte == b"\n":
+                if byte == b"\r":
+                    name_string = _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
+                    error = self._start_playing(name_string)
+                    if error is None:
+                        return True
+                else:
+                    error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
                 self.request.sendall(MOVE_CURSOR % (8, 2))
                 self.request.sendall(COLOR % 31)  # red
-                self.request.sendall(
-                    b"Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
-                )
+                self.request.sendall(error.encode("ascii"))
                 self.request.sendall(COLOR % 0)
+                self.request.sendall(CLEAR_TO_END_OF_LINE)
             elif byte == BACKSPACE:
                 # Don't just delete last byte, so that non-ascii can be erased
                 # with a single backspace press
@@ -316,43 +345,15 @@ class TetrisClient(socketserver.BaseRequestHandler):
         for other_client in self.server.playing_clients:
             other_client.keep_moving_block_between_walls()
 
-    def _handle_server_is_full_error(self) -> None:
-        try:
-            self.request.sendall(CLEAR_SCREEN)
-            self.request.sendall(MOVE_CURSOR % (2, 5))
-            self.request.sendall(b"The server is full. Please try again later.\r\n\n")
-            self.request.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        return
-
     def handle(self) -> None:
-        if len(self.server.playing_clients) == len(PLAYER_COLORS):
-            self._handle_server_is_full_error()
-            return
-
-        name = self._prompt_name()
-        if name is None:
-            return
-        self.name = name
-        print(self.client_address, "entered name:", self.name)
-
-        with self.server.state_change():
-            available_colors = PLAYER_COLORS.copy()
-            for client in self.server.playing_clients + self.server.game_over_clients:
-                available_colors.remove(client.color)
-
-            # It's possible for more people to join while prompting name
-            if not available_colors:
-                self._handle_server_is_full_error()
+        try:
+            if not self._prompt_name():
                 return
+        except OSError as e:
+            self._handle_disconnect(str(e))
+            return
 
-            self.color: int = available_colors[0]
-            self.server.playing_clients.append(self)
-            for row in self.server.landed_blocks:
-                row.extend([None] * WIDTH_PER_PLAYER)
-            self.new_block()
-
+        print(self.client_address, f"starting game: name {self.name!r}, color {self.color}")
         threading.Thread(target=self._input_thread).start()
 
         try:
