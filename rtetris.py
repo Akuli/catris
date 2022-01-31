@@ -8,7 +8,6 @@
 #   - mouse wheeling?
 #   - send queues, in case someone has slow internet?
 #   - duplicate names
-#   - When game ends, don't wipe score and game state in render
 
 from __future__ import annotations
 import copy
@@ -110,44 +109,55 @@ class TetrisClient(socketserver.BaseRequestHandler):
         return result
 
     def render_game(self, *, blink: list[int] = [], blink_color: int = 0) -> None:
-        header_line = b"o"
-        name_line = b" "
-        for client in self.server.playing_clients:
-            header_line += COLOR % client.color
-            if client == self:
-                header_line += b"==" * WIDTH_PER_PLAYER
-            else:
-                header_line += b"--" * WIDTH_PER_PLAYER
+        score_y = 5
+        game_over_y = 7
 
-            name_line += COLOR % client.color
-            name_line += client.name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+        if self.server.playing_clients:
+            header_line = b"o"
+            name_line = b" "
+            for client in self.server.playing_clients:
+                header_line += COLOR % client.color
+                if client == self:
+                    header_line += b"==" * WIDTH_PER_PLAYER
+                else:
+                    header_line += b"--" * WIDTH_PER_PLAYER
 
-        header_line += COLOR % 0
-        header_line += b"o"
-        name_line += COLOR % 0
+                name_line += COLOR % client.color
+                name_line += client.name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
 
-        lines = []
-        lines.append(name_line)
-        lines.append(header_line)
+            header_line += COLOR % 0
+            header_line += b"o"
+            name_line += COLOR % 0
 
-        for y, row in enumerate(self.server.get_color_data()):
-            line = b"|"
-            for color in row:
-                if y in blink:
-                    line += COLOR % blink_color
-                elif color is not None:
-                    line += COLOR % color
-                line += b"  "
-                if color is not None:
-                    line += COLOR % 0
-            line += b"|"
-            if y == 3:
-                line += f"  Score: {self.server.score}".encode("ascii")
-            if y == 5 and self in self.server.game_over_clients:
-                line += b"  GAME OVER"
-            lines.append(line)
+            lines = []
+            lines.append(name_line)
+            lines.append(header_line)
 
-        lines.append(b"o" + b"--" * self.server.get_width() + b"o")
+            for blink_y, row in enumerate(self.server.get_color_data()):
+                line = b"|"
+                for color in row:
+                    if blink_y in blink:
+                        line += COLOR % blink_color
+                    elif color is not None:
+                        line += COLOR % color
+                    line += b"  "
+                    if color is not None:
+                        line += COLOR % 0
+                line += b"|"
+                if len(lines) == score_y:
+                    line += f"  Score: {self.server.score}".encode("ascii")
+                if len(lines) == game_over_y and self in self.server.game_over_clients:
+                    line += b"  GAME OVER"
+                lines.append(line)
+
+            lines.append(b"o" + b"--" * self.server.get_width() + b"o")
+
+        else:
+            # Game over for everyone, keep displaying status when it wasn't over yet
+            assert self.last_displayed_lines is not None
+            lines = self.last_displayed_lines.copy()
+            if not lines[game_over_y].endswith(b"GAME OVER" ):
+                lines[game_over_y] += b"  GAME OVER"
 
         if self.last_displayed_lines is None:
             self.last_displayed_lines = [b""] * len(lines)
