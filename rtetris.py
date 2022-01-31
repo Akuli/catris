@@ -15,10 +15,10 @@ from typing import Iterator
 
 
 # TODO:
-#   - ask players names when joining, and display them below game
 #   - better game over handling
 #   - spectating: after your game over, you can still watch others play
 #   - what to do about overlapping moving blocks of different players?
+#   - arrow down probably shouldn't be as damaging to what other people are doing
 #   - mouse wheeling
 
 
@@ -32,6 +32,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
 # figured with trial and error
 CONTROL_C = b"\x03"
+BACKSPACE = b"\x7f"
 UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
@@ -56,12 +57,18 @@ BLOCK_SHAPES = {
 PLAYER_COLORS = [41, 42, 43, 44, 45, 46]
 
 
+def _name_to_string(name_bytes: bytes) -> str:
+    return "".join(
+        c for c in name_bytes.decode("utf-8", errors="replace") if c.isprintable()
+    )
+
+
 class TetrisClient(socketserver.BaseRequestHandler):
     server: TetrisServer
 
     def setup(self) -> None:
         print(self.client_address, "New connection")
-        self.last_displayed_lines = [b""] * (HEIGHT + 2)
+        self.last_displayed_lines = [b""] * (HEIGHT + 3)
         self.disconnecting = False
 
     def new_block(self) -> None:
@@ -92,13 +99,20 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def render_game(self, blink: list[int] = []) -> None:
         header_line = b"o"
+        name_line = b" "
         for client in self.server.clients:
             # e.g. 36 = cyan foreground, 46 = cyan background
-            header_line += COLOR % (client.color - 10)
+            color = COLOR % (client.color - 10)
+
+            header_line += color
             if client == self:
                 header_line += b"==" * WIDTH_PER_PLAYER
             else:
                 header_line += b"--" * WIDTH_PER_PLAYER
+
+            name_line += color
+            name_line += client.name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+
         header_line += COLOR % 0
         header_line += b"o"
 
@@ -119,8 +133,9 @@ class TetrisClient(socketserver.BaseRequestHandler):
             lines.append(line)
 
         lines.append(header_line)
-        assert len(lines) == len(self.last_displayed_lines)
+        lines.append(name_line)
 
+        assert len(lines) == len(self.last_displayed_lines)
         for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
             if old_line != new_line:
                 self.request.sendall(MOVE_CURSOR % (y + 1, 1))
@@ -216,7 +231,55 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     self._move_block_down_all_the_way()
 
+    def _prompt_name(self) -> str | None:
+        self.request.sendall(CLEAR_SCREEN)
+        self.request.sendall(MOVE_CURSOR % (5, 5))
+
+        message = f"Name (max {2*WIDTH_PER_PLAYER} letters): ".encode("ascii")
+        self.request.sendall(message)
+        name_start_pos = (5, 5 + len(message))
+
+        name = b""
+        while True:
+            try:
+                byte = self.request.recv(1)
+            except OSError as e:
+                print(self.client_address, "Disconnect:", e)
+                return None
+
+            if byte == CONTROL_C or not byte:
+                print(self.client_address, "Disconnect: received", byte)
+                break
+
+            if byte == b"\r":
+                return _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
+
+            if byte == b"\n":
+                self.request.sendall(MOVE_CURSOR % (8, 2))
+                self.request.sendall(COLOR % 31)  # red
+                self.request.sendall(
+                    b"Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
+                )
+                self.request.sendall(COLOR % 0)
+
+            if byte == BACKSPACE:
+                # Don't just delete last byte, so that non-ascii can be erased with backspace
+                name = _name_to_string(name)[:-1].encode("utf-8")
+            else:
+                name += byte
+
+            self.request.sendall(MOVE_CURSOR % name_start_pos)
+            # Send name as it will show up to other users
+            self.request.sendall(_name_to_string(name).encode("utf-8"))
+            self.request.sendall(CLEAR_TO_END_OF_LINE)
+
     def handle(self) -> None:
+        name = self._prompt_name()
+        if name is None:
+            return
+        self.name = name
+        print(self.client_address, "entered name:", self.name)
+
         with self.server.state_change():
             available_colors = PLAYER_COLORS.copy()
             for client in self.server.clients:
