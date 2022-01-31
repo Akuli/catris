@@ -468,7 +468,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
                 self._clear_full_lines()
 
             # time.sleep(constant) wouldn't be great because sending can be slow
-            next_time += 0.5
+            next_time += 0.5/(1 + self.score/2000)
             delay = next_time - time.monotonic()
             if delay > 0:
                 time.sleep(delay)
