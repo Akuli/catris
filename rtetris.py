@@ -80,7 +80,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
     def setup(self) -> None:
         print(self.client_address, "New connection")
-        self.last_displayed_lines = [b""] * (HEIGHT + 4)
+        self.last_displayed_lines: list[bytes] | None = None
         self.disconnecting = False
 
     def new_block(self) -> None:
@@ -143,15 +143,16 @@ class TetrisClient(socketserver.BaseRequestHandler):
             line += b"|"
             if y == 3:
                 line += f"  Score: {self.server.score}".encode("ascii")
+            if y == 5 and self in self.server.game_over_clients:
+                line += b"  GAME OVER"
             lines.append(line)
 
         lines.append(b"o" + b"--" * self.server.get_width() + b"o")
-        if self in self.server.game_over_clients:
-            lines.append(b" GAME OVER ".center(2 * self.server.get_width() + 2, b"="))
-        else:
-            lines.append(b"")
 
+        if self.last_displayed_lines is None:
+            self.last_displayed_lines = [b""] * len(lines)
         assert len(lines) == len(self.last_displayed_lines)
+
         for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
             if old_line != new_line:
                 self.request.sendall(MOVE_CURSOR % (y + 1, 1))
