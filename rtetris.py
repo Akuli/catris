@@ -24,7 +24,10 @@ from typing import Iterator
 ESC = b"\x1b"
 CSI = ESC + b"["
 CLEAR_SCREEN = CSI + b"2J"
+CLEAR_FROM_CURSOR_TO_END_OF_SCREEN = CSI + b"0J"
 MOVE_CURSOR = CSI + b"%d;%dH"
+SHOW_CURSOR = CSI + b"?25h"
+HIDE_CURSOR = CSI + b"?25l"
 COLOR = CSI + b"1;%dm"
 CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
@@ -154,9 +157,6 @@ class TetrisClient(socketserver.BaseRequestHandler):
                 self.request.sendall(CLEAR_TO_END_OF_LINE)
         self.last_displayed_lines = lines.copy()
 
-        # TODO: not ideal
-        self.request.sendall(MOVE_CURSOR % (1, 1))
-
     def _moving_block_coords_are_possible(self, coords: list[tuple[int, int]]) -> bool:
         other_blocks = self.server.get_color_data(exclude_player=self)
         return all(
@@ -206,19 +206,27 @@ class TetrisClient(socketserver.BaseRequestHandler):
         if self._moving_block_coords_are_possible(new_coords):
             self._rotation = new_rotation
 
+    def _handle_disconnect(self, reason: str) -> None:
+        if not self.disconnecting:
+            self.disconnecting = True
+            print(self.client_address, "Disconnect:", reason)
+            try:
+                self.request.sendall(SHOW_CURSOR)
+                self.request.sendall(MOVE_CURSOR % (24, 1))
+                self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
+                self.request.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
     def _receive_bytes(self, maxsize: int) -> bytes | None:
         try:
             result = self.request.recv(maxsize)
         except OSError as e:
-            if not self.disconnecting:
-                print(self.client_address, "Disconnect:", e)
-            self.disconnecting = True
+            self._handle_disconnect(str(e))
             return None
 
-        if result == CONTROL_C or not result:
-            if not self.disconnecting:
-                print(self.client_address, "Disconnect: received", result)
-            self.disconnecting = True
+        if result == CONTROL_C or result == ESC or not result:
+            self._handle_disconnect(f"received {result}")
             return None
 
         return result
@@ -309,6 +317,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
 
         try:
             self.request.sendall(CLEAR_SCREEN)
+            self.request.sendall(HIDE_CURSOR)
 
             while True:
                 self.render_game()
@@ -320,9 +329,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
                     break
 
         except OSError as e:
-            if not self.disconnecting:
-                print(self.client_address, "Disconnect:", e)
-                self.disconnecting = True
+            self._handle_disconnect(str(e))
         finally:
             with self.server.state_change():
                 if self in self.server.playing_clients:
