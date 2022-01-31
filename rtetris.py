@@ -53,9 +53,17 @@ BLOCK_SHAPES = {
     "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
     "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
 }
-
-# background colors
-PLAYER_COLORS = [41, 42, 43, 44, 45, 46]
+BLOCK_COLORS = {
+    # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
+    "L": 47,  # white, but should be orange (not available in standard ansi colors)
+    "I": 46,  # cyan
+    "J": 44,  # blue
+    "O": 43,  # yellow
+    "T": 45,  # purple
+    "Z": 41,  # red
+    "S": 42,  # green
+}
+PLAYER_COLORS = [31, 32, 33, 34, 35, 36, 37]  # foreground colors
 
 
 def _name_to_string(name_bytes: bytes) -> str:
@@ -73,25 +81,8 @@ class TetrisClient(socketserver.BaseRequestHandler):
         self.last_displayed_lines = [b""] * (HEIGHT + 3)
         self.disconnecting = False
 
-    def _receive_bytes(self, maxsize: int) -> bytes | None:
-        try:
-            result = self.request.recv(maxsize)
-        except OSError as e:
-            if not self.disconnecting:
-                print(self.client_address, "Disconnect:", e)
-            self.disconnecting = True
-            return None
-
-        if result == CONTROL_C or not result:
-            if not self.disconnecting:
-                print(self.client_address, "Disconnect: received", result)
-            self.disconnecting = True
-            return None
-
-        return result
-
     def new_block(self) -> None:
-        self.moving_block_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
+        self.moving_block_letter = random.choice(list(BLOCK_SHAPES.keys()))
 
         index = self.server.clients.index(self)
         self._moving_block_location = (
@@ -109,7 +100,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         result = []
 
         base_x, base_y = self._moving_block_location
-        for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_shape_letter]:
+        for rel_x, rel_y in BLOCK_SHAPES[self.moving_block_letter]:
             for iteration in range(rotation):
                 rel_x, rel_y = -rel_y, rel_x
             result.append((base_x + rel_x, base_y + rel_y))
@@ -120,16 +111,13 @@ class TetrisClient(socketserver.BaseRequestHandler):
         header_line = b"o"
         name_line = b" "
         for client in self.server.clients:
-            # e.g. 36 = cyan foreground, 46 = cyan background
-            color_bytes = COLOR % (client.color - 10)
-
-            header_line += color_bytes
+            header_line += COLOR % client.color
             if client == self:
                 header_line += b"==" * WIDTH_PER_PLAYER
             else:
                 header_line += b"--" * WIDTH_PER_PLAYER
 
-            name_line += color_bytes
+            name_line += COLOR % client.color
             name_line += client.name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
 
         header_line += COLOR % 0
@@ -192,7 +180,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             for x, y in self.get_moving_block_coords():
                 if y < 0:
                     raise RuntimeError("game over")
-                self.server.landed_blocks[y][x] = self.color
+                self.server.landed_blocks[y][x] = BLOCK_COLORS[self.moving_block_letter]
             self.server.clear_full_lines()
             self.new_block()
 
@@ -213,35 +201,33 @@ class TetrisClient(socketserver.BaseRequestHandler):
             self._moving_block_location = (x, y)
 
     def _rotate(self) -> None:
-        if self.moving_block_shape_letter == "O":
+        if self.moving_block_letter == "O":
             return
 
         new_rotation = self._rotation + 1
-        if self.moving_block_shape_letter in "ISZ":
+        if self.moving_block_letter in "ISZ":
             new_rotation %= 2
 
         new_coords = self.get_moving_block_coords(rotation=new_rotation)
         if self._moving_block_coords_are_possible(new_coords):
             self._rotation = new_rotation
 
-    def _input_thread(self) -> None:
-        while True:
-            chunk = self._receive_bytes(10)
-            if chunk is None:
-                # User disconnected, stop waiting for timeout in handle()
-                with self.server.state_change():
-                    pass
-                break
+    def _receive_bytes(self, maxsize: int) -> bytes | None:
+        try:
+            result = self.request.recv(maxsize)
+        except OSError as e:
+            if not self.disconnecting:
+                print(self.client_address, "Disconnect:", e)
+            self.disconnecting = True
+            return None
 
-            with self.server.state_change():
-                if chunk in (b"A", b"a", LEFT_ARROW_KEY):
-                    self._move_if_possible(dx=-1, dy=0)
-                if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
-                    self._move_if_possible(dx=1, dy=0)
-                if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
-                    self._rotate()
-                if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-                    self._move_block_down_all_the_way()
+        if result == CONTROL_C or not result:
+            if not self.disconnecting:
+                print(self.client_address, "Disconnect: received", result)
+            self.disconnecting = True
+            return None
+
+        return result
 
     def _prompt_name(self) -> str | None:
         self.request.sendall(CLEAR_SCREEN)
@@ -278,6 +264,25 @@ class TetrisClient(socketserver.BaseRequestHandler):
             # Send name as it will show up to other users
             self.request.sendall(_name_to_string(name).encode("utf-8"))
             self.request.sendall(CLEAR_TO_END_OF_LINE)
+
+    def _input_thread(self) -> None:
+        while True:
+            chunk = self._receive_bytes(10)
+            if chunk is None:
+                # User disconnected, stop waiting for timeout in handle()
+                with self.server.state_change():
+                    pass
+                break
+
+            with self.server.state_change():
+                if chunk in (b"A", b"a", LEFT_ARROW_KEY):
+                    self._move_if_possible(dx=-1, dy=0)
+                if chunk in (b"D", b"d", RIGHT_ARROW_KEY):
+                    self._move_if_possible(dx=1, dy=0)
+                if chunk in (b"W", b"w", UP_ARROW_KEY, b"\n"):
+                    self._rotate()
+                if chunk in (b"S", b"s", DOWN_ARROW_KEY, b" "):
+                    self._move_block_down_all_the_way()
 
     def handle(self) -> None:
         name = self._prompt_name()
@@ -375,7 +380,7 @@ class TetrisServer(socketserver.ThreadingTCPServer):
             for client in self.clients:
                 for x, y in client.get_moving_block_coords():
                     if y >= 0:
-                        result[y][x] = client.color
+                        result[y][x] = BLOCK_COLORS[client.moving_block_letter]
 
         return result
 
