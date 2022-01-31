@@ -21,6 +21,7 @@ from typing import Iterator
 #   - what to do about overlapping moving blocks of different players?
 #   - arrow down probably shouldn't be as damaging to what other people are doing
 #   - mouse wheeling
+#   - too many players error
 
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
