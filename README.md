@@ -32,7 +32,7 @@ you want to send something to the server.
 
 - There's only one score; you play together, not against other players.
     Try to collaborate and make the best use of everyone's blocks.
-- If your game is over, you can leave (Ctrl+C or Ctrl+D) and join again to play more!
+- If your game is over, you can leave (Ctrl+C, Ctrl+D or Ctrl+Q) and join again to play more!
     The score won't reset until everyone leaves at the same time.
 
 
