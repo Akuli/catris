@@ -33,6 +33,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 # figured out with prints
 CONTROL_C = b"\x03"
 CONTROL_D = b"\x04"
+CONTROL_Q = b"\x11"
 BACKSPACE = b"\x7f"
 UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
@@ -237,7 +238,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
         # Checking ESC key here is a bad idea.
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
-        if result in {CONTROL_C, CONTROL_D, b""}:
+        if result in {CONTROL_C, CONTROL_D, CONTROL_Q, b""}:
             self.handle_disconnect(f"received {result!r}")
             return None
 
