@@ -109,7 +109,7 @@ class GameState:
     # Color can't be None, because then it would be possible to put blocks to a flashing line.
     def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
         for y in full_lines:
-            self._landed_blocks[y] = [color] * len(self._landed_blocks[y])
+            self._landed_blocks[y] = [color] * self.get_width()
 
     def clear_lines(self, full_lines: list[int]) -> None:
         if self._moving_blocks:
