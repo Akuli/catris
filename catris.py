@@ -244,7 +244,7 @@ class GameState:
             for row in self._landed_blocks:
                 row.extend([None] * WIDTH_PER_PLAYER)
 
-        if not game_over:
+        if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             player.moving_block_or_wait_counter = MovingBlock(
                 self.players.index(player)
             )
