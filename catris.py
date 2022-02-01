@@ -376,7 +376,7 @@ class Client(socketserver.BaseRequestHandler):
             name_line = b" "
             for player in state.players:
                 if player.moving_block_or_wait_counter is None:
-                    # Player afk
+                    # Player disconnected
                     display_name = f"[{player.name}]"
                 elif isinstance(player.moving_block_or_wait_counter, int):
                     # Waiting for the countdown
