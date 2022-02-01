@@ -291,9 +291,10 @@ class Server(socketserver.ThreadingTCPServer):
                     with self.access_game_state() as state:
                         state.set_color_of_lines(full_lines, color)
                     time.sleep(0.1)
+                with self.access_game_state() as state:
+                    state.clear_lines(full_lines)
 
-            with self.access_game_state() as state:
-                state.clear_lines(full_lines)
+            with self.access_game_state(render=False) as state:
                 score = state.score
 
             time.sleep(0.5 / (1 + score / 2000))
