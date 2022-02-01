@@ -1,5 +1,6 @@
 from __future__ import annotations
 import copy
+import dataclasses
 import time
 import contextlib
 import socketserver
@@ -61,6 +62,9 @@ BLOCK_COLORS = {
     "S": 42,  # green
 }
 
+# If you mess up, how many seconds should you wait?
+WAIT_TIME = 10
+
 
 class MovingBlock:
     def __init__(self, player_index: int):
@@ -78,16 +82,51 @@ class MovingBlock:
         return result
 
 
+@dataclasses.dataclass(eq=False)
+class Player:
+    name: str
+    color: int
+    rotate_counter_clockwise: bool = False
+    moving_block_or_wait_counter: MovingBlock | int | None = None
+
+
 class GameState:
     def __init__(self) -> None:
-        self.score = 0
-        self.names: list[str] = []
-        self._moving_blocks: dict[str, MovingBlock] = {}
+        self.reset()
+
+    def reset(self) -> None:
+        self.players: list[Player] = []
         self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
+        self.score = 0
+
+    def game_is_over(self) -> bool:
+        return bool(self.players) and not any(
+            isinstance(p.moving_block_or_wait_counter, MovingBlock)
+            for p in self.players
+        )
+
+    def end_waiting(self, player: Player, still_connected: bool) -> None:
+        assert player.moving_block_or_wait_counter == 0
+        if self.game_is_over() or not still_connected:
+            player.moving_block_or_wait_counter = None
+            return
+
+        index = self.players.index(player)
+        x_min = WIDTH_PER_PLAYER * index
+        x_max = x_min + WIDTH_PER_PLAYER
+        for row in self._landed_blocks:
+            row[x_min:x_max] = [None] * WIDTH_PER_PLAYER
+        player.moving_block_or_wait_counter = MovingBlock(index)
 
     def get_width(self) -> int:
-        assert len(self.names) == len(self._moving_blocks)
-        return WIDTH_PER_PLAYER * len(self.names)
+        return WIDTH_PER_PLAYER * len(self.players)
+
+    def _get_moving_blocks(self) -> list[MovingBlock]:
+        result = []
+        for player in self.players:
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+                result.append(player.moving_block_or_wait_counter)
+        return result
 
     def is_valid(self) -> bool:
         seen = set()
@@ -97,7 +136,7 @@ class GameState:
                 if color is not None:
                     seen.add((x, y))
 
-        for block in self._moving_blocks.values():
+        for block in self._get_moving_blocks():
             coords = block.get_coords()
             if coords & seen or not all(
                 x in range(self.get_width()) and y < HEIGHT for x, y in coords
@@ -118,25 +157,21 @@ class GameState:
             self._landed_blocks[y] = [color] * self.get_width()
 
     def clear_lines(self, full_lines: list[int]) -> None:
-        if self._moving_blocks:
-            # It's possible to get more than 4 lines cleared if a player leaves.
-            # Don't reward that too much, it's not a good thing if players mess up.
-            if len(full_lines) == 0:
-                single_player_score = 0
-            elif len(full_lines) == 1:
-                single_player_score = 10
-            elif len(full_lines) == 2:
-                single_player_score = 30
-            elif len(full_lines) == 3:
-                single_player_score = 60
-            else:
-                single_player_score = 100
-
-            # It's more difficult to get full lines with more players, so reward
-            self.score += len(self._moving_blocks) * single_player_score
+        # It's possible to get more than 4 lines cleared if a player leaves.
+        # Don't reward that too much, it's not a good thing if players mess up.
+        if len(full_lines) == 0:
+            single_player_score = 0
+        elif len(full_lines) == 1:
+            single_player_score = 10
+        elif len(full_lines) == 2:
+            single_player_score = 30
+        elif len(full_lines) == 3:
+            single_player_score = 60
         else:
-            # Score resets when no players remain, this is how the games end
-            self.score = 0
+            single_player_score = 100
+
+        # It's more difficult to get full lines with more players, so reward
+        self.score += len(self.players) * single_player_score
 
         self._landed_blocks = [
             row for y, row in enumerate(self._landed_blocks) if y not in full_lines
@@ -147,135 +182,112 @@ class GameState:
     def get_square_colors(self) -> list[list[int | None]]:
         assert self.is_valid()
         result = copy.deepcopy(self._landed_blocks)
-        for moving_block in self._moving_blocks.values():
+        for moving_block in self._get_moving_blocks():
             for x, y in moving_block.get_coords():
                 if y >= 0:
                     result[y][x] = BLOCK_COLORS[moving_block.shape_letter]
         return result
 
-    def move_if_possible(self, name: str, dx: int, dy: int) -> bool:
+    def move_if_possible(self, player: Player, dx: int, dy: int) -> bool:
         assert self.is_valid()
-        self._moving_blocks[name].center_x += dx
-        self._moving_blocks[name].center_y += dy
-        if not self.is_valid():
-            self._moving_blocks[name].center_x -= dx
-            self._moving_blocks[name].center_y -= dy
-            return False
-        return True
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            player.moving_block_or_wait_counter.center_x += dx
+            player.moving_block_or_wait_counter.center_y += dy
+            if self.is_valid():
+                return True
+            player.moving_block_or_wait_counter.center_x -= dx
+            player.moving_block_or_wait_counter.center_y -= dy
 
-    def move_down_all_the_way(self, name: str) -> None:
-        while self.move_if_possible(name, dx=0, dy=1):
+        return False
+
+    def move_down_all_the_way(self, player: Player) -> None:
+        while self.move_if_possible(player, dx=0, dy=1):
             pass
 
-    def rotate(self, name: str, counter_clockwise: bool) -> None:
-        block = self._moving_blocks[name]
-        if block.shape_letter == "O":
-            return
+    def rotate(self, player: Player) -> None:
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            block = player.moving_block_or_wait_counter
+            if block.shape_letter == "O":
+                return
 
-        old_rotation = block.rotation
-        if counter_clockwise:
-            new_rotation = old_rotation - 1
-        else:
-            new_rotation = old_rotation + 1
+            old_rotation = block.rotation
+            if player.rotate_counter_clockwise:
+                new_rotation = old_rotation - 1
+            else:
+                new_rotation = old_rotation + 1
 
-        if block.shape_letter in "ISZ":
-            new_rotation %= 2
+            if block.shape_letter in "ISZ":
+                new_rotation %= 2
 
-        assert self.is_valid()
-        block.rotation = new_rotation
-        if not self.is_valid():
-            block.rotation = old_rotation
+            assert self.is_valid()
+            block.rotation = new_rotation
+            if not self.is_valid():
+                block.rotation = old_rotation
 
-    def add_player(self, name: str) -> None:
-        assert name not in self.names
-        self.names.append(name)
-        for row in self._landed_blocks:
-            row.extend([None] * WIDTH_PER_PLAYER)
-        self._moving_blocks[name] = MovingBlock(self.names.index(name))
+    # None return value means server full
+    def add_player(self, name: str) -> Player | None:
+        game_over = self.game_is_over()
 
-    def remove_player(self, name: str) -> None:
-        assert self.is_valid()
-
-        x_start = self.names.index(name) * WIDTH_PER_PLAYER
-        x_end = x_start + WIDTH_PER_PLAYER
-
-        self.names.remove(name)
-        del self._moving_blocks[name]
-        for row in self._landed_blocks:
-            del row[x_start:x_end]
-
-        for moving_block in self._moving_blocks.values():
-            # A slice of the game area was removed, move block accordingly
-            if moving_block.center_x in range(x_start, x_end):
-                moving_block.center_x = x_start
-            elif moving_block.center_x >= x_end:
-                moving_block.center_x -= WIDTH_PER_PLAYER
-
-            # Make sure block stays within game area (needed in some corner cases)
-            left = min(x for x, y in moving_block.get_coords())
-            right = max(x + 1 for x, y in moving_block.get_coords())
-            if left < 0:
-                moving_block.center_x += abs(left)
-            elif right > self.get_width():
-                moving_block.center_x -= right - self.get_width()
-
-        landed_points = set()
-        for y, row in enumerate(self._landed_blocks):
-            for x, value in enumerate(row):
-                if value is not None:
-                    landed_points.add((x, y))
-
-        # If a moving block bumps another moving block or a landed square, move it up.
-        # When two moving blocks bump, move the higher one.
-        # This can cause it to hit other moving blocks, or even landed squares.
-        # Repeat until all ok.
-        while True:
-            problems_detected = False
-
-            highest_blocks_first = sorted(
-                self._moving_blocks.values(), key=(lambda m: m.center_y)
-            )
-            for index, upper in enumerate(highest_blocks_first):
-                lower_points = set()
-                for lower in highest_blocks_first[index + 1 :]:
-                    lower_points |= lower.get_coords()
-
-                while upper.get_coords() & (lower_points | landed_points):
-                    upper.center_y -= 1
-                    problems_detected = True
-
-            if not problems_detected:
+        # Name can exist already, if player quits and comes back
+        for player in self.players:
+            if player.name == name:
                 break
+        else:
+            try:
+                color = min(PLAYER_COLORS - {p.color for p in self.players})
+            except ValueError:
+                # all colors used
+                return None
 
-        assert self.is_valid()
+            player = Player(name, color)
+            self.players.append(player)
+            for row in self._landed_blocks:
+                row.extend([None] * WIDTH_PER_PLAYER)
 
-    def move_blocks_down(self) -> None:
+        if not game_over:
+            player.moving_block_or_wait_counter = MovingBlock(self.players.index(player))
+            assert not self.game_is_over()
+        return player
+
+    def move_blocks_down(self) -> set[Player]:
         # Blocks of different users can be on each other's way, but should
         # still be moved if the bottommost block will move.
         #
         # Solution: repeatedly try to move each one, and stop when nothing moves.
-        todo = set(self.names)
+        todo = {
+            player
+            for player in self.players
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        }
         while True:
             something_moved = False
-            for name in todo.copy():
-                moved = self.move_if_possible(name, dx=0, dy=1)
+            for player in todo.copy():
+                moved = self.move_if_possible(player, dx=0, dy=1)
                 if moved:
                     something_moved = True
-                    todo.remove(name)
+                    todo.remove(player)
             if not something_moved:
                 break
 
-        for name in todo:
-            letter = self._moving_blocks[name].shape_letter
-            coords = self._moving_blocks[name].get_coords()
+        needs_to_wait = set()
+        for player in todo:
+            assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
+            letter = player.moving_block_or_wait_counter.shape_letter
+            coords = player.moving_block_or_wait_counter.get_coords()
 
             if any(y < 0 for x, y in coords):
-                print("Game over for player:", name)
-                self.remove_player(name)
+                player.moving_block_or_wait_counter = None
+                needs_to_wait.add(player)
             else:
                 for x, y in coords:
                     self._landed_blocks[y][x] = BLOCK_COLORS[letter]
-                self._moving_blocks[name] = MovingBlock(self.names.index(name))
+                player.moving_block_or_wait_counter = MovingBlock(
+                    self.players.index(player)
+                )
+
+        for player in needs_to_wait:
+            player.moving_block_or_wait_counter = WAIT_TIME
+        return needs_to_wait
 
 
 # If you want to play with more than 4 players, use bigger terminal than 80x24
@@ -301,11 +313,6 @@ class Server(socketserver.ThreadingTCPServer):
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
-    # Must hold the lock when calling
-    def find_client(self, name: str) -> Client:
-        [client] = [c for c in self.clients if c.name == name]
-        return client
-
     @contextlib.contextmanager
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
         with self._lock:
@@ -314,11 +321,25 @@ class Server(socketserver.ThreadingTCPServer):
                 for client in self.clients:
                     client.render_game()
 
+    def _countdown(self, player: Player) -> None:
+        while True:
+            time.sleep(1)
+            with self.access_game_state() as state:
+                assert isinstance(player.moving_block_or_wait_counter, int)
+                player.moving_block_or_wait_counter -= 1
+                if player.moving_block_or_wait_counter == 0:
+                    still_connected = any(c.player == player for c in self.clients)
+                    state.end_waiting(player, still_connected)
+                    return
+
     def _move_blocks_down_thread(self) -> None:
         while True:
             with self.access_game_state() as state:
-                state.move_blocks_down()
+                needs_to_wait = state.move_blocks_down()
                 full_lines = state.find_full_lines()
+
+            for name in needs_to_wait:
+                threading.Thread(target=self._countdown, args=[name]).start()
 
             if full_lines:
                 for color in [47, 0, 47, 0]:
@@ -338,70 +359,72 @@ class Client(socketserver.BaseRequestHandler):
     server: Server
     request: socket.socket
 
-    def __repr__(self) -> str:
-        return f"<Client name={self.name!r} color={self.color!r}>"
-
     def setup(self) -> None:
         print(self.client_address, "New connection")
         self.last_displayed_lines: list[bytes] | None = None
         self._send_queue: queue.Queue[bytes | None] = queue.Queue()
-        self.rotate_counter_clockwise = False
-        self.name: str | None = None
-        self.color: int | None = None
 
     def render_game(self) -> None:
+        assert self.player is not None
+
         with self.server.access_game_state(render=False) as state:
             score_y = 5
             rotate_dir_y = 6
-            game_over_y = 8  # Leave a visible gap above, to highlight game over text
+            game_status_y = 8  # Leave a visible gap above, to highlight game over text
 
-            if state.names:
-                header_line = b"o"
-                name_line = b" "
-                for name in state.names:
-                    color_bytes = COLOR % self.server.find_client(name).color
-                    header_line += color_bytes
-                    name_line += color_bytes
+            header_line = b"o"
+            name_line = b" "
+            for player in state.players:
+                if player.moving_block_or_wait_counter is None:
+                    # Player afk
+                    display_name = f"[{player.name}]"
+                elif isinstance(player.moving_block_or_wait_counter, int):
+                    # Waiting for the countdown
+                    display_name = (
+                        f"[{player.name}] {player.moving_block_or_wait_counter}"
+                    )
+                else:
+                    display_name = player.name
 
-                    if name == self.name:
-                        header_line += b"==" * WIDTH_PER_PLAYER
+                color_bytes = COLOR % player.color
+                header_line += color_bytes
+                name_line += color_bytes
+
+                if player == self.player:
+                    header_line += b"==" * WIDTH_PER_PLAYER
+                else:
+                    header_line += b"--" * WIDTH_PER_PLAYER
+                name_line += display_name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+
+            name_line += COLOR % 0
+            header_line += COLOR % 0
+            header_line += b"o"
+
+            lines = [name_line, header_line]
+
+            for blink_y, row in enumerate(state.get_square_colors()):
+                line = b"|"
+                for color in row:
+                    if color is None:
+                        line += b"  "
                     else:
-                        header_line += b"--" * WIDTH_PER_PLAYER
-                    name_line += name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+                        line += COLOR % color
+                        line += b"  "
+                        line += COLOR % 0
+                line += b"|"
+                lines.append(line)
 
-                name_line += COLOR % 0
-                header_line += COLOR % 0
-                header_line += b"o"
+            lines.append(b"o" + b"--" * state.get_width() + b"o")
 
-                lines = [name_line, header_line]
+            lines[score_y] += f"  Score: {state.score}".encode("ascii")
+            if self.player.rotate_counter_clockwise:
+                lines[rotate_dir_y] += b"  Counter-clockwise"
 
-                for blink_y, row in enumerate(state.get_square_colors()):
-                    line = b"|"
-                    for color in row:
-                        if color is None:
-                            line += b"  "
-                        else:
-                            line += COLOR % color
-                            line += b"  "
-                            line += COLOR % 0
-                    line += b"|"
-                    lines.append(line)
-
-                lines.append(b"o" + b"--" * state.get_width() + b"o")
-
-                lines[score_y] += f"  Score: {state.score}".encode("ascii")
-                if self.rotate_counter_clockwise:
-                    lines[rotate_dir_y] += b"  Counter-clockwise"
-                if self.name not in state.names:
-                    lines[game_over_y] += b"  GAME OVER"
-
-            else:
-                # Game over for everyone, keep displaying status when it wasn't over yet
-                assert self.last_displayed_lines is not None
-                lines = self.last_displayed_lines.copy()
-                # ... but with an additional game over message, even for the last player
-                if not lines[game_over_y].endswith(b"GAME OVER"):
-                    lines[game_over_y] += b"  GAME OVER"
+            if state.game_is_over():
+                lines[game_status_y] += b"  GAME OVER"
+            elif isinstance(self.player.moving_block_or_wait_counter, int):
+                n = self.player.moving_block_or_wait_counter
+                lines[game_status_y] += f"  Please wait: {n}".encode("ascii")
 
             if self.last_displayed_lines is None:
                 self.last_displayed_lines = [b""] * len(lines)
@@ -449,23 +472,20 @@ class Client(socketserver.BaseRequestHandler):
     def _start_playing(self, name: str) -> str | None:
         if not name:
             return "Please write a name before pressing Enter."
-        if len(name) > 2 * WIDTH_PER_PLAYER:
+        if len(f"[{name}] {WAIT_TIME}") > 2 * WIDTH_PER_PLAYER:
             return "The name is too long."
 
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
-            if name in (c.name for c in self.server.clients):
+            # If name is in state.all_names but no client matches, a player left and came back
+            if name in (c.player.name for c in self.server.clients):
                 return "This name is in use. Try a different name."
 
-            available_colors = PLAYER_COLORS - {
-                self.server.find_client(name).color for name in state.names
-            }
-            if not available_colors:
+            player = state.add_player(name)
+            if player is None:
                 return "Server is full. Please try again later."
 
-            self.name = name
-            self.color = min(available_colors)
-            state.add_player(name)
+            self.player: Player = player
             self.server.clients.add(self)
 
         return None
@@ -526,9 +546,13 @@ class Client(socketserver.BaseRequestHandler):
                     print(self.client_address, e)
 
             with self.server.access_game_state() as state:
-                if self.name in state.names:
-                    state.remove_player(self.name)
-                self.server.clients.discard(self)
+                if self in self.server.clients:
+                    self.server.clients.remove(self)
+                    if isinstance(self.player.moving_block_or_wait_counter, MovingBlock):
+                        self.player.moving_block_or_wait_counter = None
+
+                    if not self.server.clients:
+                        state.reset()
 
             print(self.client_address, "Disconnect")
             try:
@@ -551,12 +575,11 @@ class Client(socketserver.BaseRequestHandler):
             self._send_queue.put(CLEAR_SCREEN)
             if not self._prompt_name():
                 return
-            assert self.name is not None
             self._send_queue.put(HIDE_CURSOR)
 
             print(
                 self.client_address,
-                f"starting game: name {self.name!r}, color {self.color}",
+                f"starting game: (name {self.player.name!r})",
             )
 
             while True:
@@ -566,22 +589,18 @@ class Client(socketserver.BaseRequestHandler):
 
                 if command in (b"A", b"a", LEFT_ARROW_KEY):
                     with self.server.access_game_state() as state:
-                        if self.name in state.names:
-                            state.move_if_possible(self.name, dx=-1, dy=0)
+                        state.move_if_possible(self.player, dx=-1, dy=0)
                 elif command in (b"D", b"d", RIGHT_ARROW_KEY):
                     with self.server.access_game_state() as state:
-                        if self.name in state.names:
-                            state.move_if_possible(self.name, dx=1, dy=0)
+                        state.move_if_possible(self.player, dx=1, dy=0)
                 elif command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
                     with self.server.access_game_state() as state:
-                        if self.name in state.names:
-                            state.rotate(self.name, self.rotate_counter_clockwise)
+                        state.rotate(self.player)
                 elif command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     with self.server.access_game_state() as state:
-                        if self.name in state.names:
-                            state.move_down_all_the_way(self.name)
+                        state.move_down_all_the_way(self.player)
                 elif command in (b"R", b"r"):
-                    self.rotate_counter_clockwise = not self.rotate_counter_clockwise
+                    self.player.rotate_counter_clockwise = not self.player.rotate_counter_clockwise
                     self.render_game()
                 else:
                     # Hide the characters that the user typed
