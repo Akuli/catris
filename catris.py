@@ -528,20 +528,23 @@ class Client(socketserver.BaseRequestHandler):
                     with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_if_possible(self.name, dx=-1, dy=0)
-                if command in (b"D", b"d", RIGHT_ARROW_KEY):
+                elif command in (b"D", b"d", RIGHT_ARROW_KEY):
                     with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_if_possible(self.name, dx=1, dy=0)
-                if command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
+                elif command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
                     with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.rotate(self.name, self.rotate_counter_clockwise)
-                if command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
+                elif command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_down_all_the_way(self.name)
-                if command in (b"R", b"r"):
+                elif command in (b"R", b"r"):
                     self.rotate_counter_clockwise = not self.rotate_counter_clockwise
+                    self.render_game()
+                else:
+                    # Hide the characters that the user typed
                     self.render_game()
 
         except OSError as e:
