@@ -25,20 +25,25 @@ replace `localhost` with the server's IP or hostname.
 If you forget `stty raw`, you will get an error message reminding you to run it first.
 It is needed because otherwise you would have to press enter every time
 you want to send something to the server.
-On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
-instead of entering them separately.
 
 
-## Gameplay tips
+## How to play
 
-- There's only one score; you play together, not against other players.
-    Try to collaborate and make the best use of everyone's blocks.
-- If your game is over, you can leave (Ctrl+C, Ctrl+D or Ctrl+Q) and join again to play more!
-    The score won't reset until everyone leaves at the same time.
+Keys:
+- WASD or arrow keys: move and rotate
+- Ctrl+C, Ctrl+D or Ctrl+Q: quit
+
+There's only one score; you play together, not against other players.
+Try to collaborate and make the best use of everyone's blocks.
+
+Once the game is over, everyone must leave the server to start a new game.
+Let me know if you would rather have it start automatically.
 
 
 ## Troubleshooting
 
+- On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
+    instead of entering them separately.
 - If you are on Windows, you probably don't have netcat,
     and you can download it from somewhere.
     You could also just use WSL.
