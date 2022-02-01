@@ -97,7 +97,7 @@ class GameState:
                 if color is not None:
                     seen.add((x, y))
 
-        for name, block in self._moving_blocks.items():
+        for block in self._moving_blocks.values():
             coords = block.get_coords()
             if coords & seen or not all(
                 x in range(self.get_width()) and y < HEIGHT for x, y in coords
@@ -205,11 +205,13 @@ class GameState:
             del row[x_start:x_end]
 
         for moving_block in self._moving_blocks.values():
+            # A slice of the game area was removed, move block accordingly
             if moving_block.center_x in range(x_start, x_end):
                 moving_block.center_x = x_start
             elif moving_block.center_x >= x_end:
                 moving_block.center_x -= WIDTH_PER_PLAYER
 
+            # Make sure block stays within game area (needed in some corner cases)
             left = min(x for x, y in moving_block.get_coords())
             right = max(x + 1 for x, y in moving_block.get_coords())
             if left < 0:
@@ -217,9 +219,35 @@ class GameState:
             elif right > self.get_width():
                 moving_block.center_x -= right - self.get_width()
 
-        # FIXME: This is a terrible way to handle overlaps (#10)
-        while not self.is_valid():
-            random.choice(list(self._moving_blocks.values())).center_y -= 1
+        landed_points = set()
+        for y, row in enumerate(self._landed_blocks):
+            for x, value in enumerate(row):
+                if value is not None:
+                    landed_points.add((x, y))
+
+        # If a moving block bumps another moving block or a landed square, move it up.
+        # When two moving blocks bump, move the higher one.
+        # This can cause it to hit other moving blocks, or even landed squares.
+        # Repeat until all ok.
+        while True:
+            problems_detected = False
+
+            highest_blocks_first = sorted(
+                self._moving_blocks.values(), key=(lambda m: m.center_y)
+            )
+            for index, upper in enumerate(highest_blocks_first):
+                lower_points = set()
+                for lower in highest_blocks_first[index + 1 :]:
+                    lower_points |= lower.get_coords()
+
+                while upper.get_coords() & (lower_points | landed_points):
+                    upper.center_y -= 1
+                    problems_detected = True
+
+            if not problems_detected:
+                break
+
+        assert self.is_valid()
 
     def move_blocks_down(self) -> None:
         # Blocks of different users can be on each other's way, but should
