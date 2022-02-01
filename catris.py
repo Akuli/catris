@@ -278,14 +278,12 @@ class GameState:
             coords = player.moving_block_or_wait_counter.get_coords()
 
             if any(y < 0 for x, y in coords):
-                player.moving_block_or_wait_counter = None
                 needs_wait_counter.add(player)
             else:
                 for x, y in coords:
                     self._landed_blocks[y][x] = BLOCK_COLORS[letter]
-                player.moving_block_or_wait_counter = MovingBlock(
-                    self.players.index(player)
-                )
+                index = self.players.index(player)
+                player.moving_block_or_wait_counter = MovingBlock(index)
 
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
@@ -340,8 +338,8 @@ class Server(socketserver.ThreadingTCPServer):
                 needs_wait_counter = state.move_blocks_down()
                 full_lines = state.find_full_lines()
 
-            for name in needs_wait_counter:
-                threading.Thread(target=self._countdown, args=[name]).start()
+            for player in needs_wait_counter:
+                threading.Thread(target=self._countdown, args=[player]).start()
 
             if full_lines:
                 for color in [47, 0, 47, 0]:
@@ -378,7 +376,7 @@ class Client(socketserver.BaseRequestHandler):
             name_line = b" "
             for player in state.players:
                 if player.moving_block_or_wait_counter is None:
-                    # Player afk
+                    # Player disconnected
                     display_name = f"[{player.name}]"
                 elif isinstance(player.moving_block_or_wait_counter, int):
                     # Waiting for the countdown
@@ -479,7 +477,8 @@ class Client(socketserver.BaseRequestHandler):
 
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
-            # If name is in state.all_names but no client matches, a player left and came back
+            # Prevent two simultaneous clients with the same name.
+            # But it's fine if you leave and then join back with the same name
             if name in (c.player.name for c in self.server.clients):
                 return "This name is in use. Try a different name."
 
@@ -583,7 +582,7 @@ class Client(socketserver.BaseRequestHandler):
 
             print(
                 self.client_address,
-                f"starting game: (name {self.player.name!r})",
+                f"starting game, name={self.player.name!r}",
             )
 
             while True:
