@@ -63,7 +63,7 @@ BLOCK_COLORS = {
 }
 
 # If you mess up, how many seconds should you wait?
-WAIT_TIME = 10
+WAIT_TIME = 20
 
 
 class MovingBlock:
