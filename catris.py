@@ -282,9 +282,8 @@ class GameState:
             else:
                 for x, y in coords:
                     self._landed_blocks[y][x] = BLOCK_COLORS[letter]
-                player.moving_block_or_wait_counter = MovingBlock(
-                    self.players.index(player)
-                )
+                index = self.players.index(player)
+                player.moving_block_or_wait_counter = MovingBlock(index)
 
         for player in needs_to_wait:
             player.moving_block_or_wait_counter = WAIT_TIME
