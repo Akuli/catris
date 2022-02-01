@@ -328,7 +328,9 @@ class Server(socketserver.ThreadingTCPServer):
                 assert isinstance(player.moving_block_or_wait_counter, int)
                 player.moving_block_or_wait_counter -= 1
                 if player.moving_block_or_wait_counter == 0:
-                    client_currently_connected = any(c.player == player for c in self.clients)
+                    client_currently_connected = any(
+                        c.player == player for c in self.clients
+                    )
                     state.end_waiting(player, client_currently_connected)
                     return
 
