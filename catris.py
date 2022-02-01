@@ -477,7 +477,8 @@ class Client(socketserver.BaseRequestHandler):
 
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
-            # If name is in state.all_names but no client matches, a player left and came back
+            # Prevent two simultaneous clients with the same name.
+            # But it's fine if you leave and then join back with the same name
             if name in (c.player.name for c in self.server.clients):
                 return "This name is in use. Try a different name."
 
