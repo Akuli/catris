@@ -219,6 +219,12 @@ class GameState:
             elif right > self.get_width():
                 moving_block.center_x -= right - self.get_width()
 
+        landed_points = set()
+        for y, row in enumerate(self._landed_blocks):
+            for x, value in enumerate(row):
+                if value is not None:
+                    landed_points.add((x, y))
+
         # If a moving block bumps another moving block or a landed square, move it up.
         # When it is two moving blocks, move the higher one.
         # This can cause it to hit other moving blocks, or even landed squares.
@@ -233,12 +239,6 @@ class GameState:
                 lower_points = set()
                 for lower in highest_blocks_first[index + 1 :]:
                     lower_points |= lower.get_coords()
-
-                landed_points = set()
-                for y, row in enumerate(self._landed_blocks):
-                    for x, value in enumerate(row):
-                        if value is not None:
-                            landed_points.add((x, y))
 
                 while upper.get_coords() & (lower_points | landed_points):
                     upper.center_y -= 1
