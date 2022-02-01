@@ -278,7 +278,6 @@ class GameState:
             coords = player.moving_block_or_wait_counter.get_coords()
 
             if any(y < 0 for x, y in coords):
-                player.moving_block_or_wait_counter = None
                 needs_to_wait.add(player)
             else:
                 for x, y in coords:
