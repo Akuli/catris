@@ -582,7 +582,7 @@ class Client(socketserver.BaseRequestHandler):
 
             print(
                 self.client_address,
-                f"starting game: (name {self.player.name!r})",
+                f"starting game, name={self.player.name!r}",
             )
 
             while True:
