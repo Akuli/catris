@@ -125,11 +125,7 @@ class TetrisClient(socketserver.BaseRequestHandler):
             for blink_y, row in enumerate(self.server.get_square_colors()):
                 line = b"|"
                 for row_color in row:
-                    if blink_y not in blink:
-                        actual_color = row_color
-                    else:
-                        actual_color = blink_color
-
+                    actual_color = blink_color if blink_y in blink else row_color
                     if actual_color is None:
                         line += b"  "
                     else:
