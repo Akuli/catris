@@ -271,7 +271,7 @@ class GameState:
             if not something_moved:
                 break
 
-        needs_to_wait = set()
+        needs_wait_counter = set()
         for player in todo:
             assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
             letter = player.moving_block_or_wait_counter.shape_letter
@@ -279,7 +279,7 @@ class GameState:
 
             if any(y < 0 for x, y in coords):
                 player.moving_block_or_wait_counter = None
-                needs_to_wait.add(player)
+                needs_wait_counter.add(player)
             else:
                 for x, y in coords:
                     self._landed_blocks[y][x] = BLOCK_COLORS[letter]
@@ -287,9 +287,9 @@ class GameState:
                     self.players.index(player)
                 )
 
-        for player in needs_to_wait:
+        for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
-        return needs_to_wait
+        return needs_wait_counter
 
 
 # If you want to play with more than 4 players, use bigger terminal than 80x24
@@ -337,10 +337,10 @@ class Server(socketserver.ThreadingTCPServer):
     def _move_blocks_down_thread(self) -> None:
         while True:
             with self.access_game_state() as state:
-                needs_to_wait = state.move_blocks_down()
+                needs_wait_counter = state.move_blocks_down()
                 full_lines = state.find_full_lines()
 
-            for name in needs_to_wait:
+            for name in needs_wait_counter:
                 threading.Thread(target=self._countdown, args=[name]).start()
 
             if full_lines:
