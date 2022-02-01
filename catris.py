@@ -338,8 +338,8 @@ class Server(socketserver.ThreadingTCPServer):
                 needs_to_wait = state.move_blocks_down()
                 full_lines = state.find_full_lines()
 
-            for name in needs_to_wait:
-                threading.Thread(target=self._countdown, args=[name]).start()
+            for player in needs_to_wait:
+                threading.Thread(target=self._countdown, args=[player]).start()
 
             if full_lines:
                 for color in [47, 0, 47, 0]:
