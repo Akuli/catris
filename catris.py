@@ -418,7 +418,7 @@ class Client(socketserver.BaseRequestHandler):
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
             if name in (c.name for c in self.server.clients):
-                return "This name in use. Try a different name."
+                return "This name is in use. Try a different name."
 
             available_colors = PLAYER_COLORS - {
                 self.server.find_client(name).color for name in state.names
