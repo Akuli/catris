@@ -260,7 +260,7 @@ class Server(socketserver.ThreadingTCPServer):
     def __init__(self, port: int):
         super().__init__(("", port), Client)
 
-        self.__state = GameState()  # Access only with access_state()
+        self.__state = GameState()  # Access only with access_game_state()
         self._lock = threading.Lock()
 
         self.clients: set[Client] = set()
@@ -277,7 +277,7 @@ class Server(socketserver.ThreadingTCPServer):
         return client
 
     @contextlib.contextmanager
-    def access_state(self, *, render: bool = True) -> Iterator[GameState]:
+    def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
         with self._lock:
             yield self.__state
             clients_to_notify = self.clients.copy()
@@ -288,17 +288,17 @@ class Server(socketserver.ThreadingTCPServer):
 
     def _move_blocks_down_thread(self) -> None:
         while True:
-            with self.access_state() as state:
+            with self.access_game_state() as state:
                 state.move_blocks_down()
                 full_lines = state.find_full_lines()
 
             if full_lines:
                 for color in [47, 0, 47, 0]:
-                    with self.access_state() as state:
+                    with self.access_game_state() as state:
                         state.set_color_of_lines(full_lines, color)
                     time.sleep(0.1)
 
-            with self.access_state() as state:
+            with self.access_game_state() as state:
                 state.clear_lines(full_lines)
                 score = state.score
 
@@ -321,7 +321,7 @@ class Client(socketserver.BaseRequestHandler):
         self.color: int | None = None
 
     def render_game(self) -> None:
-        with self.server.access_state(render=False) as state:
+        with self.server.access_game_state(render=False) as state:
             score_y = 5
             rotate_dir_y = 6
             game_over_y = 8  # Leave a visible gap above, to highlight game over text
@@ -422,7 +422,7 @@ class Client(socketserver.BaseRequestHandler):
             return "Please write a name before pressing Enter."
 
         # Must lock while assigning self.name and self.color, so can't get duplicates
-        with self.server.access_state() as state:
+        with self.server.access_game_state() as state:
             if name in (c.name for c in self.server.clients):
                 return "This name in use. Try a different name."
 
@@ -491,7 +491,7 @@ class Client(socketserver.BaseRequestHandler):
                 except OSError as e:
                     print(self.client_address, e)
 
-            with self.server.access_state() as state:
+            with self.server.access_game_state() as state:
                 if self.name in state.names:
                     state.remove_player(self.name)
                 self.server.clients.discard(self)
@@ -531,19 +531,19 @@ class Client(socketserver.BaseRequestHandler):
                     break
 
                 if command in (b"A", b"a", LEFT_ARROW_KEY):
-                    with self.server.access_state() as state:
+                    with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_if_possible(self.name, dx=-1, dy=0)
                 if command in (b"D", b"d", RIGHT_ARROW_KEY):
-                    with self.server.access_state() as state:
+                    with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_if_possible(self.name, dx=1, dy=0)
                 if command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-                    with self.server.access_state() as state:
+                    with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.rotate(self.name, self.rotate_counter_clockwise)
                 if command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-                    with self.server.access_state() as state:
+                    with self.server.access_game_state() as state:
                         if self.name in state.names:
                             state.move_down_all_the_way(self.name)
                 if command in (b"R", b"r"):
