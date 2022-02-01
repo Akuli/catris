@@ -226,7 +226,7 @@ class GameState:
                     landed_points.add((x, y))
 
         # If a moving block bumps another moving block or a landed square, move it up.
-        # When it is two moving blocks, move the higher one.
+        # When two moving blocks bump, move the higher one.
         # This can cause it to hit other moving blocks, or even landed squares.
         # Repeat until all ok.
         while True:
