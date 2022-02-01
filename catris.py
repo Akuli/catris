@@ -244,7 +244,7 @@ class GameState:
                 self._moving_blocks[name] = MovingBlock(self.names.index(name))
 
 
-# If you want to play with more than 4 players, use bigger terminal
+# If you want to play with more than 4 players, use bigger terminal than 80x24
 PLAYER_COLORS = {31, 32, 33, 34, 35, 36, 37}  # foreground colors
 
 
