@@ -414,6 +414,8 @@ class Client(socketserver.BaseRequestHandler):
     def _start_playing(self, name: str) -> str | None:
         if not name:
             return "Please write a name before pressing Enter."
+        if len(name) > 2 * WIDTH_PER_PLAYER:
+            return "The name is too long."
 
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
@@ -443,7 +445,7 @@ class Client(socketserver.BaseRequestHandler):
     def _prompt_name(self) -> bool:
         self._send_queue.put(MOVE_CURSOR % (5, 5))
 
-        message = f"Name (max {2*WIDTH_PER_PLAYER} letters): "
+        message = "Name: "
         self._send_queue.put(message.encode("ascii"))
         name_start_pos = (5, 5 + len(message))
 
@@ -457,9 +459,7 @@ class Client(socketserver.BaseRequestHandler):
                     "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
                 )
             elif byte == b"\r":
-                error = self._start_playing(
-                    _name_to_string(name)[: 2 * WIDTH_PER_PLAYER]
-                )
+                error = self._start_playing(_name_to_string(name))
                 if error is None:
                     return True
                 self._show_prompt_error(error)
