@@ -260,31 +260,25 @@ class Server(socketserver.ThreadingTCPServer):
     def __init__(self, port: int):
         super().__init__(("", port), Client)
 
+        # RLock because state usage triggers rendering, which uses state
+        self._lock = threading.RLock()
         self.__state = GameState()  # Access only with access_game_state()
-        self._lock = threading.Lock()
-
-        self.clients: set[Client] = set()
+        self.clients: set[Client] = set()  # This too is locked with the same lock
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
+    # Must hold the lock when calling
     def find_client(self, name: str) -> Client:
-        matches = [c for c in self.clients if c.name == name]
-        try:
-            [client] = matches
-        except ValueError:
-            print(self.clients)
-            raise
+        [client] = [c for c in self.clients if c.name == name]
         return client
 
     @contextlib.contextmanager
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
         with self._lock:
             yield self.__state
-            clients_to_notify = self.clients.copy()
-
-        if render:
-            for client in clients_to_notify:
-                client.render_game()
+            if render:
+                for client in self.clients:
+                    client.render_game()
 
     def _move_blocks_down_thread(self) -> None:
         while True:
