@@ -109,7 +109,7 @@ class GameState:
     # Color can't be None, because then it would be possible to put blocks to a flashing line.
     def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
         for y in full_lines:
-            self._landed_blocks[y] = [color] * len(self._landed_blocks[y])
+            self._landed_blocks[y] = [color] * self.get_width()
 
     def clear_lines(self, full_lines: list[int]) -> None:
         if self._moving_blocks:
@@ -244,7 +244,7 @@ class GameState:
                 self._moving_blocks[name] = MovingBlock(self.names.index(name))
 
 
-# If you want to play with more than 4 players, use bigger terminal
+# If you want to play with more than 4 players, use bigger terminal than 80x24
 PLAYER_COLORS = {31, 32, 33, 34, 35, 36, 37}  # foreground colors
 
 
@@ -421,7 +421,7 @@ class Client(socketserver.BaseRequestHandler):
         # Must lock while assigning self.name and self.color, so can't get duplicates
         with self.server.access_game_state() as state:
             if name in (c.name for c in self.server.clients):
-                return "This name in use. Try a different name."
+                return "This name is in use. Try a different name."
 
             available_colors = PLAYER_COLORS - {
                 self.server.find_client(name).color for name in state.names
