@@ -15,8 +15,7 @@ $ python3 catris.py
 To connect to it, open a new terminal and run:
 
 ```
-$ stty raw
-$ nc localhost 12345
+$ stty raw && nc localhost 12345
 ```
 
 The port is literally `12345`.
@@ -26,6 +25,8 @@ replace `localhost` with the server's IP or hostname.
 If you forget `stty raw`, you will get an error message reminding you to run it first.
 It is needed because otherwise you would have to press enter every time
 you want to send something to the server.
+On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
+instead of entering them separately.
 
 
 ## Gameplay tips
@@ -42,9 +43,6 @@ you want to send something to the server.
     and you can download it from somewhere.
     You could also just use WSL.
     Make an issue if you need help or you want me to write better instructions.
-- If you are on MacOS, the raw mode doesn't exactly work as I expected.
-    See [issue #6](https://github.com/Akuli/catris/issues/6).
-    If you can get the game to work on MacOS, please let me know how :)
 - If you use a firewall, you may need to tell it to allow listening on
     the port that catris uses.
     For example, for UFW this would be `sudo ufw allow in 12345 comment 'catris'`.
