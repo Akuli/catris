@@ -105,9 +105,9 @@ class GameState:
             for p in self.players
         )
 
-    def end_waiting(self, player: Player, still_connected: bool) -> None:
+    def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
         assert player.moving_block_or_wait_counter == 0
-        if self.game_is_over() or not still_connected:
+        if self.game_is_over() or not client_currently_connected:
             player.moving_block_or_wait_counter = None
             return
 
@@ -330,8 +330,8 @@ class Server(socketserver.ThreadingTCPServer):
                 assert isinstance(player.moving_block_or_wait_counter, int)
                 player.moving_block_or_wait_counter -= 1
                 if player.moving_block_or_wait_counter == 0:
-                    still_connected = any(c.player == player for c in self.clients)
-                    state.end_waiting(player, still_connected)
+                    client_currently_connected = any(c.player == player for c in self.clients)
+                    state.end_waiting(player, client_currently_connected)
                     return
 
     def _move_blocks_down_thread(self) -> None:
