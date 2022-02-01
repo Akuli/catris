@@ -9,6 +9,12 @@ import random
 import queue
 from typing import Iterator
 
+ASCII_ART = r"""
+                   __     ___    _____   _____   _____   ___
+                  / _)   / _ \  |_   _| |  __ \ |_   _| / __)
+                 | (_   / /_\ \   | |   |  _  /  _| |_  \__ \
+                  \__) /_/   \_\  |_|   |_| \_\ |_____| (___/
+"""
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
 ESC = b"\x1b"
@@ -437,18 +443,23 @@ class Client(socketserver.BaseRequestHandler):
         return None
 
     def _show_prompt_error(self, error: str) -> None:
-        self._send_queue.put(MOVE_CURSOR % (8, 2))
+        self._send_queue.put(MOVE_CURSOR % (15, 2))
         self._send_queue.put(COLOR % 31)  # red
         self._send_queue.put(error.encode("utf-8"))
         self._send_queue.put(COLOR % 0)
         self._send_queue.put(CLEAR_TO_END_OF_LINE)
 
     def _prompt_name(self) -> bool:
-        self._send_queue.put(MOVE_CURSOR % (5, 5))
+        name_x = 20
+        name_y = 10
+        name_prompt = "Name: "
 
-        message = "Name: "
-        self._send_queue.put(message.encode("ascii"))
-        name_start_pos = (5, 5 + len(message))
+        self._send_queue.put(MOVE_CURSOR % (1, 1))
+        self._send_queue.put(ASCII_ART.encode("ascii").replace(b"\n", b"\r\n"))
+        self._send_queue.put(MOVE_CURSOR % (ASCII_ART.count("\n") + 1, 1))
+        self._send_queue.put(b"https://github.com/Akuli/catris".center(80).rstrip())
+        self._send_queue.put(MOVE_CURSOR % (name_y, name_x))
+        self._send_queue.put(name_prompt.encode("ascii"))
 
         name = b""
         while True:
@@ -471,7 +482,7 @@ class Client(socketserver.BaseRequestHandler):
             else:
                 name += byte
 
-            self._send_queue.put(MOVE_CURSOR % name_start_pos)
+            self._send_queue.put(MOVE_CURSOR % (name_y, name_x + len(name_prompt)))
             # Send name as it will show up to other users
             self._send_queue.put(_name_to_string(name).encode("utf-8"))
             self._send_queue.put(CLEAR_TO_END_OF_LINE)
