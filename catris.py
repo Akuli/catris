@@ -245,7 +245,9 @@ class GameState:
                 row.extend([None] * WIDTH_PER_PLAYER)
 
         if not game_over:
-            player.moving_block_or_wait_counter = MovingBlock(self.players.index(player))
+            player.moving_block_or_wait_counter = MovingBlock(
+                self.players.index(player)
+            )
             assert not self.game_is_over()
         return player
 
@@ -548,7 +550,9 @@ class Client(socketserver.BaseRequestHandler):
             with self.server.access_game_state() as state:
                 if self in self.server.clients:
                     self.server.clients.remove(self)
-                    if isinstance(self.player.moving_block_or_wait_counter, MovingBlock):
+                    if isinstance(
+                        self.player.moving_block_or_wait_counter, MovingBlock
+                    ):
                         self.player.moving_block_or_wait_counter = None
 
                     if not self.server.clients:
@@ -600,7 +604,9 @@ class Client(socketserver.BaseRequestHandler):
                     with self.server.access_game_state() as state:
                         state.move_down_all_the_way(self.player)
                 elif command in (b"R", b"r"):
-                    self.player.rotate_counter_clockwise = not self.player.rotate_counter_clockwise
+                    self.player.rotate_counter_clockwise = (
+                        not self.player.rotate_counter_clockwise
+                    )
                     self.render_game()
                 else:
                     # Hide the characters that the user typed
