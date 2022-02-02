@@ -179,6 +179,15 @@ class GameState:
         while len(self._landed_blocks) < HEIGHT:
             self._landed_blocks.insert(0, [None] * self.get_width())
 
+        # When landed blocks move down, they can go on top of moving blocks.
+        # This is quite rare, but results in invalid state errors.
+        # When this happens, just delete the landed block.
+        for moving_block in self._get_moving_blocks():
+            for x, y in moving_block.get_coords():
+                if y >= 0:
+                    self._landed_blocks[y][x] = None
+        assert self.is_valid()
+
     def get_square_colors(self) -> list[list[int | None]]:
         assert self.is_valid()
         result = copy.deepcopy(self._landed_blocks)
@@ -317,6 +326,7 @@ class Server(socketserver.ThreadingTCPServer):
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
         with self._lock:
             yield self.__state
+            assert self.__state.is_valid()
             if render:
                 for client in self.clients:
                     client.render_game()
