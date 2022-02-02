@@ -157,8 +157,6 @@ class GameState:
             self._landed_blocks[y] = [color] * self.get_width()
 
     def clear_lines(self, full_lines: list[int]) -> None:
-        # It's possible to get more than 4 lines cleared if a player leaves.
-        # Don't reward that too much, it's not a good thing if players mess up.
         if len(full_lines) == 0:
             single_player_score = 0
         elif len(full_lines) == 1:
@@ -170,8 +168,20 @@ class GameState:
         else:
             single_player_score = 100
 
-        # It's more difficult to get full lines with more players, so reward
-        self.score += len(self.players) * single_player_score
+        # It's more difficult to get full lines with more players.
+        # A line is full in the game, if all players have it player-specifically full.
+        # If players stick to their own areas and are independent:
+        #
+        #     P(line clear with n players)
+        #   = P(player 1 full AND player 2 full AND ... AND player n full)
+        #   = P(player 1 full) * P(player 2 full) * ... * P(player n full)
+        #   = P(line clear with 1 player)^n
+        #
+        # This means the game gets exponentially more difficult with more players.
+        # We try to compensate for this by giving exponentially more points.
+        n = len(self.players)
+        if n >= 1:  # avoid floats
+            self.score += single_player_score * 2 ** (n - 1)
 
         self._landed_blocks = [
             row for y, row in enumerate(self._landed_blocks) if y not in full_lines
