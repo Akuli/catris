@@ -63,7 +63,7 @@ BLOCK_COLORS = {
 }
 
 # If you mess up, how many seconds should you wait?
-WAIT_TIME = 20
+WAIT_TIME = 10
 
 
 class MovingBlock:
@@ -354,7 +354,7 @@ class Server(socketserver.ThreadingTCPServer):
             with self.access_game_state(render=False) as state:
                 score = state.score
 
-            time.sleep(0.5 / (1 + score / 2000))
+            time.sleep(0.5 / (1 + score / 1000))
 
 
 class Client(socketserver.BaseRequestHandler):
