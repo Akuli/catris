@@ -349,11 +349,11 @@ class Server(socketserver.ThreadingTCPServer):
         try:
             with open(high_score_file, "r", encoding="utf-8") as file:
                 for line in file:
-                    score_string, duration_string, *players = line.strip("\n").split("\t")
+                    score, duration, *players = line.strip("\n").split("\t")
                     self.high_scores.append(
                         HighScore(
-                            score=int(score_string),
-                            duration_sec=float(duration_string),
+                            score=int(score),
+                            duration_sec=float(duration),
                             players=players,
                         )
                     )
