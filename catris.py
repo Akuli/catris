@@ -334,11 +334,12 @@ class Server(socketserver.ThreadingTCPServer):
             assert self.__state.is_valid()
             if render:
                 if self.__state.game_is_over():
-                    print("Game over!")
+                    score = self.__state.score
+                    print("Game over! Score", score)
                     self.__state.reset()
                     for client in self.clients:
                         if isinstance(client.view, PlayingView):
-                            client.view = GameOverView(client)
+                            client.view = GameOverView(client, score)
                             client.render()
                 else:
                     for client in self.clients:
@@ -549,8 +550,9 @@ class PlayingView:
 
 
 class GameOverView:
-    def __init__(self, client: Client):
+    def __init__(self, client: Client, score: int):
         self._client = client
+        self._score = score
         self._all_menu_items = ["New Game", "Quit"]
         self._selected_item = "New Game"
 
@@ -560,6 +562,7 @@ class GameOverView:
         lines.append(b"")
         lines.append(b"")
         lines.append(b"Game Over :(".center(80).rstrip())
+        lines.append(f"Your score was {self._score}.".encode("ascii").center(80).rstrip())
         lines.append(b"")
         lines.append(b"")
 
