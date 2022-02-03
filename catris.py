@@ -604,10 +604,7 @@ class Client(socketserver.BaseRequestHandler):
                 return
             self._send_queue.put(HIDE_CURSOR)
 
-            print(
-                self.client_address,
-                f"starting game, name={self.server.playing_clients[self].name!r}",
-            )
+            print(self.client_address, f"starting game, name={self.name!r}")
 
             while True:
                 command = self._receive_bytes(10)
