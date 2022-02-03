@@ -70,6 +70,24 @@ PLAYER_COLORS = {31, 32, 33, 34}
 WAIT_TIME = 10
 
 
+@dataclasses.dataclass
+class HighScore:
+    score: int
+    duration_sec: float
+    players: list[str]
+
+    def get_duration_string(self) -> str:
+        seconds = int(self.duration_sec)
+        minutes = seconds // 60
+        hours = minutes // 60
+
+        if hours:
+            return f"{hours}h"
+        if minutes:
+            return f"{minutes}min"
+        return f"{seconds}sec"
+
+
 class MovingBlock:
     def __init__(self, player_index: int):
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -99,7 +117,7 @@ class GameState:
         self.reset()
 
     def reset(self) -> None:
-        self.game_id = time.monotonic_ns()
+        self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
         self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
         self.score = 0
@@ -316,7 +334,7 @@ class GameState:
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
-    def __init__(self, port: int):
+    def __init__(self, port: int, high_score_file: str):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
@@ -327,6 +345,34 @@ class Server(socketserver.ThreadingTCPServer):
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
+        self.high_scores = []
+        try:
+            with open(high_score_file, "r", encoding="utf-8") as file:
+                for line in file:
+                    score, duration, *players = line.strip("\n").split("\t")
+                    self.high_scores.append(
+                        HighScore(
+                            score=int(score),
+                            duration_sec=float(duration),
+                            players=players,
+                        )
+                    )
+        except FileNotFoundError:
+            print(high_score_file, "will be created when a game ends")
+
+        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+        self._high_score_file = high_score_file
+
+    def _add_high_score(self, hs: HighScore) -> None:
+        self.high_scores.append(hs)
+        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+
+        try:
+            with open(self._high_score_file, "a", encoding="utf-8") as file:
+                print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
+        except OSError as e:
+            print("Writing high score to file failed:", e)
+
     @contextlib.contextmanager
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
         with self.lock:
@@ -336,27 +382,38 @@ class Server(socketserver.ThreadingTCPServer):
 
             assert self.__state.is_valid()
             if self.__state.game_is_over():
-                score = self.__state.score
-                print("Game over! Score", score)
+                duration_ns = time.monotonic_ns() - self.__state.start_time
+                hs = HighScore(
+                    score=self.__state.score,
+                    duration_sec=duration_ns / (1000 * 1000 * 1000),
+                    players=[p.name for p in self.__state.players],
+                )
+                print("Game over!", hs)
                 self.__state.players.clear()
 
+                playing_clients = [
+                    c for c in self.clients if isinstance(c.view, PlayingView)
+                ]
+
                 assert render
+                if playing_clients:
+                    self._add_high_score(hs)
+                    for client in playing_clients:
+                        client.view = GameOverView(client, hs)
+                        client.render()
+                else:
+                    print("Not adding high score because everyone disconnected")
+
+            elif render:
                 for client in self.clients:
                     if isinstance(client.view, PlayingView):
-                        client.view = GameOverView(client, score)
-                        client.render()
-                return
-
-            if render:
-                for client in self.clients:
-                    if isinstance(client.view, PlayingView):
                         client.render()
 
-    def _countdown(self, player: Player, game_id: int) -> None:
+    def _countdown(self, player: Player, start_time: int) -> None:
         while True:
             time.sleep(1)
             with self.access_game_state() as state:
-                if state.game_id != game_id:
+                if state.start_time != start_time:
                     return
 
                 assert isinstance(player.moving_block_or_wait_counter, int)
@@ -372,21 +429,23 @@ class Server(socketserver.ThreadingTCPServer):
 
     def _move_blocks_down_once(self) -> None:
         with self.access_game_state() as state:
-            game_id = state.game_id
+            start_time = state.start_time
             needs_wait_counter = state.move_blocks_down()
             full_lines = state.find_full_lines()
             for player in needs_wait_counter:
-                threading.Thread(target=self._countdown, args=[player, game_id]).start()
+                threading.Thread(
+                    target=self._countdown, args=[player, start_time]
+                ).start()
 
         if full_lines:
             for color in [47, 0, 47, 0]:
                 with self.access_game_state() as state:
-                    if state.game_id != game_id:
+                    if state.start_time != start_time:
                         return
                     state.set_color_of_lines(full_lines, color)
                 time.sleep(0.1)
             with self.access_game_state() as state:
-                if state.game_id != game_id:
+                if state.start_time != start_time:
                     return
                 state.clear_lines(full_lines)
 
@@ -442,9 +501,15 @@ class AskNameView:
             self._name_so_far += received
 
     def _start_playing(self) -> None:
-        name = self._get_name()
+        name = self._get_name().strip()
         if not name:
             self._error = "Please write a name before pressing Enter."
+            return
+        if "\r" in name or "\n" in name:
+            self._error = "The name must not contain newline characters."
+            return
+        if "\t" in name:
+            self._error = "The name must not contain tab characters."
             return
         if len(f"[{name}] {WAIT_TIME}") > 2 * WIDTH_PER_PLAYER:
             self._error = "The name is too long."
@@ -556,16 +621,20 @@ class PlayingView:
 
 
 class GameOverView:
-    def __init__(self, client: Client, score: int):
+    def __init__(self, client: Client, high_score: HighScore):
         self._client = client
-        self._score = score
+        self._high_score = high_score
         self._all_menu_items = ["New Game", "Quit"]
         self._selected_item = "New Game"
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = [b""] * 7
         lines[3] = b"Game Over :(".center(80).rstrip()
-        lines[4] = f"Your score was {self._score}.".encode("ascii").center(80).rstrip()
+        lines[4] = (
+            f"Your score was {self._high_score.score}.".encode("ascii")
+            .center(80)
+            .rstrip()
+        )
 
         item_width = 20
 
@@ -577,6 +646,25 @@ class GameOverView:
                 display_text += COLOR % 0
             lines.append(b" " * ((80 - item_width) // 2) + display_text)
 
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"=== HIGH SCORES ".ljust(80, b"="))
+        lines.append(b"")
+        lines.append(b"| Score | Duration | Players")
+        lines.append(b"|-------|----------|-------".ljust(80, b"-"))
+
+        for hs in self._client.server.high_scores[:5]:
+            player_string = ", ".join(hs.players)
+            line_string = (
+                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
+            )
+            line = line_string.encode("utf-8")
+            if hs == self._high_score:
+                lines.append((COLOR % 42) + line)
+            else:
+                lines.append((COLOR % 0) + line)
+
+        lines.append(COLOR % 0)  # Needed if last score was highlighted
         return lines
 
     def handle_key_press(self, received: bytes) -> bool:
@@ -716,6 +804,6 @@ class Client(socketserver.BaseRequestHandler):
             send_queue_thread.join()  # Don't close until stuff is sent
 
 
-server = Server(12345)
+server = Server(12345, "high_scores.txt")
 print("Listening on port 12345...")
 server.serve_forever()
