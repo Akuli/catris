@@ -74,11 +74,11 @@ WAIT_TIME = 10
 @dataclasses.dataclass
 class HighScore:
     score: int
-    duration_ns: int  # nanoseconds
+    duration_sec: float
     players: list[str]
 
     def get_duration_string(self) -> str:
-        seconds = self.duration_ns // (1000 * 1000 * 1000)
+        seconds = int(self.duration_sec)
         minutes = seconds // 60
         hours = minutes // 60
 
@@ -98,7 +98,7 @@ def _read_high_scores() -> list[HighScore]:
                 result.append(
                     HighScore(
                         score=int(score_string),
-                        duration_ns=int(duration_string),
+                        duration_sec=float(duration_string),
                         players=players,
                     )
                 )
@@ -122,9 +122,7 @@ def add_high_score(hs: HighScore) -> None:
 
     try:
         with open("high_scores.txt", "a", encoding="utf-8") as file:
-            print(
-                hs.score, hs.duration_ns, *hs.players, file=file, sep="\t"
-            )
+            print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
     except OSError:
         traceback.print_exc()
         print("High score not written to file:", hs)
@@ -397,24 +395,25 @@ class Server(socketserver.ThreadingTCPServer):
 
             assert self.__state.is_valid()
             if self.__state.game_is_over():
+                duration_ns = time.monotonic_ns() - self.__state.start_time
                 hs = HighScore(
                     score=self.__state.score,
-                    duration_ns=(time.monotonic_ns() - self.__state.start_time),
+                    duration_sec=duration_ns / (1000 * 1000 * 1000),
                     players=[p.name for p in self.__state.players],
                 )
                 print("Game over!", hs)
                 self.__state.players.clear()
 
+                playing_clients = [
+                    c for c in self.clients if isinstance(c.view, PlayingView)
+                ]
+
                 assert render
-                someone_still_connected = False
-                for client in self.clients:
-                    if isinstance(client.view, PlayingView):
-                        someone_still_connected = True
+                if playing_clients:
+                    add_high_score(hs)
+                    for client in playing_clients:
                         client.view = GameOverView(client, hs)
                         client.render()
-
-                if someone_still_connected:
-                    add_high_score(hs)
                 else:
                     print("Not adding high score because everyone disconnected")
 
@@ -651,10 +650,6 @@ class GameOverView:
         )
 
         item_width = 20
-
-        highlight_color = (COLOR % 47) + (
-            COLOR % 30
-        )  # white background, black foreground
 
         for menu_item in self._all_menu_items:
             display_text = menu_item.center(item_width).encode("utf-8")
