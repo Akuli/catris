@@ -310,12 +310,6 @@ class GameState:
 PLAYER_COLORS = {31, 32, 33, 34, 35, 36, 37}  # foreground colors
 
 
-def _name_to_string(name_bytes: bytes) -> str:
-    return "".join(
-        c for c in name_bytes.decode("utf-8", errors="replace") if c.isprintable()
-    )
-
-
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
@@ -326,8 +320,7 @@ class Server(socketserver.ThreadingTCPServer):
         self.lock = threading.RLock()
         # All of the below are locked with self.lock:
         self.__state = GameState()  # see access_game_state()
-        self.names_of_connected_players: set[str] = set()
-        self.playing_clients: dict[Client, Player] = {}  # all keys are in named_clients
+        self.clients: set[Client] = set()
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
@@ -339,15 +332,18 @@ class Server(socketserver.ThreadingTCPServer):
             yield self.__state
 
             assert self.__state.is_valid()
-            if self.__state.game_is_over():
-                print("Game over!")
-                self.__state.reset()
-                for client in self.playing_clients:
-                    client.render_game_over_screen()
-                self.playing_clients.clear()
-            elif render:
-                for client in self.playing_clients:
-                    client.render_game()
+            if render:
+                if self.__state.game_is_over():
+                    print("Game over!")
+                    self.__state.reset()
+                    for client in self.clients:
+                        if isinstance(client.view, PlayingView):
+                            client.view = GameOverView(client)
+                            client.render()
+                else:
+                    for client in self.clients:
+                        if isinstance(client.view, PlayingView):
+                            client.render()
 
     def _countdown(self, player: Player, game_id: int) -> None:
         while True:
@@ -359,7 +355,11 @@ class Server(socketserver.ThreadingTCPServer):
                 assert isinstance(player.moving_block_or_wait_counter, int)
                 player.moving_block_or_wait_counter -= 1
                 if player.moving_block_or_wait_counter == 0:
-                    client_currently_connected = player in self.playing_clients.values()
+                    client_currently_connected = any(
+                        isinstance(client.view, PlayingView)
+                        and client.view.player == player
+                        for client in self.clients
+                    )
                     state.end_waiting(player, client_currently_connected)
                     return
 
@@ -392,45 +392,96 @@ class Server(socketserver.ThreadingTCPServer):
             time.sleep(0.5 / (1 + score / 1000))
 
 
-class Client(socketserver.BaseRequestHandler):
-    server: Server
-    request: socket.socket
+NAME_X = 20
+NAME_Y = 10
 
-    def setup(self) -> None:
-        print(self.client_address, "New connection")
-        self.last_displayed_lines: list[bytes] = []
-        self._send_queue: queue.Queue[bytes | None] = queue.Queue()
-        self.name: str | None = None
 
-    def _display_lines(self, lines: list[bytes]) -> None:
-        lines = lines.copy()
-        while len(lines) < len(self.last_displayed_lines):
-            lines.append(b"")
-        while len(lines) > len(self.last_displayed_lines):
-            self.last_displayed_lines.append(b"")
+class AskNameView:
+    def __init__(self, client: Client):
+        assert client.name is None
+        self._client = client
+        self._name_so_far = b""
+        self._error: str | None = None
 
-        # Send it all at once, so that hopefully cursor won't be in a
-        # temporary place for long times, even if internet is slow
-        to_send = b""
+    def _get_name(self) -> str:
+        return "".join(
+            c
+            for c in self._name_so_far.decode("utf-8", errors="replace")
+            if c.isprintable()
+        )
 
-        for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
-            if old_line != new_line:
-                to_send += MOVE_CURSOR % (y + 1, 1)
-                to_send += new_line
-                to_send += CLEAR_TO_END_OF_LINE
-        self.last_displayed_lines = lines.copy()
+    # return value is in 1-based coordinates
+    def get_cursor_pos(self) -> tuple[int, int]:
+        return (1 + NAME_Y, 1 + NAME_X + len("Name: " + self._get_name()))
 
-        # Wipe bottom of terminal and leave cursor there.
-        # This way, if user types something, it will be wiped.
-        to_send += MOVE_CURSOR % (24, 1)
-        to_send += CLEAR_TO_END_OF_LINE
+    def get_lines_to_render(self) -> list[bytes]:
+        result = ASCII_ART.encode("ascii").splitlines()
+        while len(result) < NAME_Y:
+            result.append(b"")
+        result.append(b" " * NAME_X + b"Name: " + self._get_name().encode("utf-8"))
+        if self._error is not None:
+            result.append(b"")
+            result.append(b"")
+            result.append(
+                (COLOR % 31) + b"  " + self._error.encode("utf-8") + (COLOR % 0)
+            )
+        return result
 
-        self._send_queue.put(to_send)
+    def handle_key_press(self, received: bytes) -> None:
+        if received == b"\n":
+            self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
+        elif received == b"\r":
+            # FIXME
+            self._start_playing()
+        elif received == BACKSPACE:
+            # Don't just delete last byte, so that non-ascii can be erased
+            # with a single backspace press
+            self._name_so_far = self._get_name()[:-1].encode("utf-8")
+        else:
+            self._name_so_far += received
 
-    def render_game(self) -> None:
-        with self.server.access_game_state(render=False) as state:
-            my_player = self.server.playing_clients[self]
+    def _start_playing(self) -> None:
+        name = self._get_name()
+        if not name:
+            self._error = "Please write a name before pressing Enter."
+            return
+        if len(f"[{name}] {WAIT_TIME}") > 2 * WIDTH_PER_PLAYER:
+            self._error = "The name is too long."
+            return
 
+        # Must lock while assigning name and color, so can't get duplicates
+        with self._client.server.access_game_state() as state:
+            names_of_connected_players = {
+                client.name
+                for client in self._client.server.clients
+                if client.name is not None
+            }
+            names_in_use = names_of_connected_players | {p.name for p in state.players}
+
+            if len(names_in_use) == len(PLAYER_COLORS):
+                self._error = "Server is full. Please try again later."
+                return
+
+            # Prevent two simultaneous clients with the same name.
+            # But it's fine if you leave and then join back with the same name.
+            if name in names_of_connected_players:
+                self._error = "This name is in use. Try a different name."
+                return
+
+            print(self._client.client_address, f"starting game as {name!r}")
+            self._client.send_queue.put(HIDE_CURSOR)
+            self._client.name = name
+            player = state.add_player(name)
+            self._client.view = PlayingView(self._client, player)
+
+
+class PlayingView:
+    def __init__(self, client: Client, player: Player):
+        self._client = client
+        self.player = player
+
+    def get_lines_to_render(self) -> list[bytes]:
+        with self._client.server.access_game_state(render=False) as state:
             header_line = b"o"
             name_line = b" "
             for player in state.players:
@@ -449,7 +500,7 @@ class Client(socketserver.BaseRequestHandler):
                 header_line += color_bytes
                 name_line += color_bytes
 
-                if player == my_player:
+                if player == self.player:
                     header_line += b"==" * WIDTH_PER_PLAYER
                 else:
                     header_line += b"--" * WIDTH_PER_PLAYER
@@ -476,106 +527,109 @@ class Client(socketserver.BaseRequestHandler):
             lines.append(b"o" + b"--" * state.get_width() + b"o")
 
             lines[5] += f"  Score: {state.score}".encode("ascii")
-            if my_player.rotate_counter_clockwise:
+            if self.player.rotate_counter_clockwise:
                 lines[6] += b"  Counter-clockwise"
-            if isinstance(my_player.moving_block_or_wait_counter, int):
-                n = my_player.moving_block_or_wait_counter
+            if isinstance(self.player.moving_block_or_wait_counter, int):
+                n = self.player.moving_block_or_wait_counter
                 lines[8] += f"  Please wait: {n}".encode("ascii")
 
-            self._display_lines(lines)
+            return lines
 
-    def render_game_over_screen(self) -> None:
-        self._display_lines([b"Game Over :("])  # TODO
+    def handle_key_press(self, received: bytes) -> None:
+        if received in (b"A", b"a", LEFT_ARROW_KEY):
+            with self._client.server.access_game_state() as state:
+                state.move_if_possible(self.player, dx=-1, dy=0)
+        elif received in (b"D", b"d", RIGHT_ARROW_KEY):
+            with self._client.server.access_game_state() as state:
+                state.move_if_possible(self.player, dx=1, dy=0)
+        elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
+            with self._client.server.access_game_state() as state:
+                state.rotate(self.player)
+        elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
+            with self._client.server.access_game_state() as state:
+                state.move_down_all_the_way(self.player)
+        elif received in (b"R", b"r"):
+            self.player.rotate_counter_clockwise = (
+                not self.player.rotate_counter_clockwise
+            )
+
+
+class GameOverView:
+    def __init__(self, client: Client):
+        self._client = client
+
+    def get_lines_to_render(self) -> list[bytes]:
+        return [b"Game Over :("]  # TODO
+
+    def handle_key_press(self, received: bytes) -> None:
+        if received == b"n":
+            assert self._client.name is not None
+            with self._client.server.access_game_state() as state:
+                player = state.add_player(self._client.name)
+                self._client.view = PlayingView(self._client, player)
+
+
+class Client(socketserver.BaseRequestHandler):
+    server: Server
+    request: socket.socket
+
+    def setup(self) -> None:
+        print(self.client_address, "New connection")
+        self.last_displayed_lines: list[bytes] = []
+        self.send_queue: queue.Queue[bytes | None] = queue.Queue()
+        self.name: str | None = None
+        self.view: AskNameView | PlayingView | GameOverView = AskNameView(self)
+
+    def render(self) -> None:
+        lines = self.view.get_lines_to_render()
+        while len(lines) < len(self.last_displayed_lines):
+            lines.append(b"")
+        while len(lines) > len(self.last_displayed_lines):
+            self.last_displayed_lines.append(b"")
+
+        # Send it all at once, so that hopefully cursor won't be in a
+        # temporary place for long times, even if internet is slow
+        to_send = b""
+
+        for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
+            if old_line != new_line:
+                to_send += MOVE_CURSOR % (y + 1, 1)
+                to_send += new_line
+                to_send += CLEAR_TO_END_OF_LINE
+        self.last_displayed_lines = lines.copy()
+
+        if isinstance(self.view, AskNameView):
+            cursor_pos = self.view.get_cursor_pos()
+        else:
+            # Bottom of terminal. If user types something, it's unlikely to be
+            # noticed here before it gets wiped by the next refresh.
+            cursor_pos = (24, 1)
+
+        to_send += MOVE_CURSOR % cursor_pos
+        to_send += CLEAR_TO_END_OF_LINE
+
+        self.send_queue.put(to_send)
 
     def _receive_bytes(self, maxsize: int) -> bytes | None:
         try:
             result = self.request.recv(maxsize)
         except OSError as e:
             print(self.client_address, e)
-            self._send_queue.put(None)
+            self.send_queue.put(None)
             return None
 
         # Checking ESC key here is a bad idea.
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
         if result in {CONTROL_C, CONTROL_D, CONTROL_Q, b""}:
-            self._send_queue.put(None)
+            self.send_queue.put(None)
             return None
 
         return result
 
-    def _start_playing(self, name: str) -> str | None:
-        if not name:
-            return "Please write a name before pressing Enter."
-        if len(f"[{name}] {WAIT_TIME}") > 2 * WIDTH_PER_PLAYER:
-            return "The name is too long."
-
-        # Must lock while assigning self.name and self.color, so can't get duplicates
-        with self.server.access_game_state() as state:
-            names_in_use = self.server.names_of_connected_players | {
-                p.name for p in state.players
-            }
-            if len(names_in_use) == len(PLAYER_COLORS):
-                return "Server is full. Please try again later."
-
-            # Prevent two simultaneous clients with the same name.
-            # But it's fine if you leave and then join back with the same name.
-            if name in self.server.names_of_connected_players:
-                return "This name is in use. Try a different name."
-
-            player = state.add_player(name)
-            self.name = name
-            self.server.names_of_connected_players.add(name)
-            self.server.playing_clients[self] = player
-
-        return None  # success
-
-    def _show_prompt_error(self, error: str) -> None:
-        self._send_queue.put(MOVE_CURSOR % (15, 2))
-        self._send_queue.put(COLOR % 31)  # red
-        self._send_queue.put(error.encode("utf-8"))
-        self._send_queue.put(COLOR % 0)
-        self._send_queue.put(CLEAR_TO_END_OF_LINE)
-
-    def _prompt_name(self) -> bool:
-        name_x = 20
-        name_y = 10
-        name_prompt = "Name: "
-
-        self._send_queue.put(MOVE_CURSOR % (1, 1))
-        self._send_queue.put(ASCII_ART.encode("ascii").replace(b"\n", b"\r\n"))
-        self._send_queue.put(MOVE_CURSOR % (name_y, name_x))
-        self._send_queue.put(name_prompt.encode("ascii"))
-
-        name = b""
-        while True:
-            byte = self._receive_bytes(1)
-            if byte is None:
-                return False
-            elif byte == b"\n":
-                self._show_prompt_error(
-                    "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
-                )
-            elif byte == b"\r":
-                error = self._start_playing(_name_to_string(name))
-                if error is None:
-                    return True
-                self._show_prompt_error(error)
-            elif byte == BACKSPACE:
-                # Don't just delete last byte, so that non-ascii can be erased
-                # with a single backspace press
-                name = _name_to_string(name)[:-1].encode("utf-8")
-            else:
-                name += byte
-
-            self._send_queue.put(MOVE_CURSOR % (name_y, name_x + len(name_prompt)))
-            # Send name as it will show up to other users
-            self._send_queue.put(_name_to_string(name).encode("utf-8"))
-            self._send_queue.put(CLEAR_TO_END_OF_LINE)
-
     def _send_queue_thread(self) -> None:
         while True:
-            item = self._send_queue.get()
+            item = self.send_queue.get()
             if item is not None:
                 try:
                     self.request.sendall(item)
@@ -584,17 +638,15 @@ class Client(socketserver.BaseRequestHandler):
                     print(self.client_address, e)
 
             with self.server.access_game_state() as state:
-                # https://github.com/python/typeshed/issues/7121
-                if self.name is not None:
-                    self.server.names_of_connected_players.discard(self.name)
-
-                if self in self.server.playing_clients:
-                    player = self.server.playing_clients.pop(self)
-                    if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-                        player.moving_block_or_wait_counter = None
-
-                    if not self.server.playing_clients:
-                        state.reset()
+                self.server.clients.remove(self)
+                if isinstance(self.view, PlayingView) and isinstance(
+                    self.view.player.moving_block_or_wait_counter, MovingBlock
+                ):
+                    self.view.player.moving_block_or_wait_counter = None
+                if not any(
+                    isinstance(c.view, PlayingView) for c in self.server.clients
+                ):
+                    state.reset()
 
             print(self.client_address, "Disconnect")
             try:
@@ -609,65 +661,28 @@ class Client(socketserver.BaseRequestHandler):
                 print(self.client_address, e)
             break
 
-    def _handle_key_press_after_name_prompting(self, command: bytes) -> None:
-        assert self.name is not None
-
-        with self.server.lock:
-            if self in self.server.playing_clients:
-                player = self.server.playing_clients[self]
-                if command in (b"A", b"a", LEFT_ARROW_KEY):
-                    with self.server.access_game_state() as state:
-                        state.move_if_possible(player, dx=-1, dy=0)
-                elif command in (b"D", b"d", RIGHT_ARROW_KEY):
-                    with self.server.access_game_state() as state:
-                        state.move_if_possible(player, dx=1, dy=0)
-                elif command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-                    with self.server.access_game_state() as state:
-                        state.rotate(player)
-                elif command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-                    with self.server.access_game_state() as state:
-                        state.move_down_all_the_way(player)
-                elif command in (b"R", b"r"):
-                    player.rotate_counter_clockwise = (
-                        not player.rotate_counter_clockwise
-                    )
-                    self.render_game()
-                else:
-                    self.render_game()  # Hide what the user typed
-
-            else:
-                # Game over screen
-                # TODO: make it more interesting than enter to play more
-                if command == b"\r":
-                    with self.server.access_game_state() as state:
-                        self.server.playing_clients[self] = state.add_player(self.name)
-                    return
-
-                self.render_game_over_screen()
-
     def handle(self) -> None:
         send_queue_thread = threading.Thread(target=self._send_queue_thread)
         send_queue_thread.start()
 
         try:
-            self._send_queue.put(CLEAR_SCREEN)
-            if not self._prompt_name():
-                return
-            self._send_queue.put(HIDE_CURSOR)
-
-            print(self.client_address, f"starting game, name={self.name!r}")
+            self.server.clients.add(self)
+            self.send_queue.put(CLEAR_SCREEN)
 
             while True:
+                with self.server.lock:
+                    self.render()
+
                 command = self._receive_bytes(10)
                 if command is None:
                     break
-                self._handle_key_press_after_name_prompting(command)
+                self.view.handle_key_press(command)
 
         except OSError as e:
             print(self.client_address, e)
 
         finally:
-            self._send_queue.put(None)
+            self.send_queue.put(None)
             send_queue_thread.join()  # Don't close until stuff is sent
 
 
