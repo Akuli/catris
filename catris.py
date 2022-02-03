@@ -63,6 +63,9 @@ BLOCK_COLORS = {
     "S": 42,  # green
 }
 
+# Limited to 4 players, because must fit on 80x24 terminal
+PLAYER_COLORS = {31, 32, 33, 34}
+
 # If you mess up, how many seconds should you wait?
 WAIT_TIME = 10
 
@@ -308,10 +311,6 @@ class GameState:
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
         return needs_wait_counter
-
-
-# If you want to play with more than 4 players, use bigger terminal than 80x24
-PLAYER_COLORS = {31, 32, 33, 34, 35, 36, 37}  # foreground colors
 
 
 def _name_to_string(name_bytes: bytes) -> str:
