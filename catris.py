@@ -397,25 +397,23 @@ class Server(socketserver.ThreadingTCPServer):
 
             assert self.__state.is_valid()
             if self.__state.game_is_over():
-                print("Game over!")
-
                 hs = HighScore(
                     score=self.__state.score,
                     duration_ns=(time.monotonic_ns() - self.__state.start_time),
                     players=[p.name for p in self.__state.players],
                 )
+                print("Game over!", hs)
                 self.__state.players.clear()
 
                 assert render
-                write_high_score = False
+                someone_still_connected = False
                 for client in self.clients:
                     if isinstance(client.view, PlayingView):
-                        write_high_score = True
+                        someone_still_connected = True
                         client.view = GameOverView(client, hs)
                         client.render()
 
-                if write_high_score:
-                    print(hs)
+                if someone_still_connected:
                     add_high_score(hs)
                 else:
                     print("Not adding high score because everyone disconnected")
