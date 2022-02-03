@@ -5,7 +5,6 @@ import time
 import contextlib
 import socketserver
 import threading
-import traceback
 import socket
 import random
 import queue
