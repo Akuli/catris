@@ -392,9 +392,6 @@ class Server(socketserver.ThreadingTCPServer):
             time.sleep(0.5 / (1 + score / 1000))
 
 
-NAME_X = 20
-NAME_Y = 10
-
 
 class AskNameView:
     def __init__(self, client: Client):
@@ -410,22 +407,22 @@ class AskNameView:
             if c.isprintable()
         )
 
-    # return value is in 1-based coordinates
-    def get_cursor_pos(self) -> tuple[int, int]:
-        return (1 + NAME_Y, 1 + NAME_X + len("Name: " + self._get_name()))
-
-    def get_lines_to_render(self) -> list[bytes]:
+    def get_lines_to_render_and_cursor_pos(self) -> tuple[list[bytes], tuple[int, int]]:
         result = ASCII_ART.encode("ascii").splitlines()
-        while len(result) < NAME_Y:
+        while len(result) < 10:
             result.append(b"")
-        result.append(b" " * NAME_X + b"Name: " + self._get_name().encode("utf-8"))
+
+        name_line = " " * 20 + f"Name: {self._get_name()}"
+        result.append(name_line.encode("utf-8"))
+
         if self._error is not None:
             result.append(b"")
             result.append(b"")
             result.append(
                 (COLOR % 31) + b"  " + self._error.encode("utf-8") + (COLOR % 0)
             )
-        return result
+
+        return (result, (11, len(name_line) + 1))
 
     def handle_key_press(self, received: bytes) -> None:
         if received == b"\n":
@@ -581,7 +578,15 @@ class Client(socketserver.BaseRequestHandler):
         self.view: AskNameView | PlayingView | GameOverView = AskNameView(self)
 
     def render(self) -> None:
-        lines = self.view.get_lines_to_render()
+        # Bottom of terminal. If user types something, it's unlikely to be
+        # noticed here before it gets wiped by the next refresh.
+        cursor_pos = (24, 1)
+
+        if isinstance(self.view, AskNameView):
+            lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
+        else:
+            lines = self.view.get_lines_to_render()
+
         while len(lines) < len(self.last_displayed_lines):
             lines.append(b"")
         while len(lines) > len(self.last_displayed_lines):
@@ -597,13 +602,6 @@ class Client(socketserver.BaseRequestHandler):
                 to_send += new_line
                 to_send += CLEAR_TO_END_OF_LINE
         self.last_displayed_lines = lines.copy()
-
-        if isinstance(self.view, AskNameView):
-            cursor_pos = self.view.get_cursor_pos()
-        else:
-            # Bottom of terminal. If user types something, it's unlikely to be
-            # noticed here before it gets wiped by the next refresh.
-            cursor_pos = (24, 1)
 
         to_send += MOVE_CURSOR % cursor_pos
         to_send += CLEAR_TO_END_OF_LINE
