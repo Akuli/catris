@@ -15,6 +15,7 @@ ASCII_ART = r"""
                   / _)   / _ \  |_   _| |  __ \ |_   _| / __)
                  | (_   / /_\ \   | |   |  _  /  _| |_  \__ \
                   \__) /_/   \_\  |_|   |_| \_\ |_____| (___/
+                        https://github.com/Akuli/catris
 """
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -527,8 +528,6 @@ class Client(socketserver.BaseRequestHandler):
 
         self._send_queue.put(MOVE_CURSOR % (1, 1))
         self._send_queue.put(ASCII_ART.encode("ascii").replace(b"\n", b"\r\n"))
-        self._send_queue.put(MOVE_CURSOR % (ASCII_ART.count("\n") + 1, 1))
-        self._send_queue.put(b"https://github.com/Akuli/catris".center(80).rstrip())
         self._send_queue.put(MOVE_CURSOR % (name_y, name_x))
         self._send_queue.put(name_prompt.encode("ascii"))
 
