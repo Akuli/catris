@@ -332,19 +332,22 @@ class Server(socketserver.ThreadingTCPServer):
             yield self.__state
 
             assert self.__state.is_valid()
+            if self.__state.game_is_over():
+                score = self.__state.score
+                print("Game over! Score", score)
+                self.__state.reset()
+
+                assert render
+                for client in self.clients:
+                    if isinstance(client.view, PlayingView):
+                        client.view = GameOverView(client, score)
+                        client.render()
+                return
+
             if render:
-                if self.__state.game_is_over():
-                    score = self.__state.score
-                    print("Game over! Score", score)
-                    self.__state.reset()
-                    for client in self.clients:
-                        if isinstance(client.view, PlayingView):
-                            client.view = GameOverView(client, score)
-                            client.render()
-                else:
-                    for client in self.clients:
-                        if isinstance(client.view, PlayingView):
-                            client.render()
+                for client in self.clients:
+                    if isinstance(client.view, PlayingView):
+                        client.render()
 
     def _countdown(self, player: Player, game_id: int) -> None:
         while True:
