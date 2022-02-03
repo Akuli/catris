@@ -96,6 +96,7 @@ class GameState:
         self.reset()
 
     def reset(self) -> None:
+        self.game_id = time.monotonic_ns()
         self.players: list[Player] = []
         self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
         self.score = 0
@@ -344,10 +345,13 @@ class Server(socketserver.ThreadingTCPServer):
                 for client in self.playing_clients:
                     client.render_game()
 
-    def _countdown(self, player: Player) -> None:
+    def _countdown(self, player: Player, game_id: int) -> None:
         while True:
             time.sleep(1)
             with self.access_game_state() as state:
+                if state.game_id != game_id:
+                    return
+
                 assert isinstance(player.moving_block_or_wait_counter, int)
                 player.moving_block_or_wait_counter -= 1
                 if player.moving_block_or_wait_counter == 0:
@@ -358,18 +362,22 @@ class Server(socketserver.ThreadingTCPServer):
     def _move_blocks_down_thread(self) -> None:
         while True:
             with self.access_game_state() as state:
+                game_id = state.game_id
                 needs_wait_counter = state.move_blocks_down()
                 full_lines = state.find_full_lines()
-
-            for player in needs_wait_counter:
-                threading.Thread(target=self._countdown, args=[player]).start()
+                for player in needs_wait_counter:
+                    threading.Thread(target=self._countdown, args=[player, game_id]).start()
 
             if full_lines:
                 for color in [47, 0, 47, 0]:
                     with self.access_game_state() as state:
+                        if state.game_id != game_id:
+                            continue
                         state.set_color_of_lines(full_lines, color)
                     time.sleep(0.1)
                 with self.access_game_state() as state:
+                    if state.game_id != game_id:
+                        continue
                     state.clear_lines(full_lines)
 
             with self.access_game_state(render=False) as state:
