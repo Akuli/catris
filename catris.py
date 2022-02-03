@@ -363,34 +363,34 @@ class Server(socketserver.ThreadingTCPServer):
                     state.end_waiting(player, client_currently_connected)
                     return
 
-    def _move_blocks_down_thread(self) -> None:
-        while True:
-            with self.access_game_state() as state:
-                game_id = state.game_id
-                needs_wait_counter = state.move_blocks_down()
-                full_lines = state.find_full_lines()
-                for player in needs_wait_counter:
-                    threading.Thread(
-                        target=self._countdown, args=[player, game_id]
-                    ).start()
+    def _move_blocks_down_once(self) -> None:
+        with self.access_game_state() as state:
+            game_id = state.game_id
+            needs_wait_counter = state.move_blocks_down()
+            full_lines = state.find_full_lines()
+            for player in needs_wait_counter:
+                threading.Thread(
+                    target=self._countdown, args=[player, game_id]
+                ).start()
 
-            if full_lines:
-                for color in [47, 0, 47, 0]:
-                    with self.access_game_state() as state:
-                        if state.game_id != game_id:
-                            continue
-                        state.set_color_of_lines(full_lines, color)
-                    time.sleep(0.1)
+        if full_lines:
+            for color in [47, 0, 47, 0]:
                 with self.access_game_state() as state:
                     if state.game_id != game_id:
-                        continue
-                    state.clear_lines(full_lines)
+                        return
+                    state.set_color_of_lines(full_lines, color)
+                time.sleep(0.1)
+            with self.access_game_state() as state:
+                if state.game_id != game_id:
+                    return
+                state.clear_lines(full_lines)
 
+    def _move_blocks_down_thread(self) -> None:
+        while True:
+            self._move_blocks_down_once()
             with self.access_game_state(render=False) as state:
                 score = state.score
-
             time.sleep(0.5 / (1 + score / 1000))
-
 
 
 class AskNameView:
