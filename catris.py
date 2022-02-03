@@ -562,7 +562,9 @@ class GameOverView:
         lines.append(b"")
         lines.append(b"")
         lines.append(b"Game Over :(".center(80).rstrip())
-        lines.append(f"Your score was {self._score}.".encode("ascii").center(80).rstrip())
+        lines.append(
+            f"Your score was {self._score}.".encode("ascii").center(80).rstrip()
+        )
         lines.append(b"")
         lines.append(b"")
 
@@ -573,18 +575,18 @@ class GameOverView:
             if menu_item == self._selected_item:
                 display_text = (COLOR % 47) + display_text  # white background
                 display_text = (COLOR % 30) + display_text  # black foreground
-                display_text += (COLOR % 0)
-            lines.append(b" " * ((80 - item_width)//2) + display_text)
+                display_text += COLOR % 0
+            lines.append(b" " * ((80 - item_width) // 2) + display_text)
 
         return lines
 
     def handle_key_press(self, received: bytes) -> bool:
         i = self._all_menu_items.index(self._selected_item)
         if received in (UP_ARROW_KEY, b"W", b"w") and i > 0:
-            self._selected_item = self._all_menu_items[i-1]
+            self._selected_item = self._all_menu_items[i - 1]
         if received in (DOWN_ARROW_KEY, b"S", b"s"):
             try:
-                self._selected_item = self._all_menu_items[i+1]
+                self._selected_item = self._all_menu_items[i + 1]
             except IndexError:
                 pass
         if received == b"\r":
