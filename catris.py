@@ -551,16 +551,51 @@ class PlayingView:
 class GameOverView:
     def __init__(self, client: Client):
         self._client = client
+        self._all_menu_items = ["New Game", "Quit"]
+        self._selected_item = "New Game"
 
     def get_lines_to_render(self) -> list[bytes]:
-        return [b"Game Over :("]  # TODO
+        lines = []
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"Game Over :(".center(80).rstrip())
+        lines.append(b"")
+        lines.append(b"")
 
-    def handle_key_press(self, received: bytes) -> None:
-        if received == b"n":
-            assert self._client.name is not None
-            with self._client.server.access_game_state() as state:
-                player = state.add_player(self._client.name)
-                self._client.view = PlayingView(self._client, player)
+        item_width = 20
+
+        for menu_item in self._all_menu_items:
+            display_text = menu_item.center(item_width).encode("utf-8")
+            if menu_item == self._selected_item:
+                display_text = (COLOR % 47) + display_text  # white background
+                display_text = (COLOR % 30) + display_text  # black foreground
+                display_text += (COLOR % 0)
+            lines.append(b" " * ((80 - item_width)//2) + display_text)
+
+        return lines
+
+    def handle_key_press(self, received: bytes) -> bool:
+        i = self._all_menu_items.index(self._selected_item)
+        if received in (UP_ARROW_KEY, b"W", b"w") and i > 0:
+            self._selected_item = self._all_menu_items[i-1]
+        if received in (DOWN_ARROW_KEY, b"S", b"s"):
+            try:
+                self._selected_item = self._all_menu_items[i+1]
+            except IndexError:
+                pass
+        if received == b"\r":
+            if self._selected_item == "New Game":
+                assert self._client.name is not None
+                with self._client.server.access_game_state() as state:
+                    player = state.add_player(self._client.name)
+                    self._client.view = PlayingView(self._client, player)
+            elif self._selected_item == "Quit":
+                return True
+            else:
+                raise NotImplementedError(self._selected_item)
+
+        return False  # do not quit yet
 
 
 class Client(socketserver.BaseRequestHandler):
@@ -671,7 +706,8 @@ class Client(socketserver.BaseRequestHandler):
                 command = self._receive_bytes(10)
                 if command is None:
                     break
-                self.view.handle_key_press(command)
+                if self.view.handle_key_press(command):
+                    break
 
         except OSError as e:
             print(self.client_address, e)
