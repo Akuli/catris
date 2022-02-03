@@ -89,46 +89,6 @@ class HighScore:
         return f"{seconds}sec"
 
 
-def _read_high_scores() -> list[HighScore]:
-    try:
-        with open("high_scores.txt", "r", encoding="utf-8") as file:
-            result = []
-            for line in file:
-                score_string, duration_string, *players = line.strip("\n").split("\t")
-                result.append(
-                    HighScore(
-                        score=int(score_string),
-                        duration_sec=float(duration_string),
-                        players=players,
-                    )
-                )
-            return result
-    except FileNotFoundError:
-        return []
-    except OSError:
-        traceback.print_exc()
-        print("Continuing with empty high scores list")
-        print()
-        return []
-
-
-high_scores = _read_high_scores()
-high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-
-
-def add_high_score(hs: HighScore) -> None:
-    high_scores.append(hs)
-    high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-
-    try:
-        with open("high_scores.txt", "a", encoding="utf-8") as file:
-            print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
-    except OSError:
-        traceback.print_exc()
-        print("High score not written to file:", hs)
-        print()
-
-
 class MovingBlock:
     def __init__(self, player_index: int):
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -375,7 +335,7 @@ class GameState:
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
-    def __init__(self, port: int):
+    def __init__(self, port: int, high_score_file: str):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
@@ -385,6 +345,34 @@ class Server(socketserver.ThreadingTCPServer):
         self.clients: set[Client] = set()
 
         threading.Thread(target=self._move_blocks_down_thread).start()
+
+        self.high_scores = []
+        try:
+            with open(high_score_file, "r", encoding="utf-8") as file:
+                for line in file:
+                    score_string, duration_string, *players = line.strip("\n").split("\t")
+                    self.high_scores.append(
+                        HighScore(
+                            score=int(score_string),
+                            duration_sec=float(duration_string),
+                            players=players,
+                        )
+                    )
+        except FileNotFoundError:
+            print(high_score_file, "will be created when a game ends")
+
+        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+        self._high_score_file = high_score_file
+
+    def _add_high_score(self, hs: HighScore) -> None:
+        self.high_scores.append(hs)
+        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+
+        try:
+            with open(self._high_score_file, "a", encoding="utf-8") as file:
+                print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
+        except OSError as e:
+            print("High score not written to file:", e)
 
     @contextlib.contextmanager
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
@@ -410,7 +398,7 @@ class Server(socketserver.ThreadingTCPServer):
 
                 assert render
                 if playing_clients:
-                    add_high_score(hs)
+                    self._add_high_score(hs)
                     for client in playing_clients:
                         client.view = GameOverView(client, hs)
                         client.render()
@@ -666,7 +654,7 @@ class GameOverView:
         lines.append(b"| Score | Duration | Players")
         lines.append(b"|-------|----------|-------".ljust(80, b"-"))
 
-        for hs in high_scores[:5]:
+        for hs in self._client.server.high_scores[:5]:
             player_string = ", ".join(hs.players)
             line_string = (
                 f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
@@ -817,6 +805,6 @@ class Client(socketserver.BaseRequestHandler):
             send_queue_thread.join()  # Don't close until stuff is sent
 
 
-server = Server(12345)
+server = Server(12345, "high_scores.txt")
 print("Listening on port 12345...")
 server.serve_forever()
