@@ -428,7 +428,6 @@ class AskNameView:
         if received == b"\n":
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received == b"\r":
-            # FIXME
             self._start_playing()
         elif received == BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
