@@ -247,6 +247,10 @@ class GameState:
 
     # None return value means server full
     def add_player(self, name: str) -> Player:
+        print(f"{name!r} joins a game with {len(self.players)} existing players")
+        if not self.players:
+            self.reset()
+
         game_over = self.game_is_over()
 
         # Name can exist already, if player quits and comes back
@@ -335,7 +339,7 @@ class Server(socketserver.ThreadingTCPServer):
             if self.__state.game_is_over():
                 score = self.__state.score
                 print("Game over! Score", score)
-                self.__state.reset()
+                self.__state.players.clear()
 
                 assert render
                 for client in self.clients:
@@ -466,7 +470,7 @@ class AskNameView:
                 self._error = "This name is in use. Try a different name."
                 return
 
-            print(self._client.client_address, f"starting game as {name!r}")
+            print(self._client.client_address, f"name asking done: {name!r}")
             self._client.send_queue.put(HIDE_CURSOR)
             self._client.name = name
             player = state.add_player(name)
@@ -668,16 +672,12 @@ class Client(socketserver.BaseRequestHandler):
                 except OSError as e:
                     print(self.client_address, e)
 
-            with self.server.access_game_state() as state:
+            with self.server.access_game_state():
                 self.server.clients.remove(self)
                 if isinstance(self.view, PlayingView) and isinstance(
                     self.view.player.moving_block_or_wait_counter, MovingBlock
                 ):
                     self.view.player.moving_block_or_wait_counter = None
-                if not any(
-                    isinstance(c.view, PlayingView) for c in self.server.clients
-                ):
-                    state.reset()
 
             print(self.client_address, "Disconnect")
             try:
