@@ -74,12 +74,11 @@ WAIT_TIME = 10
 @dataclasses.dataclass
 class HighScore:
     score: int
-    start_time: int  # time.monotonic_ns()
-    end_time: int  # time.monotonic_ns()
+    duration_ns: int  # nanoseconds
     players: list[str]
 
     def get_duration_string(self) -> str:
-        seconds = (self.end_time - self.start_time) // (1000 * 1000 * 1000)
+        seconds = self.duration_ns // (1000 * 1000 * 1000)
         minutes = seconds // 60
         hours = minutes // 60
 
@@ -95,12 +94,11 @@ def _read_high_scores() -> list[HighScore]:
         with open("high_scores.txt", "r", encoding="utf-8") as file:
             result = []
             for line in file:
-                score, start_time, end_time, *players = line.strip("\n").split("\t")
+                score_string, duration_string, *players = line.strip("\n").split("\t")
                 result.append(
                     HighScore(
-                        score=int(score),
-                        start_time=int(start_time),
-                        end_time=int(end_time),
+                        score=int(score_string),
+                        duration_ns=int(duration_string),
                         players=players,
                     )
                 )
@@ -125,7 +123,7 @@ def add_high_score(hs: HighScore) -> None:
     try:
         with open("high_scores.txt", "a", encoding="utf-8") as file:
             print(
-                hs.score, hs.start_time, hs.end_time, *hs.players, file=file, sep="\t"
+                hs.score, hs.duration_ns, *hs.players, file=file, sep="\t"
             )
     except OSError:
         traceback.print_exc()
@@ -403,22 +401,26 @@ class Server(socketserver.ThreadingTCPServer):
 
                 hs = HighScore(
                     score=self.__state.score,
-                    start_time=self.__state.start_time,
-                    end_time=time.monotonic_ns(),
+                    duration_ns=(time.monotonic_ns() - self.__state.start_time),
                     players=[p.name for p in self.__state.players],
                 )
-                add_high_score(hs)
-
                 self.__state.players.clear()
 
                 assert render
+                write_high_score = False
                 for client in self.clients:
                     if isinstance(client.view, PlayingView):
+                        write_high_score = True
                         client.view = GameOverView(client, hs)
                         client.render()
-                return
 
-            if render:
+                if write_high_score:
+                    print(hs)
+                    add_high_score(hs)
+                else:
+                    print("Not adding high score because everyone disconnected")
+
+            elif render:
                 for client in self.clients:
                     if isinstance(client.view, PlayingView):
                         client.render()
@@ -673,14 +675,16 @@ class GameOverView:
 
         for hs in high_scores[:5]:
             player_string = ", ".join(hs.players)
-            line_string = f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
+            line_string = (
+                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
+            )
             line = line_string.encode("utf-8")
             if hs == self._high_score:
                 lines.append((COLOR % 42) + line)
             else:
                 lines.append((COLOR % 0) + line)
 
-        lines.append(COLOR % 0)   # Needed if last score was highlighted
+        lines.append(COLOR % 0)  # Needed if last score was highlighted
         return lines
 
     def handle_key_press(self, received: bytes) -> bool:
