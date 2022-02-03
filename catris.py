@@ -276,7 +276,11 @@ class GameState:
 
         # Name can exist already, if player quits and comes back
         for player in self.players:
-            if player.name == name:
+            if player.name.lower() == name.lower():
+                # Let's say your caps lock was on accidentally and you type
+                # "aKULI" as name when you intended to type "Akuli".
+                # If that happens, you can leave the game and join back.
+                player.name = name
                 break
         else:
             color = min(PLAYER_COLORS - {p.color for p in self.players})
@@ -530,7 +534,7 @@ class AskNameView:
 
             # Prevent two simultaneous clients with the same name.
             # But it's fine if you leave and then join back with the same name.
-            if name in names_of_connected_players:
+            if name.lower() in (n.lower() for n in names_of_connected_players):
                 self._error = "This name is in use. Try a different name."
                 return
 
