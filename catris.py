@@ -584,11 +584,8 @@ class GameOverView:
         i = self._all_menu_items.index(self._selected_item)
         if received in (UP_ARROW_KEY, b"W", b"w") and i > 0:
             self._selected_item = self._all_menu_items[i - 1]
-        if received in (DOWN_ARROW_KEY, b"S", b"s"):
-            try:
-                self._selected_item = self._all_menu_items[i + 1]
-            except IndexError:
-                pass
+        if received in (DOWN_ARROW_KEY, b"S", b"s") and i+1 < len(self._all_menu_items):
+            self._selected_item = self._all_menu_items[i + 1]
         if received == b"\r":
             if self._selected_item == "New Game":
                 assert self._client.name is not None
