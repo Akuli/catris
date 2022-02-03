@@ -328,8 +328,10 @@ class Server(socketserver.ThreadingTCPServer):
 
         # RLock because state usage triggers rendering, which uses state
         self._lock = threading.RLock()
-        self.__state = GameState()  # Access only with access_game_state()
-        self.clients: set[Client] = set()  # This too is locked with the same lock
+        # All of the below are locked with self._lock:
+        self.__state = GameState()  # see access_game_state()
+        self.names_in_use: set[str] = set()
+        self.playing_clients: dict[Client, Player] = {}  # all keys are in named_clients
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
@@ -339,7 +341,7 @@ class Server(socketserver.ThreadingTCPServer):
             yield self.__state
             assert self.__state.is_valid()
             if render:
-                for client in self.clients:
+                for client in self.playing_clients:
                     client.render_game()
 
     def _countdown(self, player: Player) -> None:
@@ -349,9 +351,7 @@ class Server(socketserver.ThreadingTCPServer):
                 assert isinstance(player.moving_block_or_wait_counter, int)
                 player.moving_block_or_wait_counter -= 1
                 if player.moving_block_or_wait_counter == 0:
-                    client_currently_connected = any(
-                        c.player == player for c in self.clients
-                    )
+                    client_currently_connected = player in self.playing_clients.values()
                     state.end_waiting(player, client_currently_connected)
                     return
 
@@ -386,11 +386,12 @@ class Client(socketserver.BaseRequestHandler):
         print(self.client_address, "New connection")
         self.last_displayed_lines: list[bytes] | None = None
         self._send_queue: queue.Queue[bytes | None] = queue.Queue()
+        self.name: str | None = None
 
     def render_game(self) -> None:
-        assert self.player is not None
-
         with self.server.access_game_state(render=False) as state:
+            my_player = self.server.playing_clients[self]
+
             score_y = 5
             rotate_dir_y = 6
             game_status_y = 8  # Leave a visible gap above, to highlight game over text
@@ -413,7 +414,7 @@ class Client(socketserver.BaseRequestHandler):
                 header_line += color_bytes
                 name_line += color_bytes
 
-                if player == self.player:
+                if player == my_player:
                     header_line += b"==" * WIDTH_PER_PLAYER
                 else:
                     header_line += b"--" * WIDTH_PER_PLAYER
@@ -440,13 +441,13 @@ class Client(socketserver.BaseRequestHandler):
             lines.append(b"o" + b"--" * state.get_width() + b"o")
 
             lines[score_y] += f"  Score: {state.score}".encode("ascii")
-            if self.player.rotate_counter_clockwise:
+            if my_player.rotate_counter_clockwise:
                 lines[rotate_dir_y] += b"  Counter-clockwise"
 
             if state.game_is_over():
                 lines[game_status_y] += b"  GAME OVER"
-            elif isinstance(self.player.moving_block_or_wait_counter, int):
-                n = self.player.moving_block_or_wait_counter
+            elif isinstance(my_player.moving_block_or_wait_counter, int):
+                n = my_player.moving_block_or_wait_counter
                 lines[game_status_y] += f"  Please wait: {n}".encode("ascii")
 
             if self.last_displayed_lines is None:
@@ -502,15 +503,16 @@ class Client(socketserver.BaseRequestHandler):
         with self.server.access_game_state() as state:
             # Prevent two simultaneous clients with the same name.
             # But it's fine if you leave and then join back with the same name
-            if name in (c.player.name for c in self.server.clients):
+            if name in self.server.names_in_use:
                 return "This name is in use. Try a different name."
 
             player = state.add_player(name)
             if player is None:
                 return "Server is full. Please try again later."
 
-            self.player: Player = player
-            self.server.clients.add(self)
+            self.name = name
+            self.server.names_in_use.add(name)
+            self.server.playing_clients[self] = player
 
         return None
 
@@ -568,14 +570,15 @@ class Client(socketserver.BaseRequestHandler):
                     print(self.client_address, e)
 
             with self.server.access_game_state() as state:
-                if self in self.server.clients:
-                    self.server.clients.remove(self)
-                    if isinstance(
-                        self.player.moving_block_or_wait_counter, MovingBlock
-                    ):
-                        self.player.moving_block_or_wait_counter = None
+                # https://github.com/python/typeshed/issues/7121
+                self.server.names_in_use.discard(self.name)  # type: ignore
 
-                    if not self.server.clients:
+                if self in self.server.playing_clients:
+                    player = self.server.playing_clients.pop(self)
+                    if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+                        player.moving_block_or_wait_counter = None
+
+                    if not self.server.playing_clients:
                         state.reset()
 
             print(self.client_address, "Disconnect")
@@ -603,7 +606,7 @@ class Client(socketserver.BaseRequestHandler):
 
             print(
                 self.client_address,
-                f"starting game, name={self.player.name!r}",
+                f"starting game, name={self.server.playing_clients[self].name!r}",
             )
 
             while True:
@@ -613,19 +616,24 @@ class Client(socketserver.BaseRequestHandler):
 
                 if command in (b"A", b"a", LEFT_ARROW_KEY):
                     with self.server.access_game_state() as state:
-                        state.move_if_possible(self.player, dx=-1, dy=0)
+                        state.move_if_possible(
+                            self.server.playing_clients[self], dx=-1, dy=0
+                        )
                 elif command in (b"D", b"d", RIGHT_ARROW_KEY):
                     with self.server.access_game_state() as state:
-                        state.move_if_possible(self.player, dx=1, dy=0)
+                        state.move_if_possible(
+                            self.server.playing_clients[self], dx=1, dy=0
+                        )
                 elif command in (b"W", b"w", UP_ARROW_KEY, b"\r"):
                     with self.server.access_game_state() as state:
-                        state.rotate(self.player)
+                        state.rotate(self.server.playing_clients[self])
                 elif command in (b"S", b"s", DOWN_ARROW_KEY, b" "):
                     with self.server.access_game_state() as state:
-                        state.move_down_all_the_way(self.player)
+                        state.move_down_all_the_way(self.server.playing_clients[self])
                 elif command in (b"R", b"r"):
-                    self.player.rotate_counter_clockwise = (
-                        not self.player.rotate_counter_clockwise
+                    player = self.server.playing_clients[self]
+                    player.rotate_counter_clockwise = (
+                        not player.rotate_counter_clockwise
                     )
                     self.render_game()
                 else:
