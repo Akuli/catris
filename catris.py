@@ -424,7 +424,7 @@ class AskNameView:
         return (result, (11, len(name_line) + 1))
 
     def handle_key_press(self, received: bytes) -> None:
-        if received == b"\n":
+        if received.endswith(b"\n"):  # e.g. b"Akuli\n"
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received == b"\r":
             self._start_playing()
