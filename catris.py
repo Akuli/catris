@@ -371,7 +371,7 @@ class Server(socketserver.ThreadingTCPServer):
             with open(self._high_score_file, "a", encoding="utf-8") as file:
                 print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
         except OSError as e:
-            print("High score not written to file:", e)
+            print("Writing high score to file failed:", e)
 
     @contextlib.contextmanager
     def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
