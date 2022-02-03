@@ -109,7 +109,7 @@ class GameState:
 
     def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
         assert player.moving_block_or_wait_counter == 0
-        if self.game_is_over() or not client_currently_connected:
+        if not client_currently_connected:
             player.moving_block_or_wait_counter = None
             return
 
