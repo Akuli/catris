@@ -557,16 +557,9 @@ class GameOverView:
         self._selected_item = "New Game"
 
     def get_lines_to_render(self) -> list[bytes]:
-        lines = []
-        lines.append(b"")
-        lines.append(b"")
-        lines.append(b"")
-        lines.append(b"Game Over :(".center(80).rstrip())
-        lines.append(
-            f"Your score was {self._score}.".encode("ascii").center(80).rstrip()
-        )
-        lines.append(b"")
-        lines.append(b"")
+        lines = [b""] * 7
+        lines[3] = b"Game Over :(".center(80).rstrip()
+        lines[4] = f"Your score was {self._score}.".encode("ascii").center(80).rstrip()
 
         item_width = 20
 
