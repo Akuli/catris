@@ -4,7 +4,7 @@ This is a Tetris clone for multiple players that connect to a server with netcat
 
 ![Screenshot](screenshot.png)
 
-First, download `catris.py`. It has no dependencies apart from Python itself.
+First, download `catris.py`. It has no dependencies except Python itself.
 If you already have Git installed, you can use it:
 
 ```
