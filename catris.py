@@ -493,10 +493,14 @@ class AskNameView:
         return (result, (11, len(name_line) + 1))
 
     def handle_key_press(self, received: bytes) -> None:
-        if received.endswith(b"\n"):  # e.g. b"Akuli\n"
-            self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
-        elif received == b"\r":
+        # Enter presses can get sent in different ways...
+        # Linux/MacOS raw mode: b"\r"
+        # Linux/MacOS cooked mode (not supported): b"YourName\n"
+        # Windows: b"\r\n"
+        if b"\r" in received:
             self._start_playing()
+        elif received.endswith(b"\n"):
+            self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received == BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
             # with a single backspace press
@@ -679,7 +683,7 @@ class GameOverView:
         if received in (DOWN_ARROW_KEY, b"S", b"s") and i+1 < len(self._all_menu_items):
             self._selected_item = self._all_menu_items[i + 1]
         # fmt: on
-        if received == b"\r":
+        if received in (b"\r", b"\r\n"):
             if self._selected_item == "New Game":
                 assert self._client.name is not None
                 with self._client.server.access_game_state() as state:
