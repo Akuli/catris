@@ -4,18 +4,32 @@ This is a Tetris clone for multiple players that connect to a server with netcat
 
 ![Screenshot](screenshot.png)
 
-First, run the server:
+First, download `catris.py`. It has no dependencies apart from Python itself.
+If you already have Git installed, you can use it:
 
 ```
-$ git clone https://github.com/Akuli/catris
-$ cd catris
-$ python3 catris.py
+git clone https://github.com/Akuli/catris
+cd catris
 ```
 
-To connect to it, open a new terminal and run:
+Then run the server (if you're on Windows, use `py` instead of `python3`):
 
 ```
-$ stty raw && nc localhost 12345
+python3 catris.py
+```
+
+To connect to the server, open a new terminal and run:
+
+```
+stty raw && nc localhost 12345
+```
+
+Or if you're on Windows, google how to install telnet on whatever windows version you have
+(e.g. googling "windows 7 install telnet" worked for me),
+and use it instead of `nc`:
+
+```
+telnet localhost 12345
 ```
 
 The port is literally `12345`.
@@ -41,10 +55,6 @@ Try to collaborate and make the best use of everyone's blocks.
 
 - On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
     instead of entering them separately.
-- If you are on Windows, you probably don't have netcat,
-    and you can download it from somewhere.
-    You could also just use WSL.
-    Make an issue if you need help or you want me to write better instructions.
 - If you use a firewall, you may need to tell it to allow listening on
     the port that catris uses.
     For example, for UFW this would be `sudo ufw allow in 12345 comment 'catris'`.
