@@ -497,7 +497,7 @@ class AskNameView:
         # Linux/MacOS raw mode: b"\r"
         # Linux/MacOS cooked mode (not supported): b"YourName\n"
         # Windows: b"\r\n"
-        if b"\r" in received:
+        if received in (b"\r", b"\r\n"):
             self._start_playing()
         elif received.endswith(b"\n"):
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
