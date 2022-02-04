@@ -33,7 +33,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 CONTROL_C = b"\x03"
 CONTROL_D = b"\x04"
 CONTROL_Q = b"\x11"
-BACKSPACE = b"\x7f"
+BACKSPACE = (b"\x08", b"\x7f")  # \x08 on windows
 UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
@@ -501,7 +501,7 @@ class AskNameView:
             self._start_playing()
         elif received.endswith(b"\n"):
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
-        elif received == BACKSPACE:
+        elif received in BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
             # with a single backspace press
             self._name_so_far = self._get_name()[:-1].encode("utf-8")
