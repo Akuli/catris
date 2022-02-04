@@ -18,7 +18,7 @@ To connect to it, open a new terminal and run:
 $ stty raw && nc localhost 12345
 ```
 
-Or if you're connecting from Windows:
+Or if you're on Windows:
 
 ```
 telnet localhost 12345
