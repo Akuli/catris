@@ -36,9 +36,6 @@ Keys:
 There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
 
-Once the game is over, everyone must leave the server to start a new game.
-Let me know if you would rather have it start automatically.
-
 
 ## Troubleshooting
 
