@@ -498,7 +498,7 @@ class AskNameView:
         # Linux/MacOS cooked mode (not supported): b"YourName\n"
         # Windows: b"\r\n" (handled as if it was \r and \n separately)
         if received == b"\r":
-            self._start_playing()
+            self._start_playing()  # Will change view, so we won't receive \n
         elif received == b"\n":
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received in BACKSPACE:
