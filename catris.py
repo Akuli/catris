@@ -496,10 +496,10 @@ class AskNameView:
         # Enter presses can get sent in different ways...
         # Linux/MacOS raw mode: b"\r"
         # Linux/MacOS cooked mode (not supported): b"YourName\n"
-        # Windows: b"\r\n"
-        if received in (b"\r", b"\r\n"):
-            self._start_playing()
-        elif received.endswith(b"\n"):
+        # Windows: b"\r\n" (handled as if it was \r and \n separately)
+        if received == b"\r":
+            self._start_playing()  # Will change view, so we won't receive \n
+        elif received == b"\n":
             self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received in BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
@@ -683,7 +683,7 @@ class GameOverView:
         if received in (DOWN_ARROW_KEY, b"S", b"s") and i+1 < len(self._all_menu_items):
             self._selected_item = self._all_menu_items[i + 1]
         # fmt: on
-        if received in (b"\r", b"\r\n"):
+        if received == b"\r":
             if self._selected_item == "New Game":
                 assert self._client.name is not None
                 with self._client.server.access_game_state() as state:
@@ -739,9 +739,9 @@ class Client(socketserver.BaseRequestHandler):
 
         self.send_queue.put(to_send)
 
-    def _receive_bytes(self, maxsize: int) -> bytes | None:
+    def _receive_bytes(self) -> bytes | None:
         try:
-            result = self.request.recv(maxsize)
+            result = self.request.recv(10)
         except OSError as e:
             print(self.client_address, e)
             self.send_queue.put(None)
@@ -750,7 +750,12 @@ class Client(socketserver.BaseRequestHandler):
         # Checking ESC key here is a bad idea.
         # Arrow keys are sent as ESC + other bytes, and recv() can sometimes
         # return only some of the sent data.
-        if result in {CONTROL_C, CONTROL_D, CONTROL_Q, b""}:
+        if (
+            not result
+            or CONTROL_C in result
+            or CONTROL_D in result
+            or CONTROL_Q in result
+        ):
             self.send_queue.put(None)
             return None
 
@@ -794,15 +799,31 @@ class Client(socketserver.BaseRequestHandler):
             self.server.clients.add(self)
             self.send_queue.put(CLEAR_SCREEN)
 
+            received = b""
+
             while True:
                 with self.server.lock:
                     self.render()
 
-                command = self._receive_bytes(10)
-                if command is None:
+                new_chunk = self._receive_bytes()
+                if new_chunk is None:
                     break
-                if self.view.handle_key_press(command):
-                    break
+                received += new_chunk
+
+                # Arrow key presses are received as 3 bytes. The first two of
+                # them are CSI, aka ESC [. If we have received a part of an
+                # arrow key press, don't process it yet, wait for the rest to
+                # arrive instead.
+                while received not in (b"", ESC, CSI):
+                    if received.startswith(CSI):
+                        handle_result = self.view.handle_key_press(received[:3])
+                        received = received[3:]
+                    else:
+                        handle_result = self.view.handle_key_press(received[:1])
+                        received = received[1:]
+
+                    if handle_result:
+                        return
 
         except OSError as e:
             print(self.client_address, e)
