@@ -816,11 +816,14 @@ class Client(socketserver.BaseRequestHandler):
                 # arrive instead.
                 while received not in (b"", ESC, CSI):
                     if received.startswith(CSI):
-                        self.view.handle_key_press(received[:3])
+                        handle_result = self.view.handle_key_press(received[:3])
                         received = received[3:]
                     else:
-                        self.view.handle_key_press(received[:1])
+                        handle_result = self.view.handle_key_press(received[:1])
                         received = received[1:]
+
+                    if handle_result:
+                        return
 
         except OSError as e:
             print(self.client_address, e)
