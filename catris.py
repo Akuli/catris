@@ -532,10 +532,6 @@ class AskNameView:
             }
             names_in_use = names_of_connected_players | {p.name for p in state.players}
 
-            if len(names_in_use) == len(PLAYER_COLORS):
-                self._error = "Server is full. Please try again later."
-                return
-
             # Prevent two simultaneous clients with the same name.
             # But it's fine if you leave and then join back with the same name.
             if name.lower() in (n.lower() for n in names_of_connected_players):
@@ -792,6 +788,20 @@ class Client(socketserver.BaseRequestHandler):
             break
 
     def handle(self) -> None:
+        with self.server.access_game_state(render=False):
+            full = (len(self.server.clients) >= len(PLAYER_COLORS))
+
+        if full:
+            try:
+                self.request.sendall(b"The server is full. Please try again later.\r\n")
+            except OSError as e:
+                print(self.client_address, e)
+            try:
+                self.request.shutdown()
+            except OSError as e:
+                print(self.client_address, e)
+            self.request.close()
+
         send_queue_thread = threading.Thread(target=self._send_queue_thread)
         send_queue_thread.start()
 
