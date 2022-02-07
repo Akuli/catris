@@ -801,6 +801,7 @@ class Client(socketserver.BaseRequestHandler):
             except OSError as e:
                 print(self.client_address, e)
             self.request.close()
+            return
 
         send_queue_thread = threading.Thread(target=self._send_queue_thread)
         send_queue_thread.start()
