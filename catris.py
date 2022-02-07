@@ -530,7 +530,6 @@ class AskNameView:
                 for client in self._client.server.clients
                 if client.name is not None
             }
-            names_in_use = names_of_connected_players | {p.name for p in state.players}
 
             # Prevent two simultaneous clients with the same name.
             # But it's fine if you leave and then join back with the same name.
