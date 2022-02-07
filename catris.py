@@ -797,7 +797,7 @@ class Client(socketserver.BaseRequestHandler):
             except OSError as e:
                 print(self.client_address, e)
             try:
-                self.request.shutdown()
+                self.request.shutdown(socket.SHUT_RDWR)
             except OSError as e:
                 print(self.client_address, e)
             self.request.close()
