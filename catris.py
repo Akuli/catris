@@ -789,7 +789,7 @@ class Client(socketserver.BaseRequestHandler):
 
     def handle(self) -> None:
         with self.server.access_game_state(render=False):
-            full = (len(self.server.clients) >= len(PLAYER_COLORS))
+            full = len(self.server.clients) >= len(PLAYER_COLORS)
 
         if full:
             try:
