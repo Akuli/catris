@@ -69,6 +69,9 @@ PLAYER_COLORS = {31, 32, 33, 34}
 # If you mess up, how many seconds should you wait?
 WAIT_TIME = 10
 
+# Should be in characters to fit screen, but is actually checked in bytes
+NAME_MAX_LENGTH = 2 * WIDTH_PER_PLAYER - len(str(WAIT_TIME)) - len("[] ")
+
 
 @dataclasses.dataclass
 class HighScore:
@@ -506,7 +509,8 @@ class AskNameView:
             # with a single backspace press
             self._name_so_far = self._get_name()[:-1].encode("utf-8")
         else:
-            self._name_so_far += received
+            if len(self._name_so_far) < NAME_MAX_LENGTH:
+                self._name_so_far += received
 
     def _start_playing(self) -> None:
         name = self._get_name().strip()
@@ -518,9 +522,6 @@ class AskNameView:
             return
         if "\t" in name:
             self._error = "The name must not contain tab characters."
-            return
-        if len(f"[{name}] {WAIT_TIME}") > 2 * WIDTH_PER_PLAYER:
-            self._error = "The name is too long."
             return
 
         # Must lock while assigning name and color, so can't get duplicates
