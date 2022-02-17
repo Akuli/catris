@@ -111,7 +111,6 @@ class MovingBlock:
 class Player:
     name: str
     color: int
-    rotate_counter_clockwise: bool = False
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
 
@@ -249,14 +248,14 @@ class GameState:
         while self.move_if_possible(player, dx=0, dy=1):
             pass
 
-    def rotate(self, player: Player) -> None:
+    def rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             block = player.moving_block_or_wait_counter
             if block.shape_letter == "O":
                 return
 
             old_rotation = block.rotation
-            if player.rotate_counter_clockwise:
+            if counter_clockwise:
                 new_rotation = old_rotation - 1
             else:
                 new_rotation = old_rotation + 1
@@ -602,7 +601,7 @@ class PlayingView:
             lines.append(b"o" + b"--" * state.get_width() + b"o")
 
             lines[5] += f"  Score: {state.score}".encode("ascii")
-            if self.player.rotate_counter_clockwise:
+            if self._client.rotate_counter_clockwise:
                 lines[6] += b"  Counter-clockwise"
             if isinstance(self.player.moving_block_or_wait_counter, int):
                 n = self.player.moving_block_or_wait_counter
@@ -619,13 +618,13 @@ class PlayingView:
                 state.move_if_possible(self.player, dx=1, dy=0)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
             with self._client.server.access_game_state() as state:
-                state.rotate(self.player)
+                state.rotate(self.player, self._client.rotate_counter_clockwise)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
             with self._client.server.access_game_state() as state:
                 state.move_down_all_the_way(self.player)
         elif received in (b"R", b"r"):
-            self.player.rotate_counter_clockwise = (
-                not self.player.rotate_counter_clockwise
+            self._client.rotate_counter_clockwise = (
+                not self._client.rotate_counter_clockwise
             )
 
 
@@ -708,6 +707,7 @@ class Client(socketserver.BaseRequestHandler):
         self.send_queue: queue.Queue[bytes | None] = queue.Queue()
         self.name: str | None = None
         self.view: AskNameView | PlayingView | GameOverView = AskNameView(self)
+        self.rotate_counter_clockwise = False
 
     def render(self) -> None:
         # Bottom of terminal. If user types something, it's unlikely to be
