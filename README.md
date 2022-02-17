@@ -46,6 +46,7 @@ you want to send something to the server.
 Keys:
 - WASD or arrow keys: move and rotate
 - Ctrl+C, Ctrl+D or Ctrl+Q: quit
+- r: change rotating direction
 
 There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
@@ -58,4 +59,3 @@ Try to collaborate and make the best use of everyone's blocks.
 - If you use a firewall, you may need to tell it to allow listening on
     the port that catris uses.
     For example, for UFW this would be `sudo ufw allow in 12345 comment 'catris'`.
-- If you wish the blocks rotated in the opposite direction, press `r`.
