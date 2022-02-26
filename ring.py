@@ -1,5 +1,4 @@
 # TODO:
-#   - games are too long
 #   - should be combined with catris.py
 #   - filling up can fail with AssertionError
 from __future__ import annotations
@@ -7,6 +6,7 @@ import dataclasses
 import time
 import contextlib
 import socketserver
+import textwrap
 import threading
 import socket
 import random
@@ -42,12 +42,6 @@ DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
 LEFT_ARROW_KEY = CSI + b"D"
 
-# Game size is actually 2*GAME_RADIUS + 1 in each direction.
-GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
-MIDDLE_AREA_RADIUS = 2
-
-NAME_MAX_LENGTH = 20
-
 BLOCK_SHAPES = {
     "L": [(-1, 0), (0, 0), (1, 0), (1, -1)],
     "I": [(-2, 0), (-1, 0), (0, 0), (1, 0)],
@@ -68,11 +62,97 @@ BLOCK_COLORS = {
     "S": 42,  # green
 }
 
-# Limited to 4 players, because must fit on 80x24 terminal
+# Max 4 players
 PLAYER_COLORS = {31, 32, 33, 34}
 
 # If you mess up, how many seconds should you wait?
 WAIT_TIME = 10
+
+# Game size is actually 2*GAME_RADIUS + 1 in each direction.
+GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
+MIDDLE_AREA_RADIUS = 3
+MIDDLE_AREA = [
+    "o============o",
+    "|wwwwwwwwwwww|",
+    "|aaaaa  ddddd|",
+    "|aaaaa  ddddd|",
+    "|aaaaa  ddddd|",
+    "|ssssssssssss|",
+    "o------------o",
+]
+NAME_MAX_LENGTH = 12
+assert "".join(MIDDLE_AREA).count("w") >= NAME_MAX_LENGTH
+assert "".join(MIDDLE_AREA).count("a") >= NAME_MAX_LENGTH
+assert "".join(MIDDLE_AREA).count("s") >= NAME_MAX_LENGTH
+assert "".join(MIDDLE_AREA).count("d") >= NAME_MAX_LENGTH
+
+
+def get_middle_area_content(
+    names: dict[str, str], colors: dict[str, int]
+) -> list[bytes]:
+    names = names.copy()
+    colors = colors.copy()
+    for letter in "wasd":
+        if letter not in names:
+            names[letter] = ""
+        if letter not in colors:
+            colors[letter] = 0
+    assert names.keys() == set("wasd")
+    assert colors.keys() == set("wasd")
+
+    wrapped_names = {}
+    for letter in "wasd":
+        widths = [line.count(letter) for line in MIDDLE_AREA if letter in line]
+        assert len(set(widths)) == 1
+        width = widths[0]
+        line_count = len(widths)
+
+        wrapped = textwrap.wrap(names[letter], width, max_lines=line_count)
+
+        lines_to_add = line_count - len(wrapped)
+        prepend_count = lines_to_add // 2
+        append_count = lines_to_add - prepend_count
+        wrapped = [""] * prepend_count + wrapped + [""] * append_count
+
+        if letter == "a":
+            wrapped = [line.ljust(width) for line in wrapped]
+        elif letter == "d":
+            wrapped = [line.rjust(width) for line in wrapped]
+        else:
+            wrapped = [line.center(width) for line in wrapped]
+
+        wrapped_names[letter] = wrapped
+
+    result = []
+    for template_line_string in MIDDLE_AREA:
+        template_line = template_line_string.encode("ascii")
+
+        # Apply colors to lines surrounding the middle area
+        template_line = template_line.replace(b"o==", b"o" + (COLOR % colors['w']) + b"==")
+        template_line = template_line.replace(b"==o", b"==" + (COLOR % 0) + b"o")
+        template_line = template_line.replace(b"o--", b"o" + (COLOR % colors['s']) + b"--")
+        template_line = template_line.replace(b"--o", b"--" + (COLOR % 0) + b"o")
+        if template_line.startswith(b'|'):
+            template_line = (COLOR % colors['a']) + b'|' + (COLOR % 0) + template_line[1:]
+        if template_line.endswith(b'|'):
+            template_line = template_line[:-1] + (COLOR % colors['d']) + b'|' + (COLOR % 0)
+
+        result_line = b""
+        while template_line:
+            if template_line[0] in b"wasd":
+                letter = template_line[:1].decode("ascii")
+                result_line += (
+                    (COLOR % colors[letter])
+                    + wrapped_names[letter].pop(0).encode("utf-8")
+                    + (COLOR % 0)
+                )
+                template_line = template_line.replace(template_line[:1], b"")
+            else:
+                result_line += template_line[:1]
+                template_line = template_line[1:]
+        result.append(result_line)
+
+    return result
 
 
 @dataclasses.dataclass
@@ -142,10 +222,10 @@ class GameState:
         self.players: list[Player] = []
         self.score = 0
         self._landed_blocks: dict[tuple[int, int], int | None] = {
-            # the 123 color won't be actually displayed
-            (x, y): 123 if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS else None
+            (x, y): None
             for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
         }
 
     def game_is_over(self) -> bool:
@@ -181,6 +261,7 @@ class GameState:
             (x, y)
             for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
         }
 
         seen = {
@@ -189,7 +270,7 @@ class GameState:
 
         for block in self._get_moving_blocks():
             for x, y in block.get_coords():
-                if (x, y) in seen:
+                if (x, y) in seen or max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
                     return False
                 seen.add((x, y))
 
@@ -250,7 +331,7 @@ class GameState:
             new_landed_blocks[x, y] = color
 
         self._landed_blocks = {
-            (x, y): new_landed_blocks.get((x, y))
+            (x, y): new_landed_blocks.get((x, y), None)
             for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
         }
@@ -285,7 +366,7 @@ class GameState:
         for r in sorted(full_radiuses, reverse=True):
             self.delete_ring(r)
 
-        # When landed blocks move down, they can go on top of moving blocks.
+        # When landed blocks move, they can go on top of moving blocks.
         # This is quite rare, but results in invalid state errors.
         # When this happens, just delete the landed block.
         for moving_block in self._get_moving_blocks():
@@ -656,11 +737,29 @@ class PlayingView:
 
             square_colors = state.get_square_colors()
 
+            names = {}
+            colors = {}
+            player: Player
+            for player in state.players:
+                letter = {
+                    (0, -1): 'w',
+                    (-1, 0): 'a',
+                    (0, 1): 's',
+                    (1, 0): 'd',
+                }[self.player.world_to_player(player.direction_x, player.direction_y)]
+                names[letter] = player.name
+                colors[letter] = player.color
+
+            middle_area_content = get_middle_area_content(
+                names, colors
+            )
+
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
+                insert_middle_area_here = None
                 line = b"|"
                 for x in range(-GAME_RADIUS, GAME_RADIUS + 1):
                     if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
-                        line += b"XX"
+                        insert_middle_area_here = len(line)
                         continue
 
                     color = square_colors[self.player.world_to_player(x, y)]
@@ -672,6 +771,10 @@ class PlayingView:
                         line += COLOR % 0
 
                 line += b"|"
+
+                if insert_middle_area_here is not None:
+                    line = line[:insert_middle_area_here] + middle_area_content[y + MIDDLE_AREA_RADIUS] + line[insert_middle_area_here:]
+
                 lines.append(line)
 
             lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
