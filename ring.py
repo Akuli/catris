@@ -1,6 +1,7 @@
 # TODO:
 #   - should be combined with catris.py
 #   - filling up can fail with AssertionError
+#   - terminal size check before game starts
 from __future__ import annotations
 import dataclasses
 import time
@@ -65,6 +66,9 @@ BLOCK_COLORS = {
 # Max 4 players
 PLAYER_COLORS = {31, 32, 33, 34}
 
+# Longest allowed name will get truncated, that's fine
+NAME_MAX_LENGTH = 15
+
 # If you mess up, how many seconds should you wait?
 WAIT_TIME = 10
 
@@ -74,52 +78,50 @@ MIDDLE_AREA_RADIUS = 3
 MIDDLE_AREA = [
     "o============o",
     "|wwwwwwwwwwww|",
-    "|aaaaa  ddddd|",
-    "|aaaaa  ddddd|",
-    "|aaaaa  ddddd|",
+    "|aaaaaadddddd|",
+    "|aaaaaadddddd|",
+    "|aaaaaadddddd|",
     "|ssssssssssss|",
     "o------------o",
 ]
-NAME_MAX_LENGTH = 12
-assert "".join(MIDDLE_AREA).count("w") >= NAME_MAX_LENGTH
-assert "".join(MIDDLE_AREA).count("a") >= NAME_MAX_LENGTH
-assert "".join(MIDDLE_AREA).count("s") >= NAME_MAX_LENGTH
-assert "".join(MIDDLE_AREA).count("d") >= NAME_MAX_LENGTH
 
 
-def get_middle_area_content(
-    names: dict[str, str], colors: dict[str, int]
-) -> list[bytes]:
-    names = names.copy()
-    colors = colors.copy()
-    for letter in "wasd":
-        if letter not in names:
-            names[letter] = ""
-        if letter not in colors:
-            colors[letter] = 0
-    assert names.keys() == set("wasd")
-    assert colors.keys() == set("wasd")
-
+def get_middle_area_content(players_by_letter: dict[str, Player]) -> list[bytes]:
     wrapped_names = {}
+    colors = {}
+
     for letter in "wasd":
         widths = [line.count(letter) for line in MIDDLE_AREA if letter in line]
-        assert len(set(widths)) == 1
-        width = widths[0]
-        line_count = len(widths)
 
-        wrapped = textwrap.wrap(names[letter], width, max_lines=line_count)
+        if letter in players_by_letter:
+            colors[letter] = players_by_letter[letter].color
+            text = players_by_letter[letter].get_name_string(max_length=sum(widths))
+        else:
+            colors[letter] = 0
+            text = ""
 
-        lines_to_add = line_count - len(wrapped)
+        wrapped = textwrap.wrap(text, min(widths))
+        if len(wrapped) > len(widths):
+            # We must ignore word boundaries to make it fit
+            wrapped = []
+            for w in widths:
+                wrapped.append(text[:w])
+                text = text[w:]
+                if not text:
+                    break
+            assert not text
+
+        lines_to_add = len(widths) - len(wrapped)
         prepend_count = lines_to_add // 2
         append_count = lines_to_add - prepend_count
         wrapped = [""] * prepend_count + wrapped + [""] * append_count
 
         if letter == "a":
-            wrapped = [line.ljust(width) for line in wrapped]
+            wrapped = [line.ljust(width) for width, line in zip(widths, wrapped)]
         elif letter == "d":
-            wrapped = [line.rjust(width) for line in wrapped]
+            wrapped = [line.rjust(width) for width, line in zip(widths, wrapped)]
         else:
-            wrapped = [line.center(width) for line in wrapped]
+            wrapped = [line.center(width) for width, line in zip(widths, wrapped)]
 
         wrapped_names[letter] = wrapped
 
@@ -198,6 +200,20 @@ class Player:
     direction_y: int
     rotate_counter_clockwise: bool = False
     moving_block_or_wait_counter: MovingBlock | int | None = None
+
+    def get_name_string(self, max_length: int) -> str:
+        if self.moving_block_or_wait_counter is None:
+            format = "[%s]"
+        elif isinstance(self.moving_block_or_wait_counter, int):
+            format = "[%s] " + str(self.moving_block_or_wait_counter)
+        else:
+            format = "%s"
+
+        name = self.name
+        while True:
+            if len(format % name) <= max_length:
+                return format % name
+            name = name[:-1]
 
     # Player's view is rotated, so that blocks always appear to fall down.
     def world_to_player(self, x: int, y: int) -> tuple[int, int]:
@@ -737,22 +753,19 @@ class PlayingView:
 
             square_colors = state.get_square_colors()
 
-            names = {}
-            colors = {}
-            player: Player
+            players_by_letter = {}
+
             for player in state.players:
+                relative_direction = self.player.world_to_player(player.direction_x, player.direction_y)
                 letter = {
                     (0, -1): 'w',
                     (-1, 0): 'a',
                     (0, 1): 's',
                     (1, 0): 'd',
-                }[self.player.world_to_player(player.direction_x, player.direction_y)]
-                names[letter] = player.name
-                colors[letter] = player.color
+                }[relative_direction]
+                players_by_letter[letter] = player
 
-            middle_area_content = get_middle_area_content(
-                names, colors
-            )
+            middle_area_content = get_middle_area_content(players_by_letter)
 
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
                 insert_middle_area_here = None
