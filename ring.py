@@ -114,6 +114,19 @@ class Player:
     rotate_counter_clockwise: bool = False
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
+    # Player's view is rotated, so that blocks always appear to fall down.
+    def world_to_player(self, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-self.direction_y * x + self.direction_x * y),
+            (-self.direction_x * x - self.direction_y * y),
+        )
+
+    def player_to_world(self, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-self.direction_y * x - self.direction_x * y),
+            (self.direction_x * x - self.direction_y * y),
+        )
+
 
 class GameState:
     def __init__(self) -> None:
@@ -277,10 +290,14 @@ class GameState:
             for point in moving_block.get_coords():
                 if point in result:
                     result[point] = BLOCK_COLORS[moving_block.shape_letter]
+
         return result
 
-    def move_if_possible(self, player: Player, dx: int, dy: int) -> bool:
+    def move_if_possible(self, player: Player, dx: int, dy: int, *, in_player_coords: bool) -> bool:
         assert self.is_valid()
+        if in_player_coords:
+            dx, dy = player.player_to_world(dx, dy)
+
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             player.moving_block_or_wait_counter.center_x += dx
             player.moving_block_or_wait_counter.center_y += dy
@@ -292,7 +309,9 @@ class GameState:
         return False
 
     def move_down_all_the_way(self, player: Player) -> None:
-        while self.move_if_possible(player, dx=-player.direction_x, dy=-player.direction_y):
+        while self.move_if_possible(
+            player, dx=-player.direction_x, dy=-player.direction_y, in_player_coords=True
+        ):
             pass
 
     def rotate(self, player: Player) -> None:
@@ -335,9 +354,7 @@ class GameState:
             # Add new player
             color = min(PLAYER_COLORS - {p.color for p in self.players})
 
-            directions = {
-                (p.direction_x, p.direction_y) for p in self.players
-            }
+            directions = {(p.direction_x, p.direction_y) for p in self.players}
             assert len(directions) == len(self.players)
 
             if len(directions) == 0:
@@ -360,9 +377,7 @@ class GameState:
             self.players.append(player)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            player.moving_block_or_wait_counter = MovingBlock(
-                player
-            )
+            player.moving_block_or_wait_counter = MovingBlock(player)
             assert not self.game_is_over()
         return player
 
@@ -379,7 +394,9 @@ class GameState:
         while True:
             something_moved = False
             for player in todo.copy():
-                moved = self.move_if_possible(player, dx=-player.direction_x, dy=-player.direction_y)
+                moved = self.move_if_possible(
+                    player, dx=0, dy=1, in_player_coords=True
+                )
                 if moved:
                     something_moved = True
                     todo.remove(player)
@@ -392,7 +409,10 @@ class GameState:
             letter = player.moving_block_or_wait_counter.shape_letter
             coords = player.moving_block_or_wait_counter.get_coords()
 
-            if any(player.direction_x*x + player.direction_y*y > HEIGHT for x, y in coords):
+            if any(
+                player.direction_x * x + player.direction_y * y > HEIGHT
+                for x, y in coords
+            ):
                 needs_wait_counter.add(player)
             else:
                 for point in coords:
@@ -626,14 +646,15 @@ class PlayingView:
     def get_lines_to_render(self) -> list[bytes]:
         with self._client.server.access_game_state(render=False) as state:
             lines = []
-            lines.append(b"o" + b"--" * (2*HEIGHT + 1) + b"o")
+            lines.append(b"o" + b"--" * (2 * HEIGHT + 1) + b"o")
 
             square_colors = state.get_square_colors()
 
             for y in range(-HEIGHT, HEIGHT + 1):
                 line = b"|"
                 for x in range(-HEIGHT, HEIGHT + 1):
-                    color = square_colors[x, y]
+                    color = square_colors[self.player.world_to_player(x, y)]
+
                     if color is None:
                         line += b"  "
                     else:
@@ -643,7 +664,7 @@ class PlayingView:
                 line += b"|"
                 lines.append(line)
 
-            lines.append(b"o" + b"--" * (2*HEIGHT + 1) + b"o")
+            lines.append(b"o" + b"--" * (2 * HEIGHT + 1) + b"o")
 
             lines[5] += f"  Score: {state.score}".encode("ascii")
             if self.player.rotate_counter_clockwise:
@@ -657,10 +678,10 @@ class PlayingView:
     def handle_key_press(self, received: bytes) -> None:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
             with self._client.server.access_game_state() as state:
-                state.move_if_possible(self.player, dx=-1, dy=0)
+                state.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
             with self._client.server.access_game_state() as state:
-                state.move_if_possible(self.player, dx=1, dy=0)
+                state.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
             with self._client.server.access_game_state() as state:
                 state.rotate(self.player)
@@ -756,7 +777,7 @@ class Client(socketserver.BaseRequestHandler):
     def render(self) -> None:
         # Bottom of game. If user types something, it's unlikely to be
         # noticed here before it gets wiped by the next refresh.
-        cursor_pos = (2*HEIGHT + 4, 1)
+        cursor_pos = (2 * HEIGHT + 4, 1)
 
         if isinstance(self.view, AskNameView):
             lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
@@ -826,7 +847,7 @@ class Client(socketserver.BaseRequestHandler):
             print(self.client_address, "Disconnect")
             try:
                 self.request.sendall(SHOW_CURSOR)
-                self.request.sendall(MOVE_CURSOR % (2*HEIGHT + 4, 1))
+                self.request.sendall(MOVE_CURSOR % (2 * HEIGHT + 4, 1))
                 self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
             except OSError as e:
                 print(self.client_address, e)
