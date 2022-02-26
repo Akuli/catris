@@ -1,6 +1,5 @@
 # TODO:
 #   - should be combined with catris.py
-#   - filling up can fail with AssertionError
 #   - terminal size check before game starts
 from __future__ import annotations
 import dataclasses
@@ -179,9 +178,17 @@ class MovingBlock:
     def __init__(self, player: Player):
         self.player = player
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        self.center_x = (GAME_RADIUS + 1) * player.direction_x
-        self.center_y = (GAME_RADIUS + 1) * player.direction_y
-        self.rotation = 0  # FIXME
+        self.center_x, self.center_y = player.player_to_world(0, -GAME_RADIUS - 1)
+
+        # Orient initial block so that it always looks the same.
+        # Otherwise may create subtle bugs near end of game, where freshly
+        # added block overlaps with landed blocks.
+        self.rotation = {
+            (0, -1): 0,
+            (1, 0): 1,
+            (0, 1): 2,
+            (-1, 0): 3,
+        }[(player.direction_x, player.direction_y)]
 
     def get_coords(self) -> set[tuple[int, int]]:
         result = set()
@@ -465,19 +472,20 @@ class GameState:
             directions = {(p.direction_x, p.direction_y) for p in self.players}
             assert len(directions) == len(self.players)
 
+            # TODO: this isn't very nice
             if len(directions) == 0:
                 dir_x = 0
-                dir_y = 1
-            elif len(directions) == 1:
-                assert directions == {(0, 1)}
-                dir_x = 0
                 dir_y = -1
+            elif len(directions) == 1:
+                assert directions == {(0, -1)}
+                dir_x = 0
+                dir_y = 1
             elif len(directions) == 2:
-                assert directions == {(0, 1), (0, -1)}
+                assert directions == {(0, -1), (0, 1)}
                 dir_x = 1
                 dir_y = 0
             else:
-                assert directions == {(0, 1), (0, -1), (1, 0)}
+                assert directions == {(0, -1), (0, 1), (1, 0)}
                 dir_x = -1
                 dir_y = 0
 
@@ -775,7 +783,7 @@ class PlayingView:
                         insert_middle_area_here = len(line)
                         continue
 
-                    color = square_colors[self.player.world_to_player(x, y)]
+                    color = square_colors[self.player.player_to_world(x, y)]
                     if color is None:
                         line += b"  "
                     else:
