@@ -1,6 +1,4 @@
 # TODO:
-#   - game too big
-#   - middle area too small
 #   - games are too long
 #   - should be combined with catris.py
 #   - filling up can fail with AssertionError
