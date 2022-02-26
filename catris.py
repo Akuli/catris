@@ -797,7 +797,8 @@ class Client(socketserver.BaseRequestHandler):
         send_queue_thread.start()
 
         try:
-            self.server.clients.add(self)
+            with self.server.lock:
+                self.server.clients.add(self)
             self.send_queue.put(CLEAR_SCREEN)
 
             received = b""
