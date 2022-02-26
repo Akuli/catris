@@ -1,5 +1,8 @@
+# TODO:
+#   - game too big
+#   - middle area too small
+#   - games are too long
 from __future__ import annotations
-import copy
 import dataclasses
 import time
 import contextlib
@@ -229,16 +232,24 @@ class GameState:
             if max(abs(x), abs(y)) == r:
                 continue
 
-            # move other blocks towards center
-            # square will go to two places if on a diagonal line, that's fine
-            if x > 0 and abs(x) >= abs(y):
-                new_landed_blocks[x - 1, y] = color
-            if x < 0 and abs(x) >= abs(y):
-                new_landed_blocks[x + 1, y] = color
-            if y > 0 and abs(y) >= abs(x):
-                new_landed_blocks[x, y - 1] = color
-            if y < 0 and abs(y) >= abs(x):
-                new_landed_blocks[x, y + 1] = color
+            # Move towards center. Squares at a diagonal direction from center
+            # have abs(x) == abs(y) move in two different directions.
+            # Two squares can move into the same place. That's fine.
+            move_left = x > 0 and abs(x) >= abs(y)
+            move_right = x < 0 and abs(x) >= abs(y)
+            move_up = y > 0 and abs(y) >= abs(x)
+            move_down = y < 0 and abs(y) >= abs(x)
+            if move_left:
+                x -= 1
+            if move_right:
+                x += 1
+            if move_up:
+                y -= 1
+            if move_down:
+                y += 1
+
+            if (x, y) != (0, 0):
+                new_landed_blocks[x, y] = color
 
         self._landed_blocks = {
             (x, y): new_landed_blocks.get((x, y))
@@ -295,7 +306,9 @@ class GameState:
 
         return result
 
-    def move_if_possible(self, player: Player, dx: int, dy: int, *, in_player_coords: bool) -> bool:
+    def move_if_possible(
+        self, player: Player, dx: int, dy: int, *, in_player_coords: bool
+    ) -> bool:
         assert self.is_valid()
         if in_player_coords:
             dx, dy = player.player_to_world(dx, dy)
@@ -311,9 +324,7 @@ class GameState:
         return False
 
     def move_down_all_the_way(self, player: Player) -> None:
-        while self.move_if_possible(
-            player, dx=0, dy=1, in_player_coords=True
-        ):
+        while self.move_if_possible(player, dx=0, dy=1, in_player_coords=True):
             pass
 
     def rotate(self, player: Player) -> None:
@@ -396,9 +407,7 @@ class GameState:
         while True:
             something_moved = False
             for player in todo.copy():
-                moved = self.move_if_possible(
-                    player, dx=0, dy=1, in_player_coords=True
-                )
+                moved = self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
                 if moved:
                     something_moved = True
                     todo.remove(player)
@@ -411,10 +420,7 @@ class GameState:
             letter = player.moving_block_or_wait_counter.shape_letter
             coords = player.moving_block_or_wait_counter.get_coords()
 
-            if any(
-                player.world_to_player(x, y)[1] < -HEIGHT
-                for x, y in coords
-            ):
+            if any(player.world_to_player(x, y)[1] < -HEIGHT for x, y in coords):
                 needs_wait_counter.add(player)
             else:
                 for point in coords:
@@ -698,6 +704,12 @@ class PlayingView:
             self.player.rotate_counter_clockwise = (
                 not self.player.rotate_counter_clockwise
             )
+        # TODO: remove, for development only
+        elif received == b"2":
+            with self._client.server.access_game_state() as state:
+                state._landed_blocks = {
+                    (-x, -y): color for (x, y), color in state._landed_blocks.items()
+                }
 
 
 class GameOverView:
