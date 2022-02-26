@@ -129,14 +129,22 @@ def get_middle_area_content(players_by_letter: dict[str, Player]) -> list[bytes]
         template_line = template_line_string.encode("ascii")
 
         # Apply colors to lines surrounding the middle area
-        template_line = template_line.replace(b"o==", b"o" + (COLOR % colors['w']) + b"==")
+        template_line = template_line.replace(
+            b"o==", b"o" + (COLOR % colors["w"]) + b"=="
+        )
         template_line = template_line.replace(b"==o", b"==" + (COLOR % 0) + b"o")
-        template_line = template_line.replace(b"o--", b"o" + (COLOR % colors['s']) + b"--")
+        template_line = template_line.replace(
+            b"o--", b"o" + (COLOR % colors["s"]) + b"--"
+        )
         template_line = template_line.replace(b"--o", b"--" + (COLOR % 0) + b"o")
-        if template_line.startswith(b'|'):
-            template_line = (COLOR % colors['a']) + b'|' + (COLOR % 0) + template_line[1:]
-        if template_line.endswith(b'|'):
-            template_line = template_line[:-1] + (COLOR % colors['d']) + b'|' + (COLOR % 0)
+        if template_line.startswith(b"|"):
+            template_line = (
+                (COLOR % colors["a"]) + b"|" + (COLOR % 0) + template_line[1:]
+            )
+        if template_line.endswith(b"|"):
+            template_line = (
+                template_line[:-1] + (COLOR % colors["d"]) + b"|" + (COLOR % 0)
+            )
 
         result_line = b""
         while template_line:
@@ -764,12 +772,14 @@ class PlayingView:
             players_by_letter = {}
 
             for player in state.players:
-                relative_direction = self.player.world_to_player(player.direction_x, player.direction_y)
+                relative_direction = self.player.world_to_player(
+                    player.direction_x, player.direction_y
+                )
                 letter = {
-                    (0, -1): 'w',
-                    (-1, 0): 'a',
-                    (0, 1): 's',
-                    (1, 0): 'd',
+                    (0, -1): "w",
+                    (-1, 0): "a",
+                    (0, 1): "s",
+                    (1, 0): "d",
                 }[relative_direction]
                 players_by_letter[letter] = player
 
@@ -794,7 +804,11 @@ class PlayingView:
                 line += b"|"
 
                 if insert_middle_area_here is not None:
-                    line = line[:insert_middle_area_here] + middle_area_content[y + MIDDLE_AREA_RADIUS] + line[insert_middle_area_here:]
+                    line = (
+                        line[:insert_middle_area_here]
+                        + middle_area_content[y + MIDDLE_AREA_RADIUS]
+                        + line[insert_middle_area_here:]
+                    )
 
                 lines.append(line)
 
