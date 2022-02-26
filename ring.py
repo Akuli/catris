@@ -477,25 +477,16 @@ class GameState:
             # Add new player
             color = min(PLAYER_COLORS - {p.color for p in self.players})
 
-            directions = {(p.direction_x, p.direction_y) for p in self.players}
-            assert len(directions) == len(self.players)
+            used_directions = {(p.direction_x, p.direction_y) for p in self.players}
+            opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
+            unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
 
-            # TODO: this isn't very nice
-            if len(directions) == 0:
-                dir_x = 0
-                dir_y = -1
-            elif len(directions) == 1:
-                assert directions == {(0, -1)}
-                dir_x = 0
-                dir_y = 1
-            elif len(directions) == 2:
-                assert directions == {(0, -1), (0, 1)}
-                dir_x = 1
-                dir_y = 0
-            else:
-                assert directions == {(0, -1), (0, 1), (1, 0)}
-                dir_x = -1
-                dir_y = 0
+            # If possible, pick a direction opposite to existing player.
+            # Choose a direction consistently, for reproducible debugging.
+            try:
+                dir_x, dir_y = min(opposites_of_used_directions & unused_directions)
+            except ValueError:
+                dir_x, dir_y = min(unused_directions)
 
             player = Player(name, color, dir_x, dir_y)
             self.players.append(player)
