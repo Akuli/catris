@@ -136,12 +136,15 @@ class GameState:
     def reset(self) -> None:
         self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
+        self.score = 0
         self._landed_blocks: dict[tuple[int, int], int | None] = {
             (x, y): None
             for x in range(-HEIGHT, HEIGHT + 1)
             for y in range(-HEIGHT, HEIGHT + 1)
         }
-        self.score = 0
+
+        # doesn't really matter which color this is, won't be displayed anyway
+        self._landed_blocks[(0, 0)] = BLOCK_COLORS["L"]
 
     def game_is_over(self) -> bool:
         return bool(self.players) and not any(
@@ -652,14 +655,18 @@ class PlayingView:
             for y in range(-HEIGHT, HEIGHT + 1):
                 line = b"|"
                 for x in range(-HEIGHT, HEIGHT + 1):
-                    color = square_colors[self.player.world_to_player(x, y)]
+                    if (x, y) == (0, 0):
+                        line += b"XX"
+                        continue
 
+                    color = square_colors[self.player.world_to_player(x, y)]
                     if color is None:
                         line += b"  "
                     else:
                         line += COLOR % color
                         line += b"  "
                         line += COLOR % 0
+
                 line += b"|"
                 lines.append(line)
 
