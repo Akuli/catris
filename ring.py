@@ -2,6 +2,8 @@
 #   - game too big
 #   - middle area too small
 #   - games are too long
+#   - should be combined with catris.py
+#   - filling up can fail with AssertionError
 from __future__ import annotations
 import dataclasses
 import time
@@ -42,9 +44,10 @@ DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
 LEFT_ARROW_KEY = CSI + b"D"
 
-# Game size is actually 2*HEIGHT+1 in each direction. (+1 for (0,0) square)
-# HEIGHT is how far to go from center to each direction.
-HEIGHT = 20
+# Game size is actually 2*GAME_RADIUS + 1 in each direction.
+GAME_RADIUS = 15
+MIDDLE_AREA_RADIUS = 2
+
 NAME_MAX_LENGTH = 20
 
 BLOCK_SHAPES = {
@@ -96,8 +99,8 @@ class MovingBlock:
     def __init__(self, player: Player):
         self.player = player
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        self.center_x = (HEIGHT + 1) * player.direction_x
-        self.center_y = (HEIGHT + 1) * player.direction_y
+        self.center_x = (GAME_RADIUS + 1) * player.direction_x
+        self.center_y = (GAME_RADIUS + 1) * player.direction_y
         self.rotation = 0  # FIXME
 
     def get_coords(self) -> set[tuple[int, int]]:
@@ -141,13 +144,11 @@ class GameState:
         self.players: list[Player] = []
         self.score = 0
         self._landed_blocks: dict[tuple[int, int], int | None] = {
-            (x, y): None
-            for x in range(-HEIGHT, HEIGHT + 1)
-            for y in range(-HEIGHT, HEIGHT + 1)
+            # the 123 color won't be actually displayed
+            (x, y): 123 if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS else None
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
         }
-
-        # doesn't really matter which color this is, won't be displayed anyway
-        self._landed_blocks[(0, 0)] = BLOCK_COLORS["L"]
 
     def game_is_over(self) -> bool:
         return bool(self.players) and not any(
@@ -180,8 +181,8 @@ class GameState:
     def is_valid(self) -> bool:
         assert self._landed_blocks.keys() == {
             (x, y)
-            for x in range(-HEIGHT, HEIGHT + 1)
-            for y in range(-HEIGHT, HEIGHT + 1)
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
         }
 
         seen = {
@@ -195,7 +196,7 @@ class GameState:
                 seen.add((x, y))
 
                 player_x, player_y = block.player.world_to_player(x, y)
-                if player_x < -HEIGHT or player_x > HEIGHT or player_y > 0:
+                if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
                     return False
 
         return True
@@ -203,7 +204,7 @@ class GameState:
     def find_full_radiuses(self) -> list[int]:
         return [
             r
-            for r in range(1, HEIGHT + 1)
+            for r in range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)
             if not any(
                 color is None
                 for (x, y), color in self._landed_blocks.items()
@@ -248,13 +249,12 @@ class GameState:
             if move_down:
                 y += 1
 
-            if (x, y) != (0, 0):
-                new_landed_blocks[x, y] = color
+            new_landed_blocks[x, y] = color
 
         self._landed_blocks = {
             (x, y): new_landed_blocks.get((x, y))
-            for x in range(-HEIGHT, HEIGHT + 1)
-            for y in range(-HEIGHT, HEIGHT + 1)
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
         }
 
     def clear_rings(self, full_radiuses: list[int]) -> None:
@@ -420,7 +420,7 @@ class GameState:
             letter = player.moving_block_or_wait_counter.shape_letter
             coords = player.moving_block_or_wait_counter.get_coords()
 
-            if any(player.world_to_player(x, y)[1] < -HEIGHT for x, y in coords):
+            if any(player.world_to_player(x, y)[1] < -GAME_RADIUS for x, y in coords):
                 needs_wait_counter.add(player)
             else:
                 for point in coords:
@@ -654,14 +654,14 @@ class PlayingView:
     def get_lines_to_render(self) -> list[bytes]:
         with self._client.server.access_game_state(render=False) as state:
             lines = []
-            lines.append(b"o" + b"--" * (2 * HEIGHT + 1) + b"o")
+            lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
 
             square_colors = state.get_square_colors()
 
-            for y in range(-HEIGHT, HEIGHT + 1):
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
                 line = b"|"
-                for x in range(-HEIGHT, HEIGHT + 1):
-                    if (x, y) == (0, 0):
+                for x in range(-GAME_RADIUS, GAME_RADIUS + 1):
+                    if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
                         line += b"XX"
                         continue
 
@@ -676,7 +676,7 @@ class PlayingView:
                 line += b"|"
                 lines.append(line)
 
-            lines.append(b"o" + b"--" * (2 * HEIGHT + 1) + b"o")
+            lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
 
             lines[5] += f"  Score: {state.score}".encode("ascii")
             if self.player.rotate_counter_clockwise:
@@ -795,7 +795,7 @@ class Client(socketserver.BaseRequestHandler):
     def render(self) -> None:
         # Bottom of game. If user types something, it's unlikely to be
         # noticed here before it gets wiped by the next refresh.
-        cursor_pos = (2 * HEIGHT + 4, 1)
+        cursor_pos = (2 * GAME_RADIUS + 4, 1)
 
         if isinstance(self.view, AskNameView):
             lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
@@ -865,7 +865,7 @@ class Client(socketserver.BaseRequestHandler):
             print(self.client_address, "Disconnect")
             try:
                 self.request.sendall(SHOW_CURSOR)
-                self.request.sendall(MOVE_CURSOR % (2 * HEIGHT + 4, 1))
+                self.request.sendall(MOVE_CURSOR % (2 * GAME_RADIUS + 4, 1))
                 self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
             except OSError as e:
                 print(self.client_address, e)
