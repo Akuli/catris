@@ -91,6 +91,7 @@ class HighScore:
 
 class MovingBlock:
     def __init__(self, player: Player):
+        self.player = player
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         self.center_x = (HEIGHT + 1) * player.direction_x
         self.center_y = (HEIGHT + 1) * player.direction_y
@@ -163,34 +164,32 @@ class GameState:
 
         player.moving_block_or_wait_counter = MovingBlock(player)
 
-    def _get_moving_blocks(self) -> list[tuple[Player, MovingBlock]]:
+    def _get_moving_blocks(self) -> list[MovingBlock]:
         result = []
         for player in self.players:
             if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-                result.append((player, player.moving_block_or_wait_counter))
+                result.append(player.moving_block_or_wait_counter)
         return result
 
     def is_valid(self) -> bool:
-        if self._landed_blocks.keys() != {
+        assert self._landed_blocks.keys() == {
             (x, y)
             for x in range(-HEIGHT, HEIGHT + 1)
             for y in range(-HEIGHT, HEIGHT + 1)
-        }:
-            return False
+        }
 
         seen = {
             point for point, color in self._landed_blocks.items() if color is not None
         }
 
-        for player, block in self._get_moving_blocks():
+        for block in self._get_moving_blocks():
             for x, y in block.get_coords():
                 if (x, y) in seen:
                     return False
                 seen.add((x, y))
 
-                along = x * player.direction_x + y * player.direction_y
-                across = y * player.direction_x - x * player.direction_y
-                if along < 0 or across < -HEIGHT or across > HEIGHT:
+                player_x, player_y = block.player.world_to_player(x, y)
+                if player_x < -HEIGHT or player_x > HEIGHT or player_y > 0:
                     return False
 
         return True
@@ -277,7 +276,7 @@ class GameState:
         # When landed blocks move down, they can go on top of moving blocks.
         # This is quite rare, but results in invalid state errors.
         # When this happens, just delete the landed block.
-        for player, moving_block in self._get_moving_blocks():
+        for moving_block in self._get_moving_blocks():
             for point in moving_block.get_coords():
                 if self._landed_blocks.get(point) is not None:
                     self._landed_blocks[point] = None
@@ -286,7 +285,7 @@ class GameState:
     def get_square_colors(self) -> dict[tuple[int, int], int | None]:
         assert self.is_valid()
         result = self._landed_blocks.copy()
-        for player, moving_block in self._get_moving_blocks():
+        for moving_block in self._get_moving_blocks():
             for point in moving_block.get_coords():
                 if point in result:
                     result[point] = BLOCK_COLORS[moving_block.shape_letter]
@@ -310,7 +309,7 @@ class GameState:
 
     def move_down_all_the_way(self, player: Player) -> None:
         while self.move_if_possible(
-            player, dx=-player.direction_x, dy=-player.direction_y, in_player_coords=True
+            player, dx=0, dy=1, in_player_coords=True
         ):
             pass
 
@@ -410,7 +409,7 @@ class GameState:
             coords = player.moving_block_or_wait_counter.get_coords()
 
             if any(
-                player.direction_x * x + player.direction_y * y > HEIGHT
+                player.world_to_player(x, y)[1] < -HEIGHT
                 for x, y in coords
             ):
                 needs_wait_counter.add(player)
