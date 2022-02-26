@@ -270,22 +270,13 @@ class GameState:
                     self._landed_blocks[point] = None
         assert self.is_valid()
 
-    def get_square_colors(self) -> list[list[int | None]]:
+    def get_square_colors(self) -> dict[tuple[int, int], int | None]:
         assert self.is_valid()
-        result: list[list[int | None]] = [
-            [None] * (2*HEIGHT + 1)
-            for y in range(2*HEIGHT + 1)
-        ]
-
-        for (x, y), color in self._landed_blocks.items():
-            result[y + HEIGHT][x + HEIGHT] = color
-
+        result = self._landed_blocks.copy()
         for player, moving_block in self._get_moving_blocks():
-            for x, y in moving_block.get_coords():
-                x += HEIGHT
-                y += HEIGHT
-                if x in range(2*HEIGHT + 1) and y in range(2*HEIGHT + 1):
-                    result[y][x] = BLOCK_COLORS[moving_block.shape_letter]
+            for point in moving_block.get_coords():
+                if point in result:
+                    result[point] = BLOCK_COLORS[moving_block.shape_letter]
         return result
 
     def move_if_possible(self, player: Player, dx: int, dy: int) -> bool:
@@ -637,9 +628,12 @@ class PlayingView:
             lines = []
             lines.append(b"o" + b"--" * (2*HEIGHT + 1) + b"o")
 
-            for blink_y, row in enumerate(state.get_square_colors()):
+            square_colors = state.get_square_colors()
+
+            for y in range(-HEIGHT, HEIGHT + 1):
                 line = b"|"
-                for color in row:
+                for x in range(-HEIGHT, HEIGHT + 1):
+                    color = square_colors[x, y]
                     if color is None:
                         line += b"  "
                     else:
@@ -832,7 +826,7 @@ class Client(socketserver.BaseRequestHandler):
             print(self.client_address, "Disconnect")
             try:
                 self.request.sendall(SHOW_CURSOR)
-                self.request.sendall(MOVE_CURSOR % (24, 1))
+                self.request.sendall(MOVE_CURSOR % (2*HEIGHT + 4, 1))
                 self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
             except OSError as e:
                 print(self.client_address, e)
