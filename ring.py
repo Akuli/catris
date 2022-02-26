@@ -710,6 +710,11 @@ class PlayingView:
                 state._landed_blocks = {
                     (-x, -y): color for (x, y), color in state._landed_blocks.items()
                 }
+                if not state.is_valid():
+                    state._landed_blocks = {
+                        (-x, -y): color
+                        for (x, y), color in state._landed_blocks.items()
+                    }
 
 
 class GameOverView:
