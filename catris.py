@@ -11,6 +11,7 @@ import threading
 import socket
 import random
 import queue
+from abc import abstractmethod
 from typing import Iterator
 
 ASCII_ART = r"""
@@ -21,8 +22,14 @@ ASCII_ART = r"""
                         https://github.com/Akuli/catris
 """
 
-_parser = argparse.ArgumentParser(epilog=ASCII_ART, formatter_class=argparse.RawDescriptionHelpFormatter)
-_parser.add_argument("--ring", action="store_true", help="something quite different from the classic game :)")
+_parser = argparse.ArgumentParser(
+    epilog=ASCII_ART, formatter_class=argparse.RawDescriptionHelpFormatter
+)
+_parser.add_argument(
+    "--ring",
+    action="store_true",
+    help="something quite different from the classic game :)",
+)
 RING_MODE = _parser.parse_args().ring
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code
@@ -99,7 +106,6 @@ if RING_MODE:
         "|ssssssssssss|",
         "o------------o",
     ]
-
 
     def get_middle_area_content(players_by_letter: dict[str, Player]) -> list[bytes]:
         wrapped_names = {}
@@ -179,6 +185,7 @@ if RING_MODE:
 
         return result
 
+
 if RING_MODE:
     TERMINAL_HEIGHT_NEEDED = 2 * GAME_RADIUS + 4
 else:
@@ -205,6 +212,7 @@ class HighScore:
 
 class MovingBlock:
     if RING_MODE:
+
         def __init__(self, player: Player):
             self.player = player
             self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -221,6 +229,7 @@ class MovingBlock:
             }[(player.direction_x, player.direction_y)]
 
     else:
+
         def __init__(self, player_index: int):
             self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
             self.center_x = (WIDTH_PER_PLAYER * player_index) + (WIDTH_PER_PLAYER // 2)
@@ -247,6 +256,7 @@ class Player:
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
     if RING_MODE:
+        # TODO: use get_name_string even in non-ring mode
         def get_name_string(self, max_length: int) -> str:
             if self.moving_block_or_wait_counter is None:
                 format = "[%s]"
@@ -274,8 +284,16 @@ class Player:
                 (self.direction_x * x - self.direction_y * y),
             )
 
+    else:
 
-class GameState:
+        def world_to_player(self, x: int, y: int) -> tuple[int, int]:
+            return (x, y)
+
+        def player_to_world(self, x: int, y: int) -> tuple[int, int]:
+            return (x, y)
+
+
+class Game:
     def __init__(self) -> None:
         self.reset()
 
@@ -283,48 +301,12 @@ class GameState:
         self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
         self.score = 0
-        if RING_MODE:
-            self._landed_blocks: dict[tuple[int, int], int | None] = {
-                (x, y): None
-                for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
-                for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
-                if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
-            }
-        else:
-            self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
 
     def game_is_over(self) -> bool:
         return bool(self.players) and not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
             for p in self.players
         )
-
-    def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
-        assert player.moving_block_or_wait_counter == 0
-        if not client_currently_connected:
-            player.moving_block_or_wait_counter = None
-            return
-
-        if RING_MODE:
-            for x, y in self._landed_blocks.keys():
-                # Math magic to check if (x,y) is in the player's triangle-shaped area.
-                # Have fun figuring out how it works :)
-                dot = x * player.direction_x + y * player.direction_y
-                if dot >= 0 and 2 * dot ** 2 >= x * x + y * y:
-                    self._landed_blocks[x, y] = None
-            player.moving_block_or_wait_counter = MovingBlock(player)
-
-        else:
-            index = self.players.index(player)
-            x_min = WIDTH_PER_PLAYER * index
-            x_max = x_min + WIDTH_PER_PLAYER
-            for row in self._landed_blocks:
-                row[x_min:x_max] = [None] * WIDTH_PER_PLAYER
-            player.moving_block_or_wait_counter = MovingBlock(index)
-
-    if not RING_MODE:
-        def get_width(self) -> int:
-            return WIDTH_PER_PLAYER * len(self.players)
 
     def _get_moving_blocks(self) -> list[MovingBlock]:
         result = []
@@ -333,114 +315,37 @@ class GameState:
                 result.append(player.moving_block_or_wait_counter)
         return result
 
-    if RING_MODE:
-        def is_valid(self) -> bool:
-            assert self._landed_blocks.keys() == {
-                (x, y)
-                for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
-                for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
-                if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
-            }
+    def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
+        assert player.moving_block_or_wait_counter == 0
+        if not client_currently_connected:
+            player.moving_block_or_wait_counter = None
+            return
+        self.wipe_playing_area(player)
 
-            seen = {
-                point for point, color in self._landed_blocks.items() if color is not None
-            }
+    @abstractmethod
+    def wipe_playing_area(self, player: Player) -> None:
+        pass
 
-            for block in self._get_moving_blocks():
-                for x, y in block.get_coords():
-                    if (x, y) in seen or max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
-                        return False
-                    seen.add((x, y))
-
-                    player_x, player_y = block.player.world_to_player(x, y)
-                    if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
-                        return False
-
-            return True
-    else:
-        def is_valid(self) -> bool:
-            seen = set()
-
-            for y, row in enumerate(self._landed_blocks):
-                for x, color in enumerate(row):
-                    if color is not None:
-                        seen.add((x, y))
-
-            for block in self._get_moving_blocks():
-                coords = block.get_coords()
-                if coords & seen or not all(
-                    x in range(self.get_width()) and y < HEIGHT for x, y in coords
-                ):
-                    return False
-                seen.update(coords)
-            return True
+    @abstractmethod
+    def is_valid(self) -> bool:
+        pass
 
     # In ring mode, full lines are actually full squares.
     # Return value is a list of y coordinates or radiuses, depending on mode.
+    @abstractmethod
     def find_full_lines(self) -> list[int]:
-        if RING_MODE:
-            return [
-                r
-                for r in range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)
-                if not any(
-                    color is None
-                    for (x, y), color in self._landed_blocks.items()
-                    if max(abs(x), abs(y)) == r
-                )
-            ]
-        else:
-            return [
-                y for y, row in enumerate(self._landed_blocks) if row and None not in row
-            ]
+        pass
 
     # Between find_full_lines and clear_full_lines, there's a flashing animation.
     # Color can't be None, otherwise it is possible to put blocks into a currently flashing ring.
+    @abstractmethod
     def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
-        if RING_MODE:
-            for x, y in self._landed_blocks.keys():
-                if max(abs(x), abs(y)) in full_lines:
-                    self._landed_blocks[x, y] = color
-        else:
-            for y in full_lines:
-                self._landed_blocks[y] = [color] * self.get_width()
+        pass
 
-    if RING_MODE:
-        def delete_ring(self, r: int) -> None:
-            new_landed_blocks = {}
-            for (x, y), color in self._landed_blocks.items():
-                if color is None:
-                    continue
-
-                # preserve squares inside the ring
-                if max(abs(x), abs(y)) < r:
-                    new_landed_blocks[x, y] = color
-
-                # delete squares on the ring
-                if max(abs(x), abs(y)) == r:
-                    continue
-
-                # Move towards center. Squares at a diagonal direction from center
-                # have abs(x) == abs(y) move in two different directions.
-                # Two squares can move into the same place. That's fine.
-                move_left = x > 0 and abs(x) >= abs(y)
-                move_right = x < 0 and abs(x) >= abs(y)
-                move_up = y > 0 and abs(y) >= abs(x)
-                move_down = y < 0 and abs(y) >= abs(x)
-                if move_left:
-                    x -= 1
-                if move_right:
-                    x += 1
-                if move_up:
-                    y -= 1
-                if move_down:
-                    y += 1
-
-                new_landed_blocks[x, y] = color
-
-            self._landed_blocks = {
-                (x, y): new_landed_blocks.get((x, y), None)
-                for x, y in self._landed_blocks.keys()
-            }
+    # FIXME: this method has too much copy/pasta in implementations
+    @abstractmethod
+    def delete_full_lines(self, full_lines: list[int]) -> None:
+        pass
 
     def clear_lines(self, full_lines: list[int]) -> None:
         if len(full_lines) == 0:
@@ -469,53 +374,14 @@ class GameState:
         if n >= 1:  # avoid floats
             self.score += single_player_score * 2 ** (n - 1)
 
-        if RING_MODE:
-            for r in sorted(full_lines, reverse=True):
-                self.delete_ring(r)
-        else:
-            self._landed_blocks = [
-                row for y, row in enumerate(self._landed_blocks) if y not in full_lines
-            ]
-            while len(self._landed_blocks) < HEIGHT:
-                self._landed_blocks.insert(0, [None] * self.get_width())
-
-        # When landed blocks move, they can go on top of moving blocks.
-        # This is quite rare, but results in invalid state errors.
-        # When this happens, just delete the landed block.
-        for moving_block in self._get_moving_blocks():
-            if RING_MODE:
-                for point in moving_block.get_coords():
-                    if self._landed_blocks.get(point) is not None:
-                        self._landed_blocks[point] = None
-            else:
-                for x, y in moving_block.get_coords():
-                    if y >= 0:
-                        self._landed_blocks[y][x] = None
+        self.delete_full_lines(full_lines)
         assert self.is_valid()
 
-    if RING_MODE:
-        def get_square_colors(self) -> dict[tuple[int, int], int | None]:
-            assert self.is_valid()
-            result = self._landed_blocks.copy()
-            for moving_block in self._get_moving_blocks():
-                for point in moving_block.get_coords():
-                    if point in result:
-                        result[point] = BLOCK_COLORS[moving_block.shape_letter]
-
-            return result
-    else:
-        def get_square_colors(self) -> list[list[int | None]]:
-            assert self.is_valid()
-            result = copy.deepcopy(self._landed_blocks)
-            for moving_block in self._get_moving_blocks():
-                for x, y in moving_block.get_coords():
-                    if y >= 0:
-                        result[y][x] = BLOCK_COLORS[moving_block.shape_letter]
-            return result
-
-    def move_if_possible(self, player: Player, dx: int, dy: int, *, in_player_coords: bool) -> bool:
+    def move_if_possible(
+        self, player: Player, dx: int, dy: int, in_player_coords: bool
+    ) -> bool:
         assert self.is_valid()
-        if RING_MODE and in_player_coords:
+        if in_player_coords:
             dx, dy = player.player_to_world(dx, dy)
 
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
@@ -552,7 +418,16 @@ class GameState:
             if not self.is_valid():
                 block.rotation = old_rotation
 
-    # None return value means server full
+    # Low level. Used by add_player().
+    # TODO: these suck ass
+    @abstractmethod
+    def instantiate_player(self, name: str, color: int) -> Player:
+        pass
+
+    @abstractmethod
+    def instantiate_moving_block(self, player: Player) -> MovingBlock:
+        pass
+
     def add_player(self, name: str) -> Player:
         print(f"{name!r} joins a game with {len(self.players)} existing players")
         if not self.players:
@@ -571,35 +446,11 @@ class GameState:
         else:
             # Add new player
             color = min(PLAYER_COLORS - {p.color for p in self.players})
-            if RING_MODE:
-                used_directions = {(p.direction_x, p.direction_y) for p in self.players}
-                opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
-                unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
-
-                # If possible, pick a direction opposite to existing player.
-                # Choose a direction consistently, for reproducible debugging.
-                try:
-                    dir_x, dir_y = min(opposites_of_used_directions & unused_directions)
-                except ValueError:
-                    dir_x, dir_y = min(unused_directions)
-
-                player = Player(name, color, dir_x, dir_y)
-            else:
-                player = Player(name, color)
-
+            player = self.instantiate_player(name, color)
             self.players.append(player)
 
-            if not RING_MODE:
-                for row in self._landed_blocks:
-                    row.extend([None] * WIDTH_PER_PLAYER)
-
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            if RING_MODE:
-                player.moving_block_or_wait_counter = MovingBlock(player)
-            else:
-                player.moving_block_or_wait_counter = MovingBlock(
-                    self.players.index(player)
-                )
+            player.moving_block_or_wait_counter = self.instantiate_moving_block(player)
             assert not self.game_is_over()
         return player
 
@@ -629,8 +480,11 @@ class GameState:
             letter = player.moving_block_or_wait_counter.shape_letter
             coords = player.moving_block_or_wait_counter.get_coords()
 
+            # FIXME: use inheritance
             if RING_MODE:
-                block_not_fully_visible = any(player.world_to_player(x, y)[1] < -GAME_RADIUS for x, y in coords)
+                block_not_fully_visible = any(
+                    player.world_to_player(x, y)[1] < -GAME_RADIUS for x, y in coords
+                )
             else:
                 block_not_fully_visible = any(y < 0 for x, y in coords)
             if block_not_fully_visible:
@@ -652,6 +506,218 @@ class GameState:
         return needs_wait_counter
 
 
+class TraditionalGame(Game):
+    def reset(self) -> None:
+        super().reset()
+        self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
+
+    def wipe_playing_area(self, player: Player) -> None:
+        index = self.players.index(player)
+        x_min = WIDTH_PER_PLAYER * index
+        x_max = x_min + WIDTH_PER_PLAYER
+        for row in self._landed_blocks:
+            row[x_min:x_max] = [None] * WIDTH_PER_PLAYER
+        player.moving_block_or_wait_counter = MovingBlock(index)
+
+    # TODO: can this be _non_public()?
+    def get_width(self) -> int:
+        return WIDTH_PER_PLAYER * len(self.players)
+
+    def is_valid(self) -> bool:
+        seen = set()
+
+        for y, row in enumerate(self._landed_blocks):
+            for x, color in enumerate(row):
+                if color is not None:
+                    seen.add((x, y))
+
+        for block in self._get_moving_blocks():
+            coords = block.get_coords()
+            if coords & seen or not all(
+                x in range(self.get_width()) and y < HEIGHT for x, y in coords
+            ):
+                return False
+            seen.update(coords)
+        return True
+
+    def find_full_lines(self) -> list[int]:
+        return [
+            y for y, row in enumerate(self._landed_blocks) if row and None not in row
+        ]
+
+    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+        for y in full_lines:
+            self._landed_blocks[y] = [color] * self.get_width()
+
+    def delete_full_lines(self, full_lines: list[int]) -> None:
+        self._landed_blocks = [
+            row for y, row in enumerate(self._landed_blocks) if y not in full_lines
+        ]
+        while len(self._landed_blocks) < HEIGHT:
+            self._landed_blocks.insert(0, [None] * self.get_width())
+
+        # When landed blocks move, they can go on top of moving blocks.
+        # This is quite rare, but results in invalid state errors.
+        # When this happens, just delete the landed block.
+        for moving_block in self._get_moving_blocks():
+            for x, y in moving_block.get_coords():
+                if y >= 0:
+                    self._landed_blocks[y][x] = None
+
+    def get_square_colors(self) -> list[list[int | None]]:
+        assert self.is_valid()
+        result = copy.deepcopy(self._landed_blocks)
+        for moving_block in self._get_moving_blocks():
+            for x, y in moving_block.get_coords():
+                if y >= 0:
+                    result[y][x] = BLOCK_COLORS[moving_block.shape_letter]
+        return result
+
+    def instantiate_player(self, name: str, color: int) -> Player:
+        for row in self._landed_blocks:
+            row.extend([None] * WIDTH_PER_PLAYER)
+        return Player(name, color)
+
+    def instantiate_moving_block(self, player: Player):
+        return MovingBlock(self.players.index(player))
+
+
+class RingGame(Game):
+    def reset(self) -> None:
+        super().reset()
+        self._landed_blocks: dict[tuple[int, int], int | None] = {
+            (x, y): None
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
+        }
+
+    def wipe_playing_area(self, player: Player) -> None:
+        for x, y in self._landed_blocks.keys():
+            # Math magic to check if (x,y) is in the player's triangle-shaped area.
+            # Have fun figuring out how it works :)
+            dot = x * player.direction_x + y * player.direction_y
+            if dot >= 0 and 2 * dot ** 2 >= x * x + y * y:
+                self._landed_blocks[x, y] = None
+        player.moving_block_or_wait_counter = MovingBlock(player)
+
+    def is_valid(self) -> bool:
+        assert self._landed_blocks.keys() == {
+            (x, y)
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
+        }
+
+        seen = {
+            point for point, color in self._landed_blocks.items() if color is not None
+        }
+
+        for block in self._get_moving_blocks():
+            for x, y in block.get_coords():
+                if (x, y) in seen or max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
+                    return False
+                seen.add((x, y))
+
+                player_x, player_y = block.player.world_to_player(x, y)
+                if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
+                    return False
+
+        return True
+
+    def find_full_lines(self) -> list[int]:
+        return [
+            r
+            for r in range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)
+            if not any(
+                color is None
+                for (x, y), color in self._landed_blocks.items()
+                if max(abs(x), abs(y)) == r
+            )
+        ]
+
+    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+        for x, y in self._landed_blocks.keys():
+            if max(abs(x), abs(y)) in full_lines:
+                self._landed_blocks[x, y] = color
+
+    def _delete_ring(self, r: int) -> None:
+        new_landed_blocks = {}
+        for (x, y), color in self._landed_blocks.items():
+            if color is None:
+                continue
+
+            # preserve squares inside the ring
+            if max(abs(x), abs(y)) < r:
+                new_landed_blocks[x, y] = color
+
+            # delete squares on the ring
+            if max(abs(x), abs(y)) == r:
+                continue
+
+            # Move towards center. Squares at a diagonal direction from center
+            # have abs(x) == abs(y) move in two different directions.
+            # Two squares can move into the same place. That's fine.
+            move_left = x > 0 and abs(x) >= abs(y)
+            move_right = x < 0 and abs(x) >= abs(y)
+            move_up = y > 0 and abs(y) >= abs(x)
+            move_down = y < 0 and abs(y) >= abs(x)
+            if move_left:
+                x -= 1
+            if move_right:
+                x += 1
+            if move_up:
+                y -= 1
+            if move_down:
+                y += 1
+
+            new_landed_blocks[x, y] = color
+
+        self._landed_blocks = {
+            (x, y): new_landed_blocks.get((x, y), None)
+            for x, y in self._landed_blocks.keys()
+        }
+
+    def delete_full_lines(self, full_lines: list[int]) -> None:
+        for r in sorted(full_lines, reverse=True):
+            self._delete_ring(r)
+
+        # When landed blocks move, they can go on top of moving blocks.
+        # This is quite rare, but results in invalid state errors.
+        # When this happens, just delete the landed block.
+        for moving_block in self._get_moving_blocks():
+            for point in moving_block.get_coords():
+                if self._landed_blocks.get(point) is not None:
+                    self._landed_blocks[point] = None
+
+    def get_square_colors(self) -> dict[tuple[int, int], int | None]:
+        assert self.is_valid()
+        result = self._landed_blocks.copy()
+        for moving_block in self._get_moving_blocks():
+            for point in moving_block.get_coords():
+                if point in result:
+                    result[point] = BLOCK_COLORS[moving_block.shape_letter]
+
+        return result
+
+    def instantiate_player(self, name: str, color: int) -> None:
+        used_directions = {(p.direction_x, p.direction_y) for p in self.players}
+        opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
+        unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
+
+        # If possible, pick a direction opposite to existing player.
+        # Choose a direction consistently, for reproducible debugging.
+        try:
+            dir_x, dir_y = min(opposites_of_used_directions & unused_directions)
+        except ValueError:
+            dir_x, dir_y = min(unused_directions)
+
+        return Player(name, color, dir_x, dir_y)
+
+    def instantiate_moving_block(self, player: Player) -> MovingBlock:
+        return MovingBlock(player)
+
+
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
@@ -659,10 +725,12 @@ class Server(socketserver.ThreadingTCPServer):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
-        self.lock = threading.RLock()
-        # All of the below are locked with self.lock:
-        self.__state = GameState()  # see access_game_state()
+        self.lock = threading.RLock()  # __game and clients are locked with this
         self.clients: set[Client] = set()
+        if RING_MODE:
+            self.__game = RingGame()
+        else:
+            self.__game = TraditionalGame()
 
         threading.Thread(target=self._move_blocks_down_thread).start()
 
@@ -697,22 +765,22 @@ class Server(socketserver.ThreadingTCPServer):
             print("Writing high score to file failed:", e)
 
     @contextlib.contextmanager
-    def access_game_state(self, *, render: bool = True) -> Iterator[GameState]:
+    def access_game(self, *, render: bool = True) -> Iterator[Game]:
         with self.lock:
-            assert self.__state.is_valid()
-            assert not self.__state.game_is_over()
-            yield self.__state
+            assert self.__game.is_valid()
+            assert not self.__game.game_is_over()
+            yield self.__game
 
-            assert self.__state.is_valid()
-            if self.__state.game_is_over():
-                duration_ns = time.monotonic_ns() - self.__state.start_time
+            assert self.__game.is_valid()
+            if self.__game.game_is_over():
+                duration_ns = time.monotonic_ns() - self.__game.start_time
                 hs = HighScore(
-                    score=self.__state.score,
+                    score=self.__game.score,
                     duration_sec=duration_ns / (1000 * 1000 * 1000),
-                    players=[p.name for p in self.__state.players],
+                    players=[p.name for p in self.__game.players],
                 )
                 print("Game over!", hs)
-                self.__state.players.clear()
+                self.__game.players.clear()
 
                 playing_clients = [
                     c for c in self.clients if isinstance(c.view, PlayingView)
@@ -735,7 +803,7 @@ class Server(socketserver.ThreadingTCPServer):
     def _countdown(self, player: Player, start_time: int) -> None:
         while True:
             time.sleep(1)
-            with self.access_game_state() as state:
+            with self.access_game() as state:
                 if state.start_time != start_time:
                     return
 
@@ -751,7 +819,7 @@ class Server(socketserver.ThreadingTCPServer):
                     return
 
     def _move_blocks_down_once(self) -> None:
-        with self.access_game_state() as state:
+        with self.access_game() as state:
             start_time = state.start_time
             needs_wait_counter = state.move_blocks_down()
             full_lines = state.find_full_lines()
@@ -763,12 +831,12 @@ class Server(socketserver.ThreadingTCPServer):
         if full_lines:
             print("Full:", full_lines)
             for color in [47, 0, 47, 0]:
-                with self.access_game_state() as state:
+                with self.access_game() as state:
                     if state.start_time != start_time:
                         return
                     state.set_color_of_lines(full_lines, color)
                 time.sleep(0.1)
-            with self.access_game_state() as state:
+            with self.access_game() as state:
                 if state.start_time != start_time:
                     return
                 state.clear_lines(full_lines)
@@ -776,7 +844,7 @@ class Server(socketserver.ThreadingTCPServer):
     def _move_blocks_down_thread(self) -> None:
         while True:
             self._move_blocks_down_once()
-            with self.access_game_state(render=False) as state:
+            with self.access_game(render=False) as state:
                 score = state.score
             time.sleep(0.5 / (1 + score / 1000))
 
@@ -842,7 +910,7 @@ class AskNameView:
             return
 
         # Must lock while assigning name and color, so can't get duplicates
-        with self._client.server.access_game_state() as state:
+        with self._client.server.access_game() as state:
             names_of_connected_players = {
                 client.name
                 for client in self._client.server.clients
@@ -873,7 +941,7 @@ class PlayingView:
         self.player = player
 
     def get_lines_to_render(self) -> list[bytes]:
-        with self._client.server.access_game_state(render=False) as state:
+        with self._client.server.access_game(render=False) as state:
             if RING_MODE:
                 lines = []
                 lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
@@ -946,7 +1014,9 @@ class PlayingView:
                         header_line += b"==" * WIDTH_PER_PLAYER
                     else:
                         header_line += b"--" * WIDTH_PER_PLAYER
-                    name_line += display_name.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+                    name_line += display_name.center(2 * WIDTH_PER_PLAYER).encode(
+                        "utf-8"
+                    )
 
                 name_line += COLOR % 0
                 header_line += COLOR % 0
@@ -979,16 +1049,16 @@ class PlayingView:
 
     def handle_key_press(self, received: bytes) -> None:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
-            with self._client.server.access_game_state() as state:
+            with self._client.server.access_game() as state:
                 state.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
-            with self._client.server.access_game_state() as state:
+            with self._client.server.access_game() as state:
                 state.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-            with self._client.server.access_game_state() as state:
+            with self._client.server.access_game() as state:
                 state.rotate(self.player)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-            with self._client.server.access_game_state() as state:
+            with self._client.server.access_game() as state:
                 state.move_down_all_the_way(self.player)
         elif received in (b"R", b"r"):
             self.player.rotate_counter_clockwise = (
@@ -996,7 +1066,7 @@ class PlayingView:
             )
         # TODO: remove, for development only
         elif received == b"2" and RING_MODE:
-            with self._client.server.access_game_state() as state:
+            with self._client.server.access_game() as state:
                 state._landed_blocks = {
                     (-x, -y): color for (x, y), color in state._landed_blocks.items()
                 }
@@ -1065,7 +1135,7 @@ class GameOverView:
         if received == b"\r":
             if self._selected_item == "New Game":
                 assert self._client.name is not None
-                with self._client.server.access_game_state() as state:
+                with self._client.server.access_game() as state:
                     player = state.add_player(self._client.name)
                     self._client.view = PlayingView(self._client, player)
             elif self._selected_item == "Quit":
@@ -1150,7 +1220,7 @@ class Client(socketserver.BaseRequestHandler):
                 except OSError as e:
                     print(self.client_address, e)
 
-            with self.server.access_game_state():
+            with self.server.access_game():
                 self.server.clients.remove(self)
                 if isinstance(self.view, PlayingView) and isinstance(
                     self.view.player.moving_block_or_wait_counter, MovingBlock
