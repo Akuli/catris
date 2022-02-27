@@ -1185,14 +1185,9 @@ class CheckTerminalSizeView:
         asyncio.create_task(self._refresh_loop())
 
     async def _refresh_loop(self) -> None:
-        # Wait until the view is assigned to the client (lol)
-        await asyncio.sleep(0.1)
         assert self._client.view == self
 
-        while True:
-            if self._client.view != self:
-                return
-            self._client.last_displayed_lines.clear()
+        while self._client.view == self:
             self._client.render()
             await asyncio.sleep(0.5)
 
@@ -1361,7 +1356,6 @@ class Client:
         self.rotate_counter_clockwise = False
 
     def render(self) -> None:
-        print("rendering", self.view)
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
             self.last_displayed_lines.clear()
