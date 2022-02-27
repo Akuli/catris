@@ -7,13 +7,13 @@ import sys
 import textwrap
 import random
 from abc import abstractmethod
-from typing import ClassVar, Iterator
+from typing import Any, ClassVar, Iterator
 
 if sys.version_info >= (3, 9):
     from asyncio import to_thread
 else:
     # copied from source code with slight modifications
-    async def to_thread(func, *args, **kwargs):  # type: ignore
+    async def to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
         import contextvars, functools
 
         loop = asyncio.get_running_loop()
