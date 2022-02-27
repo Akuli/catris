@@ -716,7 +716,7 @@ class RingGame(Game):
         except ValueError:
             up_x, up_y = min(unused_directions)
 
-        player =  Player(
+        player = Player(
             name,
             color,
             up_x,
@@ -1104,7 +1104,9 @@ class GameOverView:
             if self._selected_item == "New Game":
                 assert self._client.name is not None
                 with self._client.server.access_game() as state:
-                    player = state.get_existing_player_or_add_new_player(self._client.name)
+                    player = state.get_existing_player_or_add_new_player(
+                        self._client.name
+                    )
                     self._client.view = PlayingView(self._client, player)
             elif self._selected_item == "Quit":
                 return True
