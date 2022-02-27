@@ -47,6 +47,7 @@ Keys:
 - WASD or arrow keys: move and rotate
 - Ctrl+C, Ctrl+D or Ctrl+Q: quit
 - r: change rotating direction
+- f: flip the game upside down (only available in ring mode with 1 player)
 
 There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
