@@ -52,11 +52,6 @@ DOWN_ARROW_KEY = CSI + b"B"
 RIGHT_ARROW_KEY = CSI + b"C"
 LEFT_ARROW_KEY = CSI + b"D"
 
-if not RING_MODE:
-    # Width varies as people join/leave
-    HEIGHT = 20
-    WIDTH_PER_PLAYER = 7
-
 BLOCK_SHAPES = {
     "L": [(-1, 0), (0, 0), (1, 0), (1, -1)],
     "I": [(-2, 0), (-1, 0), (0, 0), (1, 0)],
@@ -87,104 +82,6 @@ WAIT_TIME = 10
 
 # Longest allowed name will get truncated, that's fine
 NAME_MAX_LENGTH = 15
-
-if RING_MODE:
-    # Game size is actually 2*GAME_RADIUS + 1 in each direction.
-    GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
-    MIDDLE_AREA_RADIUS = 3
-    MIDDLE_AREA = [
-        "o============o",
-        "|wwwwwwwwwwww|",
-        "|aaaaaadddddd|",
-        "|aaaaaadddddd|",
-        "|aaaaaadddddd|",
-        "|ssssssssssss|",
-        "o------------o",
-    ]
-
-    def get_middle_area_content(players_by_letter: dict[str, Player]) -> list[bytes]:
-        wrapped_names = {}
-        colors = {}
-
-        for letter in "wasd":
-            widths = [line.count(letter) for line in MIDDLE_AREA if letter in line]
-
-            if letter in players_by_letter:
-                colors[letter] = players_by_letter[letter].color
-                text = players_by_letter[letter].get_name_string(max_length=sum(widths))
-            else:
-                colors[letter] = 0
-                text = ""
-
-            wrapped = textwrap.wrap(text, min(widths))
-            if len(wrapped) > len(widths):
-                # We must ignore word boundaries to make it fit
-                wrapped = []
-                for w in widths:
-                    wrapped.append(text[:w])
-                    text = text[w:]
-                    if not text:
-                        break
-                assert not text
-
-            lines_to_add = len(widths) - len(wrapped)
-            prepend_count = lines_to_add // 2
-            append_count = lines_to_add - prepend_count
-            wrapped = [""] * prepend_count + wrapped + [""] * append_count
-
-            if letter == "a":
-                wrapped = [line.ljust(width) for width, line in zip(widths, wrapped)]
-            elif letter == "d":
-                wrapped = [line.rjust(width) for width, line in zip(widths, wrapped)]
-            else:
-                wrapped = [line.center(width) for width, line in zip(widths, wrapped)]
-
-            wrapped_names[letter] = wrapped
-
-        result = []
-        for template_line_string in MIDDLE_AREA:
-            template_line = template_line_string.encode("ascii")
-
-            # Apply colors to lines surrounding the middle area
-            template_line = template_line.replace(
-                b"o==", b"o" + (COLOR % colors["w"]) + b"=="
-            )
-            template_line = template_line.replace(b"==o", b"==" + (COLOR % 0) + b"o")
-            template_line = template_line.replace(
-                b"o--", b"o" + (COLOR % colors["s"]) + b"--"
-            )
-            template_line = template_line.replace(b"--o", b"--" + (COLOR % 0) + b"o")
-            if template_line.startswith(b"|"):
-                template_line = (
-                    (COLOR % colors["a"]) + b"|" + (COLOR % 0) + template_line[1:]
-                )
-            if template_line.endswith(b"|"):
-                template_line = (
-                    template_line[:-1] + (COLOR % colors["d"]) + b"|" + (COLOR % 0)
-                )
-
-            result_line = b""
-            while template_line:
-                if template_line[0] in b"wasd":
-                    letter = template_line[:1].decode("ascii")
-                    result_line += (
-                        (COLOR % colors[letter])
-                        + wrapped_names[letter].pop(0).encode("utf-8")
-                        + (COLOR % 0)
-                    )
-                    template_line = template_line.replace(template_line[:1], b"")
-                else:
-                    result_line += template_line[:1]
-                    template_line = template_line[1:]
-            result.append(result_line)
-
-        return result
-
-
-if RING_MODE:
-    TERMINAL_HEIGHT_NEEDED = 2 * GAME_RADIUS + 4
-else:
-    TERMINAL_HEIGHT_NEEDED = 24
 
 
 @dataclasses.dataclass
@@ -505,34 +402,44 @@ class Game:
 
 
 class TraditionalGame(Game):
+    # Width varies as people join/leave
+    HEIGHT = 20
+    WIDTH_PER_PLAYER = 7
+
     def reset(self) -> None:
         super().reset()
         self.landed_blocks = {}
 
     def wipe_playing_area(self, player: Player) -> None:
         index = self.players.index(player)
-        x_min = WIDTH_PER_PLAYER * index
-        x_max = x_min + WIDTH_PER_PLAYER
+        x_min = self.WIDTH_PER_PLAYER * index
+        x_max = x_min + self.WIDTH_PER_PLAYER
         for x in range(x_min, x_max):
-            for y in range(HEIGHT):
+            for y in range(self.HEIGHT):
                 self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(player)
 
     def _get_width(self) -> int:
-        return WIDTH_PER_PLAYER * len(self.players)
+        return self.WIDTH_PER_PLAYER * len(self.players)
 
     def is_valid(self) -> bool:
-        assert self.landed_blocks.keys() == {(x, y) for x in range(self._get_width()) for y in range(HEIGHT)}
+        if self.players:
+            assert self.landed_blocks.keys() == {
+               (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+            }
+
         return super().is_valid() and all(
-            x in range(self._get_width()) and y < HEIGHT
+            x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks()
             for x, y in block.get_coords()
         )
 
     def find_full_lines(self) -> list[int]:
         result = []
-        for y in range(HEIGHT):
-            row = [color for point, color in self.landed_blocks.items() if point[1] == y]
+        for y in range(self.HEIGHT):
+            row = [
+                color for point, color in self.landed_blocks.items() if point[1] == y
+            ]
             if row and None not in row:
                 result.append(y)
         return result
@@ -547,15 +454,18 @@ class TraditionalGame(Game):
             new_landed_blocks = {}
             for (x, y), color in self.landed_blocks.items():
                 if y < full_y:
-                    new_landed_blocks[x, y+1] = color
+                    new_landed_blocks[x, y + 1] = color
                 if y > full_y:
                     new_landed_blocks[x, y] = color
-            self.landed_blocks = {point: new_landed_blocks.get(point, None) for point in self.landed_blocks.keys()}
+            self.landed_blocks = {
+                point: new_landed_blocks.get(point, None)
+                for point in self.landed_blocks.keys()
+            }
 
     def instantiate_player(self, name: str, color: int) -> Player:
-        x_min = len(self.players) * WIDTH_PER_PLAYER
-        x_max = x_min + WIDTH_PER_PLAYER
-        for y in range(HEIGHT):
+        x_min = len(self.players) * self.WIDTH_PER_PLAYER
+        x_max = x_min + self.WIDTH_PER_PLAYER
+        for y in range(self.HEIGHT):
             for x in range(x_min, x_max):
                 assert (x, y) not in self.landed_blocks.keys()
                 self.landed_blocks[x, y] = None
@@ -566,7 +476,7 @@ class TraditionalGame(Game):
             direction_x=0,
             direction_y=-1,
             moving_block_start_x=(
-                len(self.players) * WIDTH_PER_PLAYER + (WIDTH_PER_PLAYER // 2)
+                len(self.players) * self.WIDTH_PER_PLAYER + (self.WIDTH_PER_PLAYER // 2)
             ),
             moving_block_start_y=-1,
         )
@@ -575,17 +485,17 @@ class TraditionalGame(Game):
         header_line = b"o"
         name_line = b" "
         for player in self.players:
-            name_text = player.get_name_string(max_length=2 * WIDTH_PER_PLAYER)
+            name_text = player.get_name_string(max_length=2 * self.WIDTH_PER_PLAYER)
 
             color_bytes = COLOR % player.color
             header_line += color_bytes
             name_line += color_bytes
 
             if player == rendering_for_this_player:
-                header_line += b"==" * WIDTH_PER_PLAYER
+                header_line += b"==" * self.WIDTH_PER_PLAYER
             else:
-                header_line += b"--" * WIDTH_PER_PLAYER
-            name_line += name_text.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+                header_line += b"--" * self.WIDTH_PER_PLAYER
+            name_line += name_text.center(2 * self.WIDTH_PER_PLAYER).encode("utf-8")
 
         name_line += COLOR % 0
         header_line += COLOR % 0
@@ -594,7 +504,7 @@ class TraditionalGame(Game):
         lines = [name_line, header_line]
         square_colors = self.get_square_colors()
 
-        for y in range(HEIGHT):
+        for y in range(self.HEIGHT):
             line = b"|"
             for x in range(self._get_width()):
                 color = square_colors[x, y]
@@ -612,13 +522,108 @@ class TraditionalGame(Game):
 
 
 class RingGame(Game):
+    # Game size is actually 2*GAME_RADIUS + 1 in each direction.
+    GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
+
+    MIDDLE_AREA_RADIUS = 3
+    MIDDLE_AREA = [
+        "o============o",
+        "|wwwwwwwwwwww|",
+        "|aaaaaadddddd|",
+        "|aaaaaadddddd|",
+        "|aaaaaadddddd|",
+        "|ssssssssssss|",
+        "o------------o",
+    ]
+
+    @classmethod
+    def get_middle_area_content(
+        cls, players_by_letter: dict[str, Player]
+    ) -> list[bytes]:
+        wrapped_names = {}
+        colors = {}
+
+        for letter in "wasd":
+            widths = [line.count(letter) for line in cls.MIDDLE_AREA if letter in line]
+
+            if letter in players_by_letter:
+                colors[letter] = players_by_letter[letter].color
+                text = players_by_letter[letter].get_name_string(max_length=sum(widths))
+            else:
+                colors[letter] = 0
+                text = ""
+
+            wrapped = textwrap.wrap(text, min(widths))
+            if len(wrapped) > len(widths):
+                # We must ignore word boundaries to make it fit
+                wrapped = []
+                for w in widths:
+                    wrapped.append(text[:w])
+                    text = text[w:]
+                    if not text:
+                        break
+                assert not text
+
+            lines_to_add = len(widths) - len(wrapped)
+            prepend_count = lines_to_add // 2
+            append_count = lines_to_add - prepend_count
+            wrapped = [""] * prepend_count + wrapped + [""] * append_count
+
+            if letter == "a":
+                wrapped = [line.ljust(width) for width, line in zip(widths, wrapped)]
+            elif letter == "d":
+                wrapped = [line.rjust(width) for width, line in zip(widths, wrapped)]
+            else:
+                wrapped = [line.center(width) for width, line in zip(widths, wrapped)]
+
+            wrapped_names[letter] = wrapped
+
+        result = []
+        for template_line_string in cls.MIDDLE_AREA:
+            template_line = template_line_string.encode("ascii")
+
+            # Apply colors to lines surrounding the middle area
+            template_line = template_line.replace(
+                b"o==", b"o" + (COLOR % colors["w"]) + b"=="
+            )
+            template_line = template_line.replace(b"==o", b"==" + (COLOR % 0) + b"o")
+            template_line = template_line.replace(
+                b"o--", b"o" + (COLOR % colors["s"]) + b"--"
+            )
+            template_line = template_line.replace(b"--o", b"--" + (COLOR % 0) + b"o")
+            if template_line.startswith(b"|"):
+                template_line = (
+                    (COLOR % colors["a"]) + b"|" + (COLOR % 0) + template_line[1:]
+                )
+            if template_line.endswith(b"|"):
+                template_line = (
+                    template_line[:-1] + (COLOR % colors["d"]) + b"|" + (COLOR % 0)
+                )
+
+            result_line = b""
+            while template_line:
+                if template_line[0] in b"wasd":
+                    letter = template_line[:1].decode("ascii")
+                    result_line += (
+                        (COLOR % colors[letter])
+                        + wrapped_names[letter].pop(0).encode("utf-8")
+                        + (COLOR % 0)
+                    )
+                    template_line = template_line.replace(template_line[:1], b"")
+                else:
+                    result_line += template_line[:1]
+                    template_line = template_line[1:]
+            result.append(result_line)
+
+        return result
+
     def reset(self) -> None:
         super().reset()
         self.landed_blocks = {
             (x, y): None
-            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
-            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
-            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
+            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
         }
 
     def wipe_playing_area(self, player: Player) -> None:
@@ -633,9 +638,9 @@ class RingGame(Game):
     def is_valid(self) -> bool:
         assert self.landed_blocks.keys() == {
             (x, y)
-            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
-            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
-            if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
+            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
         }
 
         if not super().is_valid():
@@ -643,17 +648,21 @@ class RingGame(Game):
 
         for block in self._get_moving_blocks():
             for x, y in block.get_coords():
-                if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
+                if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     return False
                 player_x, player_y = block.player.world_to_player(x, y)
-                if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
+                if (
+                    player_x < -self.GAME_RADIUS
+                    or player_x > self.GAME_RADIUS
+                    or player_y > 0
+                ):
                     return False
         return True
 
     def find_full_lines(self) -> list[int]:
         return [
             r
-            for r in range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)
+            for r in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
             if not any(
                 color is None
                 for (x, y), color in self.landed_blocks.items()
@@ -724,13 +733,13 @@ class RingGame(Game):
             color,
             dir_x,
             dir_y,
-            moving_block_start_x=(GAME_RADIUS + 1) * dir_x,
-            moving_block_start_y=(GAME_RADIUS + 1) * dir_y,
+            moving_block_start_x=(self.GAME_RADIUS + 1) * dir_x,
+            moving_block_start_y=(self.GAME_RADIUS + 1) * dir_y,
         )
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         lines = []
-        lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
+        lines.append(b"o" + b"--" * (2 * self.GAME_RADIUS + 1) + b"o")
 
         players_by_letter = {}
         for player in self.players:
@@ -745,14 +754,14 @@ class RingGame(Game):
             }[relative_direction]
             players_by_letter[letter] = player
 
-        middle_area_content = get_middle_area_content(players_by_letter)
+        middle_area_content = self.get_middle_area_content(players_by_letter)
         square_colors = self.get_square_colors()
 
-        for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
+        for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
             insert_middle_area_here = None
             line = b"|"
-            for x in range(-GAME_RADIUS, GAME_RADIUS + 1):
-                if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
+            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
+                if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     insert_middle_area_here = len(line)
                     continue
 
@@ -769,13 +778,13 @@ class RingGame(Game):
             if insert_middle_area_here is not None:
                 line = (
                     line[:insert_middle_area_here]
-                    + middle_area_content[y + MIDDLE_AREA_RADIUS]
+                    + middle_area_content[y + self.MIDDLE_AREA_RADIUS]
                     + line[insert_middle_area_here:]
                 )
 
             lines.append(line)
 
-        lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
+        lines.append(b"o" + b"--" * (2 * self.GAME_RADIUS + 1) + b"o")
         return lines
 
 
@@ -1011,7 +1020,6 @@ class PlayingView:
             if isinstance(self.player.moving_block_or_wait_counter, int):
                 n = self.player.moving_block_or_wait_counter
                 lines[8] += f"  Please wait: {n}".encode("ascii")
-
             return lines
 
     def handle_key_press(self, received: bytes) -> None:
@@ -1039,8 +1047,7 @@ class PlayingView:
                 }
                 if not state.is_valid():
                     state.landed_blocks = {
-                        (-x, -y): color
-                        for (x, y), color in state.landed_blocks.items()
+                        (-x, -y): color for (x, y), color in state.landed_blocks.items()
                     }
 
 
@@ -1125,14 +1132,13 @@ class Client(socketserver.BaseRequestHandler):
         self.view: AskNameView | PlayingView | GameOverView = AskNameView(self)
 
     def render(self) -> None:
-        # Bottom of game. If user types something, it's unlikely to be
-        # noticed here before it gets wiped by the next refresh.
-        cursor_pos = (TERMINAL_HEIGHT_NEEDED, 1)
-
         if isinstance(self.view, AskNameView):
             lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
         else:
+            # Bottom of game. If user types something, it's unlikely to be
+            # noticed here before it gets wiped by the next refresh.
             lines = self.view.get_lines_to_render()
+            cursor_pos = (len(lines) + 1, 1)
 
         while len(lines) < len(self.last_displayed_lines):
             lines.append(b"")
@@ -1197,7 +1203,7 @@ class Client(socketserver.BaseRequestHandler):
             print(self.client_address, "Disconnect")
             try:
                 self.request.sendall(SHOW_CURSOR)
-                self.request.sendall(MOVE_CURSOR % (TERMINAL_HEIGHT_NEEDED, 1))
+                self.request.sendall(b"\r")  # move cursor to start of line
                 self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
             except OSError as e:
                 print(self.client_address, e)
