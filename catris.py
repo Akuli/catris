@@ -225,11 +225,13 @@ class Game:
     def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
         pass
 
+    # This method is allowed to leave the game in invalid state, if moving landed
+    # blocks makes them go on top of moving blocks.
     @abstractmethod
-    def delete_full_lines(self, full_lines: list[int]) -> None:
+    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
         pass
 
-    def clear_lines(self, full_lines: list[int]) -> None:
+    def clear_full_lines(self, full_lines: list[int]) -> None:
         if len(full_lines) == 0:
             single_player_score = 0
         elif len(full_lines) == 1:
@@ -256,7 +258,7 @@ class Game:
         if n >= 1:  # avoid floats
             self.score += single_player_score * 2 ** (n - 1)
 
-        self.delete_full_lines(full_lines)
+        self.delete_full_lines_raw(full_lines)
 
         # When landed blocks move, they can go on top of moving blocks.
         # This is quite rare, but results in invalid state errors.
@@ -436,7 +438,7 @@ class TraditionalGame(Game):
             if point[1] in full_lines:
                 self.landed_blocks[point] = color
 
-    def delete_full_lines(self, full_lines: list[int]) -> None:
+    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
         for full_y in sorted(full_lines):
             new_landed_blocks = {}
             for (x, y), color in self.landed_blocks.items():
@@ -698,7 +700,7 @@ class RingGame(Game):
             for x, y in self.landed_blocks.keys()
         }
 
-    def delete_full_lines(self, full_lines: list[int]) -> None:
+    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
         for r in sorted(full_lines, reverse=True):
             self._delete_ring(r)
 
@@ -903,7 +905,7 @@ class Server(socketserver.ThreadingTCPServer):
             with self.access_game() as state:
                 if state.start_time != start_time:
                     return
-                state.clear_lines(full_lines)
+                state.clear_full_lines(full_lines)
 
     def _move_blocks_down_thread(self) -> None:
         while True:
