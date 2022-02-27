@@ -86,12 +86,8 @@ PLAYER_COLORS = {31, 32, 33, 34}
 # If you mess up, how many seconds should you wait?
 WAIT_TIME = 10
 
-if RING_MODE:
-    # Longest allowed name will get truncated, that's fine
-    NAME_MAX_LENGTH = 15
-else:
-    # Should be in characters to fit screen, but is actually checked in bytes
-    NAME_MAX_LENGTH = 2 * WIDTH_PER_PLAYER - len(str(WAIT_TIME)) - len("[] ")
+# Longest allowed name will get truncated, that's fine
+NAME_MAX_LENGTH = 15
 
 if RING_MODE:
     # Game size is actually 2*GAME_RADIUS + 1 in each direction.
@@ -250,42 +246,33 @@ class Player:
     rotate_counter_clockwise: bool = False
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
-    if RING_MODE:
-        # TODO: use get_name_string even in non-ring mode
-        def get_name_string(self, max_length: int) -> str:
-            if self.moving_block_or_wait_counter is None:
-                format = "[%s]"
-            elif isinstance(self.moving_block_or_wait_counter, int):
-                format = "[%s] " + str(self.moving_block_or_wait_counter)
-            else:
-                format = "%s"
+    # TODO: use get_name_string even in non-ring mode
+    def get_name_string(self, max_length: int) -> str:
+        if self.moving_block_or_wait_counter is None:
+            format = "[%s]"
+        elif isinstance(self.moving_block_or_wait_counter, int):
+            format = "[%s] " + str(self.moving_block_or_wait_counter)
+        else:
+            format = "%s"
 
-            name = self.name
-            while True:
-                if len(format % name) <= max_length:
-                    return format % name
-                name = name[:-1]
+        name = self.name
+        while True:
+            if len(format % name) <= max_length:
+                return format % name
+            name = name[:-1]
 
-        # Player's view is rotated, so that blocks always appear to fall down.
-        def world_to_player(self, x: int, y: int) -> tuple[int, int]:
-            return (
-                (-self.direction_y * x + self.direction_x * y),
-                (-self.direction_x * x - self.direction_y * y),
-            )
+    # In ring mode, player's view is rotated so that blocks fall down.
+    def world_to_player(self, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-self.direction_y * x + self.direction_x * y),
+            (-self.direction_x * x - self.direction_y * y),
+        )
 
-        def player_to_world(self, x: int, y: int) -> tuple[int, int]:
-            return (
-                (-self.direction_y * x - self.direction_x * y),
-                (self.direction_x * x - self.direction_y * y),
-            )
-
-    else:
-
-        def world_to_player(self, x: int, y: int) -> tuple[int, int]:
-            return (x, y)
-
-        def player_to_world(self, x: int, y: int) -> tuple[int, int]:
-            return (x, y)
+    def player_to_world(self, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-self.direction_y * x - self.direction_x * y),
+            (self.direction_x * x - self.direction_y * y),
+        )
 
 
 class Game:
@@ -994,16 +981,7 @@ class PlayingView:
                 header_line = b"o"
                 name_line = b" "
                 for player in state.players:
-                    if player.moving_block_or_wait_counter is None:
-                        # Player disconnected
-                        display_name = f"[{player.name}]"
-                    elif isinstance(player.moving_block_or_wait_counter, int):
-                        # Waiting for the countdown
-                        display_name = (
-                            f"[{player.name}] {player.moving_block_or_wait_counter}"
-                        )
-                    else:
-                        display_name = player.name
+                    name_text = player.get_name_string(max_length=2 * WIDTH_PER_PLAYER)
 
                     color_bytes = COLOR % player.color
                     header_line += color_bytes
@@ -1013,9 +991,7 @@ class PlayingView:
                         header_line += b"==" * WIDTH_PER_PLAYER
                     else:
                         header_line += b"--" * WIDTH_PER_PLAYER
-                    name_line += display_name.center(2 * WIDTH_PER_PLAYER).encode(
-                        "utf-8"
-                    )
+                    name_line += name_text.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
 
                 name_line += COLOR % 0
                 header_line += COLOR % 0
