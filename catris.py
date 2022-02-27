@@ -107,7 +107,7 @@ class MovingBlock:
             (1, 0): 1,
             (0, 1): 2,
             (-1, 0): 3,
-        }[(player.direction_x, player.direction_y)]
+        }[player.up_x, player.up_y]
 
     def get_coords(self) -> set[tuple[int, int]]:
         result = set()
@@ -122,9 +122,9 @@ class MovingBlock:
 class Player:
     name: str
     color: int
-    # What direction is up? TODO: rename variables
-    direction_x: int
-    direction_y: int
+    # What direction is up in the player's view? The up vector always has length 1.
+    up_x: int
+    up_y: int
     # These should be barely above the top of the game.
     # For example, in traditional tetris, that means moving_block_start_y = -1.
     moving_block_start_x: int
@@ -149,14 +149,14 @@ class Player:
     # In ring mode, player's view is rotated so that blocks fall down.
     def world_to_player(self, x: int, y: int) -> tuple[int, int]:
         return (
-            (-self.direction_y * x + self.direction_x * y),
-            (-self.direction_x * x - self.direction_y * y),
+            (-self.up_y * x + self.up_x * y),
+            (-self.up_x * x - self.up_y * y),
         )
 
     def player_to_world(self, x: int, y: int) -> tuple[int, int]:
         return (
-            (-self.direction_y * x - self.direction_x * y),
-            (self.direction_x * x - self.direction_y * y),
+            (-self.up_y * x - self.up_x * y),
+            (self.up_x * x - self.up_y * y),
         )
 
 
@@ -462,8 +462,8 @@ class TraditionalGame(Game):
         return Player(
             name,
             color,
-            direction_x=0,
-            direction_y=-1,
+            up_x=0,
+            up_y=-1,
             moving_block_start_x=(
                 len(self.players) * self.WIDTH_PER_PLAYER + (self.WIDTH_PER_PLAYER // 2)
             ),
@@ -619,7 +619,7 @@ class RingGame(Game):
         for x, y in self.landed_blocks.keys():
             # Math magic to check if (x,y) is in the player's triangle-shaped area.
             # Have fun figuring out how it works :)
-            dot = x * player.direction_x + y * player.direction_y
+            dot = x * player.up_x + y * player.up_y
             if dot >= 0 and 2 * dot ** 2 >= x * x + y * y:
                 self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(player)
@@ -706,24 +706,24 @@ class RingGame(Game):
             self._delete_ring(r)
 
     def instantiate_player(self, name: str, color: int) -> Player:
-        used_directions = {(p.direction_x, p.direction_y) for p in self.players}
+        used_directions = {(p.up_x, p.up_y) for p in self.players}
         opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
         unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
 
         # If possible, pick a direction opposite to existing player.
         # Choose a direction consistently, for reproducible debugging.
         try:
-            dir_x, dir_y = min(opposites_of_used_directions & unused_directions)
+            up_x, up_y = min(opposites_of_used_directions & unused_directions)
         except ValueError:
-            dir_x, dir_y = min(unused_directions)
+            up_x, up_y = min(unused_directions)
 
         return Player(
             name,
             color,
-            dir_x,
-            dir_y,
-            moving_block_start_x=(self.GAME_RADIUS + 1) * dir_x,
-            moving_block_start_y=(self.GAME_RADIUS + 1) * dir_y,
+            up_x,
+            up_y,
+            moving_block_start_x=(self.GAME_RADIUS + 1) * up_x,
+            moving_block_start_y=(self.GAME_RADIUS + 1) * up_y,
         )
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
@@ -733,7 +733,7 @@ class RingGame(Game):
         players_by_letter = {}
         for player in self.players:
             relative_direction = rendering_for_this_player.world_to_player(
-                player.direction_x, player.direction_y
+                player.up_x, player.up_y
             )
             letter = {
                 (0, -1): "w",
