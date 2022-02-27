@@ -143,6 +143,7 @@ class Player:
         while True:
             if len(format % name) <= max_length:
                 return format % name
+            assert name
             name = name[:-1]
 
     # In ring mode, player's view is rotated so that blocks fall down.
