@@ -833,7 +833,9 @@ class Server(socketserver.ThreadingTCPServer):
         return high_scores
 
     @contextlib.contextmanager
-    def access_game(self, game_class: type[Game], *, render: bool = True) -> Iterator[Game]:
+    def access_game(
+        self, game_class: type[Game], *, render: bool = True
+    ) -> Iterator[Game]:
         with self.lock:
             [game] = [g for g in self.games if isinstance(g, game_class)]
 
@@ -858,11 +860,15 @@ class Server(socketserver.ThreadingTCPServer):
 
                 assert render
                 if playing_clients:
-                    all_high_scores = self._add_high_score(game.HIGH_SCORES_FILE, high_score)
+                    all_high_scores = self._add_high_score(
+                        game.HIGH_SCORES_FILE, high_score
+                    )
                     all_high_scores.sort(key=(lambda hs: hs.score), reverse=True)
                     best5 = all_high_scores[:5]
                     for client in playing_clients:
-                        client.view = GameOverView(client, type(game), high_score, best5)
+                        client.view = GameOverView(
+                            client, type(game), high_score, best5
+                        )
                         client.render()
                 else:
                     print("Not adding high score because everyone disconnected")
@@ -979,7 +985,9 @@ class AskNameView:
             self._error = "Please write a name before pressing Enter."
             return
         if any(c.isspace() and c != " " for c in name):
-            self._error = "The name can contain spaces, but not other whitespace characters."
+            self._error = (
+                "The name can contain spaces, but not other whitespace characters."
+            )
             return
 
         # Must lock while assigning name and color, so can't get duplicates
@@ -1026,17 +1034,19 @@ class MenuView:
     def handle_key_press(self, received: bytes) -> bool:
         if received in (UP_ARROW_KEY, b"W", b"w") and self.selected_index > 0:
             self.selected_index -= 1
-        if received in (DOWN_ARROW_KEY, b"S", b"s") and self.selected_index+1 < len(self.menu_items):
+        if received in (DOWN_ARROW_KEY, b"S", b"s") and self.selected_index + 1 < len(
+            self.menu_items
+        ):
             self.selected_index += 1
         if received == b"\r":
             return bool(self.on_enter_pressed())
         return False  # do not quit yet
 
 
-
 class ChooseGameView(MenuView):
-
-    def __init__(self, client: Client, previous_game_class: type[Game] = GAME_CLASSES[0]):
+    def __init__(
+        self, client: Client, previous_game_class: type[Game] = GAME_CLASSES[0]
+    ):
         super().__init__()
         self._client = client
         self.selected_index = GAME_CLASSES.index(previous_game_class)
@@ -1053,7 +1063,9 @@ class ChooseGameView(MenuView):
                         text += f" ({len(game.players)} players)"
                 self.menu_items.append(text)
             self.menu_items.append("Quit")
-            return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+            return (
+                ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+            )
 
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
@@ -1068,7 +1080,13 @@ class ChooseGameView(MenuView):
 
 
 class GameOverView(MenuView):
-    def __init__(self, client: Client, game_class: type[Game], new_high_score: HighScore, high_scores: list[HighScore]):
+    def __init__(
+        self,
+        client: Client,
+        game_class: type[Game],
+        new_high_score: HighScore,
+        high_scores: list[HighScore],
+    ):
         super().__init__()
         self.menu_items.extend(["New Game", "Choose a different game", "Quit"])
         self._client = client
@@ -1113,9 +1131,7 @@ class GameOverView(MenuView):
         if text == "New Game":
             assert self._client.name is not None
             with self._client.server.access_game(self._game_class) as game:
-                player = game.get_existing_player_or_add_new_player(
-                    self._client.name
-                )
+                player = game.get_existing_player_or_add_new_player(self._client.name)
                 self._client.view = PlayingView(self._client, game, player)
         elif text == "Choose a different game":
             self._client.view = ChooseGameView(self._client, self._game_class)
@@ -1181,7 +1197,9 @@ class Client(socketserver.BaseRequestHandler):
         self.last_displayed_lines: list[bytes] = []
         self.send_queue: queue.Queue[bytes | None] = queue.Queue()
         self.name: str | None = None
-        self.view: AskNameView | ChooseGameView | PlayingView | GameOverView = AskNameView(self)
+        self.view: AskNameView | ChooseGameView | PlayingView | GameOverView = (
+            AskNameView(self)
+        )
         self.rotate_counter_clockwise = False
 
     def render(self) -> None:
