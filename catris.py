@@ -888,7 +888,10 @@ class Server:
         self.__games = {}
         for klass in GAME_CLASSES:
             self.__games[klass] = klass()
-        self.tasks = [asyncio.create_task(self._move_blocks_down_task(klass)) for klass in GAME_CLASSES]
+        self.tasks = [
+            asyncio.create_task(self._move_blocks_down_task(klass))
+            for klass in GAME_CLASSES
+        ]
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
         high_scores = []
@@ -919,7 +922,9 @@ class Server:
         high_scores.append(hs)
         return high_scores
 
-    async def _high_score_task(self, game_class: type[Game], high_score: HighScore) -> None:
+    async def _high_score_task(
+        self, game_class: type[Game], high_score: HighScore
+    ) -> None:
         high_scores = await asyncio.to_thread(
             self._add_high_score, game_class.HIGH_SCORES_FILE, high_score
         )
