@@ -214,32 +214,28 @@ class Game:
                 self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(player)
 
-    # Return value is a list of numbers describing what will be removed soon.
-    # The numbers don't have to be y coordinates. In ring mode, they are radiuses.
+    # This method should:
+    #   1. Yield the points that are about to be removed. The yielded value
+    #      will be used for the flashing animation.
+    #   2. Remove them.
+    #   3. Call finish_wiping_full_lines().
+    #
+    # In ring mode, a full "line" can be a line or a ring. That's why returning
+    # a list of full lines would be unnecessarily difficult.
+    #
+    # When this method is done, moving and landed blocks may overlap.
     @abstractmethod
-    def find_full_lines(self) -> list[int]:
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         pass
 
-    # Between find_full_lines and clear_full_lines, there's a flashing animation.
-    # Color can't be None, otherwise it is possible to put blocks into a currently flashing ring.
-    @abstractmethod
-    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
-        pass
-
-    # This method is allowed to leave the game in invalid state, if moving landed
-    # blocks makes them go on top of moving blocks.
-    @abstractmethod
-    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
-        pass
-
-    def clear_full_lines(self, full_lines: list[int]) -> None:
-        if len(full_lines) == 0:
+    def finish_wiping_full_lines(self, count: int) -> None:
+        if count == 0:
             single_player_score = 0
-        elif len(full_lines) == 1:
+        elif count == 1:
             single_player_score = 10
-        elif len(full_lines) == 2:
+        elif count == 2:
             single_player_score = 30
-        elif len(full_lines) == 3:
+        elif count == 3:
             single_player_score = 60
         else:
             single_player_score = 100
@@ -258,8 +254,6 @@ class Game:
         n = len(self.players)
         if n >= 1:  # avoid floats
             self.score += single_player_score * 3 ** (n - 1)
-
-        self.delete_full_lines_raw(full_lines)
 
         # When landed blocks move, they can go on top of moving blocks.
         # This is quite rare, but results in invalid state errors.
@@ -428,23 +422,21 @@ class TraditionalGame(Game):
             for x, y in block.get_coords()
         )
 
-    def find_full_lines(self) -> list[int]:
-        result = []
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+        y_coords = []
+        points: set[tuple[int, int]] = set()
+
         for y in range(self.HEIGHT):
             row = [
                 color for point, color in self.landed_blocks.items() if point[1] == y
             ]
             if row and None not in row:
-                result.append(y)
-        return result
+                y_coords.append(y)
+                points.update((x, y) for x in range(self._get_width()))
 
-    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
-        for point in self.landed_blocks.keys():
-            if point[1] in full_lines:
-                self.landed_blocks[point] = color
+        yield points
 
-    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
-        for full_y in sorted(full_lines):
+        for full_y in sorted(y_coords):
             new_landed_blocks = {}
             for (x, y), color in self.landed_blocks.items():
                 if y < full_y:
@@ -455,6 +447,8 @@ class TraditionalGame(Game):
                 point: new_landed_blocks.get(point, None)
                 for point in self.landed_blocks.keys()
             }
+
+        self.finish_wiping_full_lines(len(y_coords))
 
     def add_player(self, name: str, color: int) -> Player:
         x_min = len(self.players) * self.WIDTH_PER_PLAYER
@@ -656,8 +650,8 @@ class RingGame(Game):
         return True
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
-    def find_full_lines(self) -> list[int]:
-        return [
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+        radiuses = [
             r
             for r in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
             if not any(
@@ -667,10 +661,109 @@ class RingGame(Game):
             )
         ]
 
-    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
-        for x, y in self.landed_blocks.keys():
-            if max(abs(x), abs(y)) in full_lines:
-                self.landed_blocks[x, y] = color
+        # Lines represented as (dir_x, dir_y, list_of_points) tuples.
+        # Direction vector is how other landed blocks will be moved.
+        lines = []
+
+        # Horizontal lines
+        for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
+            dir_x = 0
+            dir_y = -1 if y > 0 else 1
+            if abs(y) > self.MIDDLE_AREA_RADIUS:
+                points = [
+                    (x, y) for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+                ]
+                lines.append((dir_x, dir_y, points))
+            else:
+                # left side
+                points = [
+                    (x, y) for x in range(-self.GAME_RADIUS, -self.MIDDLE_AREA_RADIUS)
+                ]
+                lines.append((dir_x, dir_y, points))
+                # right side
+                points = [
+                    (x, y)
+                    for x in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
+                ]
+                lines.append((dir_x, dir_y, points))
+
+        # Vertical lines
+        for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
+            dir_x = -1 if x > 0 else 1
+            dir_y = 0
+            if abs(x) > self.MIDDLE_AREA_RADIUS:
+                points = [
+                    (x, y) for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+                ]
+                lines.append((dir_x, dir_y, points))
+            else:
+                # top side
+                points = [
+                    (x, y) for y in range(-self.GAME_RADIUS, -self.MIDDLE_AREA_RADIUS)
+                ]
+                lines.append((dir_x, dir_y, points))
+                # bottom side
+                points = [
+                    (x, y)
+                    for y in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
+                ]
+                lines.append((dir_x, dir_y, points))
+
+        full_lines = [
+            (dir_x, dir_y, points)
+            for dir_x, dir_y, points in lines
+            if None not in (self.landed_blocks[p] for p in points)
+        ]
+
+        yield ( {
+            point for dx, dy, points in full_lines for point in points
+        } | {
+            (x, y)
+            for x, y in self.landed_blocks.keys()
+            if max(abs(x), abs(y)) in radiuses
+        })
+
+        # Remove lines in order where removing first line doesn't mess up
+        # coordinates of second, etc
+        def sorting_key(line: tuple[int, int, list[tuple[int, int]]]) -> int:
+            dir_x, dir_y, points = line
+            x, y = points[0]  # any point would do
+            return dir_x * x + dir_y * y
+
+        for dir_x, dir_y, points in sorted(full_lines, key=sorting_key):
+            self._delete_line(dir_x, dir_y, points)
+        for r in radiuses:
+            self._delete_ring(r)
+
+        self.finish_wiping_full_lines(len(lines) + len(radiuses))
+
+    def _delete_line(
+        self, dir_x: int, dir_y: int, points: list[tuple[int, int]]
+    ) -> None:
+        # dot product describes where it is along the direction, and is same for all points
+        # determinant describes where it is in the opposite direction
+        point_and_dir_dot_product = dir_x * points[0][0] + dir_y * points[0][1]
+        point_and_dir_determinants = [dir_y * x - dir_x * y for x, y in points]
+
+        new_landed_blocks: dict[tuple[int, int], int | None] = {
+            (x, y): None for x, y in self.landed_blocks.keys()
+        }
+        for (x, y), color in self.landed_blocks.items():
+            if color is None or (x, y) in points:
+                continue
+
+            # If (x, y) aligns with the line and moving in the direction would
+            # bring it closer to the line, then move it
+            if (
+                dir_y * x - dir_x * y in point_and_dir_determinants
+                and x * dir_x + y * dir_y < point_and_dir_dot_product
+            ):
+                x += dir_x
+                y += dir_y
+
+            new_landed_blocks[x, y] = color
+
+        self.landed_blocks = new_landed_blocks
 
     def _delete_ring(self, r: int) -> None:
         new_landed_blocks = {}
@@ -902,24 +995,29 @@ class Server(socketserver.ThreadingTCPServer):
         with self.access_game(game_class) as game:
             start_time = game.start_time
             needs_wait_counter = game.move_blocks_down()
-            full_lines = game.find_full_lines()
+            full_lines_iter = game.find_and_then_wipe_full_lines()
+            full_points = next(full_lines_iter)
             for player in needs_wait_counter:
                 threading.Thread(
                     target=self._countdown, args=[player, game, start_time]
                 ).start()
 
-        if full_lines:
-            print("Full:", full_lines)
+        if full_points:
+            print(f"Flashing and wiping {len(full_points)} points")
             for color in [47, 0, 47, 0]:
                 with self.access_game(game_class) as game:
                     if game.start_time != start_time:
                         return
-                    game.set_color_of_full_lines(full_lines, color)
+                    for point in full_points:
+                        game.landed_blocks[point] = color
                 time.sleep(0.1)
             with self.access_game(game_class) as game:
                 if game.start_time != start_time:
                     return
-                game.clear_full_lines(full_lines)
+                try:
+                    next(full_lines_iter)  # run past yield, which deletes points
+                except StopIteration:
+                    pass  # function ended without a second yield
 
     def _move_blocks_down_thread(self, game_class: type[Game]) -> None:
         while True:
