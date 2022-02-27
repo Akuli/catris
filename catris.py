@@ -1034,7 +1034,7 @@ class PlayingView:
                 not self._client.rotate_counter_clockwise
             )
         # TODO: remove, for development only
-        elif received == b"F":
+        elif received in (b"F", b"f"):
             with self._client.server.access_game() as state:
                 if isinstance(state, RingGame) and len(state.players) == 1:
                     old_landed_blocks = state.landed_blocks.copy()
