@@ -1415,11 +1415,11 @@ class Client:
         self.writer.write(to_send)
 
     async def _receive_bytes(self) -> bytes | None:
+        # TODO: is the error handling needed?
         try:
             result = await self._reader.read(10)
         except OSError as e:
-            # TODO: disconnect player properly
-            print(self.name, e)
+            print("Receive error:", self.name, e)
             return None
 
         # Checking ESC key here is a bad idea.
@@ -1431,7 +1431,6 @@ class Client:
             or CONTROL_D in result
             or CONTROL_Q in result
         ):
-            # TODO: disconnect player properly
             return None
 
         return result
@@ -1472,6 +1471,7 @@ class Client:
                         return
 
         finally:
+            # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
             await self.writer.drain()
             self.writer.close()
