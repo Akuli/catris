@@ -1,13 +1,10 @@
 from __future__ import annotations
+import asyncio
 import dataclasses
 import time
 import contextlib
-import socketserver
 import textwrap
-import threading
-import socket
 import random
-import queue
 from abc import abstractmethod
 from typing import ClassVar, Iterator
 
@@ -884,20 +881,14 @@ class RingGame(Game):
 GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame]
 
 
-class Server(socketserver.ThreadingTCPServer):
-    allow_reuse_address = True
-
-    def __init__(self, port: int):
-        super().__init__(("", port), Client)
-
+class Server:
+    def __init__(self) -> None:
         # RLock because state usage triggers rendering, which uses state
-        self.lock = threading.RLock()  # clients and __games are locked with this
         self.clients: set[Client] = set()
         self.__games = {}
-
         for klass in GAME_CLASSES:
             self.__games[klass] = klass()
-            threading.Thread(target=self._move_blocks_down_thread, args=[klass]).start()
+        self.tasks = [asyncio.create_task(self._move_blocks_down_task(klass)) for klass in GAME_CLASSES]
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
         high_scores = []
@@ -928,55 +919,65 @@ class Server(socketserver.ThreadingTCPServer):
         high_scores.append(hs)
         return high_scores
 
+    async def _high_score_task(self, game_class: type[Game], high_score: HighScore) -> None:
+        high_scores = await asyncio.to_thread(
+            self._add_high_score, game_class.HIGH_SCORES_FILE, high_score
+        )
+        high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+        best5 = high_scores[:5]
+        for client in self.clients:
+            if (
+                isinstance(client.view, GameOverView)
+                and client.view.game_class == game_class
+                and client.view.new_high_score == high_score
+            ):
+                client.view.set_high_scores(best5)
+                client.render()
+
     @contextlib.contextmanager
     def access_game(
         self, game_class: type[Game], *, render: bool = True
     ) -> Iterator[Game]:
-        with self.lock:
-            game = self.__games[game_class]
-            assert game.is_valid()
-            assert not game.game_is_over()
-            yield game
+        game = self.__games[game_class]
+        assert game.is_valid()
+        assert not game.game_is_over()
+        yield game
 
-            assert game.is_valid()
-            if game.game_is_over():
-                duration_ns = time.monotonic_ns() - game.start_time
-                high_score = HighScore(
-                    score=game.score,
-                    duration_sec=duration_ns / (1000 * 1000 * 1000),
-                    players=[p.name for p in game.players],
-                )
-                print("Game over!", high_score)
-                game.players.clear()
+        assert game.is_valid()
+        if game.game_is_over():
+            duration_ns = time.monotonic_ns() - game.start_time
+            high_score = HighScore(
+                score=game.score,
+                duration_sec=duration_ns / (1000 * 1000 * 1000),
+                players=[p.name for p in game.players],
+            )
+            print("Game over!", high_score)
+            game.players.clear()
 
-                playing_clients = [
-                    c for c in self.clients if isinstance(c.view, PlayingView)
-                ]
+            playing_clients = [
+                c for c in self.clients if isinstance(c.view, PlayingView)
+            ]
 
-                assert render
-                if playing_clients:
-                    all_high_scores = self._add_high_score(
-                        game.HIGH_SCORES_FILE, high_score
-                    )
-                    all_high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-                    best5 = all_high_scores[:5]
-                    for client in playing_clients:
-                        client.view = GameOverView(
-                            client, type(game), high_score, best5
-                        )
-                        client.render()
-                else:
-                    print("Not adding high score because everyone disconnected")
+            assert render
+            if playing_clients:
+                for client in playing_clients:
+                    client.view = GameOverView(client, type(game), high_score)
+                    client.render()
+                asyncio.create_task(self._high_score_task(type(game), high_score))
+            else:
+                print("Not adding high score because everyone disconnected")
 
-            elif render:
-                for client in self.clients:
-                    if isinstance(client.view, (PlayingView, ChooseGameView)):
-                        client.render()
+        elif render:
+            for client in self.clients:
+                if isinstance(client.view, (PlayingView, ChooseGameView)):
+                    client.render()
 
     # TODO: instantiate new Game instead of resetting, so won't need to pass start_time
-    def _countdown(self, player: Player, original_game: Game, start_time: int) -> None:
+    async def _countdown(
+        self, player: Player, original_game: Game, start_time: int
+    ) -> None:
         while True:
-            time.sleep(1)
+            await asyncio.sleep(1)
             with self.access_game(type(original_game)) as game:
                 if game.start_time != start_time:
                     return
@@ -992,16 +993,14 @@ class Server(socketserver.ThreadingTCPServer):
                     game.end_waiting(player, client_currently_connected)
                     return
 
-    def _move_blocks_down_once(self, game_class: type[Game]) -> None:
+    async def _move_blocks_down_once(self, game_class: type[Game]) -> None:
         with self.access_game(game_class) as game:
             start_time = game.start_time
             needs_wait_counter = game.move_blocks_down()
             full_lines_iter = game.find_and_then_wipe_full_lines()
             full_points = next(full_lines_iter)
             for player in needs_wait_counter:
-                threading.Thread(
-                    target=self._countdown, args=[player, game, start_time]
-                ).start()
+                asyncio.create_task(self._countdown(player, game, start_time))
 
         if full_points:
             print(f"Flashing and wiping {len(full_points)} points")
@@ -1011,7 +1010,7 @@ class Server(socketserver.ThreadingTCPServer):
                         return
                     for point in full_points:
                         game.landed_blocks[point] = color
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
             with self.access_game(game_class) as game:
                 if game.start_time != start_time:
                     return
@@ -1020,12 +1019,18 @@ class Server(socketserver.ThreadingTCPServer):
                 except StopIteration:
                     pass  # function ended without a second yield
 
-    def _move_blocks_down_thread(self, game_class: type[Game]) -> None:
+    async def _move_blocks_down_task(self, game_class: type[Game]) -> None:
         while True:
-            self._move_blocks_down_once(game_class)
+            await self._move_blocks_down_once(game_class)
             with self.access_game(game_class, render=False) as game:
                 score = game.score
-            time.sleep(0.5 / (1 + score / 1000))
+            await asyncio.sleep(0.5 / (1 + score / 1000))
+
+    async def handle_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        client = Client(self, reader, writer)
+        await client.handle()
 
 
 class AskNameView:
@@ -1090,23 +1095,21 @@ class AskNameView:
             )
             return
 
-        # Must lock while assigning name and color, so can't get duplicates
-        with self._client.server.lock:
-            # Prevent two simultaneous clients with the same name.
-            # But it's fine if you leave and then join back with the same name.
-            names_of_connected_players = {
-                client.name
-                for client in self._client.server.clients
-                if client.name is not None
-            }
-            if name.lower() in (n.lower() for n in names_of_connected_players):
-                self._error = "This name is in use. Try a different name."
-                return
+        # Prevent two simultaneous clients with the same name.
+        # But it's fine if you leave and then join back with the same name.
+        names_of_connected_players = {
+            client.name
+            for client in self._client.server.clients
+            if client.name is not None
+        }
+        if name.lower() in (n.lower() for n in names_of_connected_players):
+            self._error = "This name is in use. Try a different name."
+            return
 
-            print(self._client.client_address, f"name asking done: {name!r}")
-            self._client.send_queue.put(HIDE_CURSOR)
-            self._client.name = name
-            self._client.view = ChooseGameView(self._client)
+        print(f"name asking done: {name!r}")
+        self._client.writer.write(HIDE_CURSOR)
+        self._client.name = name
+        self._client.view = ChooseGameView(self._client)
 
 
 class MenuView:
@@ -1152,20 +1155,17 @@ class ChooseGameView(MenuView):
         self.selected_index = GAME_CLASSES.index(previous_game_class)
 
     def get_lines_to_render(self) -> list[bytes]:
-        with self._client.server.lock:
-            self.menu_items.clear()
-            for game_class in GAME_CLASSES:
-                text = game_class.NAME
-                with self._client.server.access_game(game_class, render=False) as game:
-                    if len(game.players) == 1:
-                        text += " (1 player)"
-                    else:
-                        text += f" ({len(game.players)} players)"
-                self.menu_items.append(text)
-            self.menu_items.append("Quit")
-            return (
-                ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
-            )
+        self.menu_items.clear()
+        for game_class in GAME_CLASSES:
+            text = game_class.NAME
+            with self._client.server.access_game(game_class, render=False) as game:
+                if len(game.players) == 1:
+                    text += " (1 player)"
+                else:
+                    text += f" ({len(game.players)} players)"
+            self.menu_items.append(text)
+        self.menu_items.append("Quit")
+        return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
 
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
@@ -1182,20 +1182,19 @@ class CheckTerminalSizeView:
         self._game_class = game_class
 
         # Terminal needs to be refreshed frequently as the user resizes it.
-        threading.Thread(target=self._refresh_loop).start()
+        asyncio.create_task(self._refresh_loop())
 
-    def _refresh_loop(self) -> None:
+    async def _refresh_loop(self) -> None:
         # Wait until the view is assigned to the client (lol)
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
         assert self._client.view == self
 
         while True:
-            with self._client.server.lock:
-                if self._client.view != self:
-                    return
-                self._client.last_displayed_lines.clear()
-                self._client.render()
-            time.sleep(0.5)
+            if self._client.view != self:
+                return
+            self._client.last_displayed_lines.clear()
+            self._client.render()
+            await asyncio.sleep(0.5)
 
     def get_lines_to_render(self) -> list[bytes]:
         width = 80
@@ -1231,20 +1230,25 @@ class GameOverView(MenuView):
         client: Client,
         game_class: type[Game],
         new_high_score: HighScore,
-        high_scores: list[HighScore],
     ):
         super().__init__()
         self.menu_items.extend(["New Game", "Choose a different game", "Quit"])
         self._client = client
-        self._game_class = game_class
-        self._new_high_score = new_high_score
+        self.game_class = game_class
+        self.new_high_score = new_high_score
+        self._high_scores: list[HighScore] | None = None
+
+    def set_high_scores(self, high_scores: list[HighScore]) -> None:
         self._high_scores = high_scores
 
     def get_lines_to_render(self) -> list[bytes]:
+        if self._high_scores is None:
+            return [b"", b"", b"Loading...".center(80).rstrip()]
+
         lines = [b"", b"", b""]
         lines.append(b"Game Over :(".center(80).rstrip())
         lines.append(
-            f"Your score was {self._new_high_score.score}.".encode("ascii")
+            f"Your score was {self.new_high_score.score}.".encode("ascii")
             .center(80)
             .rstrip()
         )
@@ -1264,7 +1268,7 @@ class GameOverView(MenuView):
                 f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
             )
             line = line_string.encode("utf-8")
-            if hs == self._new_high_score:
+            if hs == self.new_high_score:
                 lines.append((COLOR % 42) + line)
             else:
                 lines.append((COLOR % 0) + line)
@@ -1273,14 +1277,17 @@ class GameOverView(MenuView):
         return lines
 
     def on_enter_pressed(self) -> bool:
+        if self._high_scores is None:
+            return False
+
         text = self.menu_items[self.selected_index]
         if text == "New Game":
             assert self._client.name is not None
-            with self._client.server.access_game(self._game_class) as game:
+            with self._client.server.access_game(self.game_class) as game:
                 player = game.get_existing_player_or_add_new_player(self._client.name)
                 self._client.view = PlayingView(self._client, game, player)
         elif text == "Choose a different game":
-            self._client.view = ChooseGameView(self._client, self._game_class)
+            self._client.view = ChooseGameView(self._client, self.game_class)
         elif text == "Quit":
             return True
         else:
@@ -1334,14 +1341,15 @@ class PlayingView:
                         state.landed_blocks = old_landed_blocks
 
 
-class Client(socketserver.BaseRequestHandler):
-    server: Server
-    request: socket.socket
+class Client:
+    def __init__(
+        self, server: Server, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        self.server = server
+        self._reader = reader
+        self.writer = writer
 
-    def setup(self) -> None:
-        print(self.client_address, "New connection")
         self.last_displayed_lines: list[bytes] = []
-        self.send_queue: queue.Queue[bytes | None] = queue.Queue()
         self.name: str | None = None
         self.view: (
             AskNameView
@@ -1353,10 +1361,11 @@ class Client(socketserver.BaseRequestHandler):
         self.rotate_counter_clockwise = False
 
     def render(self) -> None:
+        print("rendering", self.view)
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
             self.last_displayed_lines.clear()
-            self.send_queue.put(
+            self.writer.write(
                 CLEAR_SCREEN
                 + (MOVE_CURSOR % (1, 1))
                 + b"\r\n".join(self.view.get_lines_to_render())
@@ -1390,14 +1399,14 @@ class Client(socketserver.BaseRequestHandler):
         to_send += MOVE_CURSOR % cursor_pos
         to_send += CLEAR_TO_END_OF_LINE
 
-        self.send_queue.put(to_send)
+        self.writer.write(to_send)
 
-    def _receive_bytes(self) -> bytes | None:
+    async def _receive_bytes(self) -> bytes | None:
         try:
-            result = self.request.recv(10)
+            result = await self._reader.read(10)
         except OSError as e:
-            print(self.client_address, e)
-            self.send_queue.put(None)
+            # TODO: disconnect player properly
+            print(self.name, e)
             return None
 
         # Checking ESC key here is a bad idea.
@@ -1409,68 +1418,28 @@ class Client(socketserver.BaseRequestHandler):
             or CONTROL_D in result
             or CONTROL_Q in result
         ):
-            self.send_queue.put(None)
+            # TODO: disconnect player properly
             return None
 
         return result
 
-    def _send_queue_thread(self) -> None:
-        while True:
-            item = self.send_queue.get()
-            if item is not None:
-                try:
-                    self.request.sendall(item)
-                    continue
-                except OSError as e:
-                    print(self.client_address, e)
-
-            with self.server.lock:
-                self.server.clients.remove(self)
-                if isinstance(self.view, PlayingView) and isinstance(
-                    self.view.player.moving_block_or_wait_counter, MovingBlock
-                ):
-                    with self.server.access_game(type(self.view.game)):
-                        self.view.player.moving_block_or_wait_counter = None
-
-            print(self.client_address, "Disconnect")
-            try:
-                self.request.sendall(SHOW_CURSOR)
-                self.request.sendall(b"\r")  # move cursor to start of line
-                self.request.sendall(CLEAR_FROM_CURSOR_TO_END_OF_SCREEN)
-            except OSError as e:
-                print(self.client_address, e)
-            try:
-                self.request.shutdown(socket.SHUT_RDWR)
-            except OSError as e:
-                print(self.client_address, e)
-            break
-
-    def handle(self) -> None:
-        with self.server.lock:
-            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
-                full = True
-            else:
-                full = False
-                self.server.clients.add(self)
-
-        # do not send while locked, would freeze ongoing games
-        if full:
-            print(self.client_address, "Sending server full message")
-            self.request.sendall(b"The server is full. Please try again later.\r\n")
-            return
-
-        send_queue_thread = threading.Thread(target=self._send_queue_thread)
-        send_queue_thread.start()
+    async def handle(self) -> None:
+        print("New connection")
 
         try:
-            self.send_queue.put(CLEAR_SCREEN)
+            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+                print("Sending server full message")
+                self.writer.write(b"The server is full. Please try again later.\r\n")
+                return
+
+            self.server.clients.add(self)
+            self.writer.write(CLEAR_SCREEN)
             received = b""
 
             while True:
-                with self.server.lock:
-                    self.render()
+                self.render()
 
-                new_chunk = self._receive_bytes()
+                new_chunk = await self._receive_bytes()
                 if new_chunk is None:
                     break
                 received += new_chunk
@@ -1486,22 +1455,28 @@ class Client(socketserver.BaseRequestHandler):
                     else:
                         handle_result = self.view.handle_key_press(received[:1])
                         received = received[1:]
-
                     if handle_result:
                         return
 
-        except OSError as e:
-            print(self.client_address, e)
-
         finally:
-            self.send_queue.put(None)
-            send_queue_thread.join()  # Don't close until stuff is sent
+            self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
+            await self.writer.drain()
+            self.writer.close()
+            print(self.name, "Connection closed")
 
 
-def main() -> None:
-    server = Server(12345)
-    print("Listening on port 12345...")
-    server.serve_forever()
+async def bloop() -> None:
+    while True:
+        print("bloop")
+        await asyncio.sleep(1)
 
 
-main()
+async def main() -> None:
+    my_server = Server()
+    asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
+    async with asyncio_server:
+        print("Listening on port 12345...")
+        await asyncio.gather(asyncio_server.serve_forever(), *my_server.tasks, bloop())
+
+
+asyncio.run(main())
