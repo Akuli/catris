@@ -1036,7 +1036,7 @@ class PlayingView:
         # TODO: remove, for development only
         elif received == b"F":
             with self._client.server.access_game() as state:
-                if isinstance(state, RingGame) and len(state.players) == 2:
+                if isinstance(state, RingGame) and len(state.players) == 1:
                     old_landed_blocks = state.landed_blocks.copy()
                     state.landed_blocks = {
                         (-x, -y): color for (x, y), color in state.landed_blocks.items()
