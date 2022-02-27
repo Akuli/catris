@@ -21,16 +21,6 @@ ASCII_ART = r"""
                         https://github.com/Akuli/catris
 """
 
-_parser = argparse.ArgumentParser(
-    epilog=ASCII_ART, formatter_class=argparse.RawDescriptionHelpFormatter
-)
-_parser.add_argument(
-    "--ring",
-    action="store_true",
-    help="something quite different from the classic game :)",
-)
-RING_MODE = _parser.parse_args().ring
-
 # https://en.wikipedia.org/wiki/ANSI_escape_code
 ESC = b"\x1b"
 CSI = ESC + b"["
@@ -425,7 +415,7 @@ class TraditionalGame(Game):
     def is_valid(self) -> bool:
         if self.players:
             assert self.landed_blocks.keys() == {
-               (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+                (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
             }
 
         return super().is_valid() and all(
@@ -791,19 +781,24 @@ class RingGame(Game):
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
-    def __init__(self, port: int, high_score_file: str):
+    def __init__(self, port: int, ring_mode: bool):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
         self.lock = threading.RLock()  # __game and clients are locked with this
         self.clients: set[Client] = set()
         self.__game: Game
-        if RING_MODE:
+        if ring_mode:
             self.__game = RingGame()
         else:
             self.__game = TraditionalGame()
 
         threading.Thread(target=self._move_blocks_down_thread).start()
+
+        if ring_mode:
+            high_score_file = "ring_high_scores.txt"
+        else:
+            high_score_file = "high_scores.txt"
 
         self.high_scores = []
         try:
@@ -1040,15 +1035,15 @@ class PlayingView:
                 not self.player.rotate_counter_clockwise
             )
         # TODO: remove, for development only
-        elif received == b"2" and RING_MODE:
+        elif received == b"F":
             with self._client.server.access_game() as state:
-                state.landed_blocks = {
-                    (-x, -y): color for (x, y), color in state.landed_blocks.items()
-                }
-                if not state.is_valid():
+                if isinstance(state, RingGame) and len(state.players) == 2:
+                    old_landed_blocks = state.landed_blocks.copy()
                     state.landed_blocks = {
                         (-x, -y): color for (x, y), color in state.landed_blocks.items()
                     }
+                    if not state.is_valid():
+                        state.landed_blocks = old_landed_blocks
 
 
 class GameOverView:
@@ -1256,9 +1251,17 @@ class Client(socketserver.BaseRequestHandler):
             send_queue_thread.join()  # Don't close until stuff is sent
 
 
-if RING_MODE:
-    server = Server(12345, "ring_high_scores.txt")
-else:
-    server = Server(12345, "high_scores.txt")
-print("Listening on port 12345...")
-server.serve_forever()
+def main():
+    parser = argparse.ArgumentParser(
+        epilog=ASCII_ART, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--ring",
+        action="store_true",
+        help="something quite different from the classic game :)",
+    )
+    args = parser.parse_args()
+
+    server = Server(12345, args.ring)
+    print("Listening on port 12345...")
+    server.serve_forever()
