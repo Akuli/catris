@@ -131,7 +131,6 @@ class Player:
     moving_block_start_y: int
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
-    # TODO: use get_name_string even in non-ring mode
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
             format = "[%s]"
@@ -144,6 +143,7 @@ class Player:
         while True:
             if len(format % name) <= max_length:
                 return format % name
+            assert name
             name = name[:-1]
 
     # In ring mode, player's view is rotated so that blocks fall down.
@@ -265,7 +265,7 @@ class Game:
         # When this happens, just delete the landed block.
         for moving_block in self._get_moving_blocks():
             for point in moving_block.get_coords():
-                if self.landed_blocks.get(point) is not None:
+                if self.landed_blocks.get(point, None) is not None:
                     self.landed_blocks[point] = None
 
         assert self.is_valid()
@@ -1034,9 +1034,9 @@ class PlayingView:
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
             )
-        elif received == b"F":
+        elif received in (b"F", b"f"):
             with self._client.server.access_game() as state:
-                if isinstance(state, RingGame) and len(state.players) == 2:
+                if isinstance(state, RingGame) and len(state.players) == 1:
                     old_landed_blocks = state.landed_blocks.copy()
                     state.landed_blocks = {
                         (-x, -y): color for (x, y), color in state.landed_blocks.items()
