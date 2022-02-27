@@ -1,6 +1,5 @@
 # TODO: terminal size check before game starts
 from __future__ import annotations
-import argparse
 import dataclasses
 import time
 import contextlib
@@ -11,7 +10,7 @@ import socket
 import random
 import queue
 from abc import abstractmethod
-from typing import Iterator
+from typing import ClassVar, Iterator
 
 ASCII_ART = r"""
                    __     ___    _____   _____   _____   ___
@@ -162,6 +161,8 @@ class Player:
 
 class Game:
     landed_blocks: dict[tuple[int, int], int | None]
+    NAME: ClassVar[str]
+    HIGH_SCORES_FILE: ClassVar[str]
 
     def __init__(self) -> None:
         self.reset()
@@ -394,6 +395,9 @@ class Game:
 
 
 class TraditionalGame(Game):
+    NAME = "Traditional game"
+    HIGH_SCORES_FILE = "high_scores.txt"
+
     # Width varies as people join/leave
     HEIGHT = 20
     WIDTH_PER_PLAYER = 7
@@ -513,6 +517,9 @@ class TraditionalGame(Game):
 
 
 class RingGame(Game):
+    NAME = "Ring game"
+    HIGH_SCORES_FILE = "ring_high_scores.txt"
+
     # Game size is actually 2*GAME_RADIUS + 1 in each direction.
     GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
 
@@ -778,34 +785,31 @@ class RingGame(Game):
         return lines
 
 
+GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame]
+
+
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
-    def __init__(self, port: int, ring_mode: bool):
+    def __init__(self, port: int):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
-        self.lock = threading.RLock()  # __game and clients are locked with this
+        self.lock = threading.RLock()  # clients and __games are locked with this
         self.clients: set[Client] = set()
-        self.__game: Game
-        if ring_mode:
-            self.__game = RingGame()
-        else:
-            self.__game = TraditionalGame()
+        self.__games = {}
 
-        threading.Thread(target=self._move_blocks_down_thread).start()
+        for klass in GAME_CLASSES:
+            self.__games[klass] = klass()
+            threading.Thread(target=self._move_blocks_down_thread, args=[klass]).start()
 
-        if ring_mode:
-            high_score_file = "ring_high_scores.txt"
-        else:
-            high_score_file = "high_scores.txt"
-
-        self.high_scores = []
+    def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
+        high_scores = []
         try:
-            with open(high_score_file, "r", encoding="utf-8") as file:
+            with open(file_name, "r", encoding="utf-8") as file:
                 for line in file:
                     score, duration, *players = line.strip("\n").split("\t")
-                    self.high_scores.append(
+                    high_scores.append(
                         HighScore(
                             score=int(score),
                             duration_sec=float(duration),
@@ -813,40 +817,41 @@ class Server(socketserver.ThreadingTCPServer):
                         )
                     )
         except FileNotFoundError:
-            print("High scores will be saved to", high_score_file)
+            print("Creating", file_name)
+        except (ValueError, OSError) as e:
+            print(f"Reading {file_name} failed:", e)
         else:
-            print("Found high scores file:", high_score_file)
-
-        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-        self._high_score_file = high_score_file
-
-    def _add_high_score(self, hs: HighScore) -> None:
-        self.high_scores.append(hs)
-        self.high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+            print("Found high scores file:", file_name)
 
         try:
-            with open(self._high_score_file, "a", encoding="utf-8") as file:
+            with open(file_name, "a", encoding="utf-8") as file:
                 print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
         except OSError as e:
-            print("Writing high score to file failed:", e)
+            print(f"Writing to {file_name} failed:", e)
+
+        high_scores.append(hs)
+        return high_scores
 
     @contextlib.contextmanager
-    def access_game(self, *, render: bool = True) -> Iterator[Game]:
+    def access_game(
+        self, game_class: type[Game], *, render: bool = True
+    ) -> Iterator[Game]:
         with self.lock:
-            assert self.__game.is_valid()
-            assert not self.__game.game_is_over()
-            yield self.__game
+            game = self.__games[game_class]
+            assert game.is_valid()
+            assert not game.game_is_over()
+            yield game
 
-            assert self.__game.is_valid()
-            if self.__game.game_is_over():
-                duration_ns = time.monotonic_ns() - self.__game.start_time
-                hs = HighScore(
-                    score=self.__game.score,
+            assert game.is_valid()
+            if game.game_is_over():
+                duration_ns = time.monotonic_ns() - game.start_time
+                high_score = HighScore(
+                    score=game.score,
                     duration_sec=duration_ns / (1000 * 1000 * 1000),
-                    players=[p.name for p in self.__game.players],
+                    players=[p.name for p in game.players],
                 )
-                print("Game over!", hs)
-                self.__game.players.clear()
+                print("Game over!", high_score)
+                game.players.clear()
 
                 playing_clients = [
                     c for c in self.clients if isinstance(c.view, PlayingView)
@@ -854,23 +859,30 @@ class Server(socketserver.ThreadingTCPServer):
 
                 assert render
                 if playing_clients:
-                    self._add_high_score(hs)
+                    all_high_scores = self._add_high_score(
+                        game.HIGH_SCORES_FILE, high_score
+                    )
+                    all_high_scores.sort(key=(lambda hs: hs.score), reverse=True)
+                    best5 = all_high_scores[:5]
                     for client in playing_clients:
-                        client.view = GameOverView(client, hs)
+                        client.view = GameOverView(
+                            client, type(game), high_score, best5
+                        )
                         client.render()
                 else:
                     print("Not adding high score because everyone disconnected")
 
             elif render:
                 for client in self.clients:
-                    if isinstance(client.view, PlayingView):
+                    if isinstance(client.view, (PlayingView, ChooseGameView)):
                         client.render()
 
-    def _countdown(self, player: Player, start_time: int) -> None:
+    # TODO: instantiate new Game instead of resetting, so won't need to pass start_time
+    def _countdown(self, player: Player, original_game: Game, start_time: int) -> None:
         while True:
             time.sleep(1)
-            with self.access_game() as state:
-                if state.start_time != start_time:
+            with self.access_game(type(original_game)) as game:
+                if game.start_time != start_time:
                     return
 
                 assert isinstance(player.moving_block_or_wait_counter, int)
@@ -881,37 +893,37 @@ class Server(socketserver.ThreadingTCPServer):
                         and client.view.player == player
                         for client in self.clients
                     )
-                    state.end_waiting(player, client_currently_connected)
+                    game.end_waiting(player, client_currently_connected)
                     return
 
-    def _move_blocks_down_once(self) -> None:
-        with self.access_game() as state:
-            start_time = state.start_time
-            needs_wait_counter = state.move_blocks_down()
-            full_lines = state.find_full_lines()
+    def _move_blocks_down_once(self, game_class: type[Game]) -> None:
+        with self.access_game(game_class) as game:
+            start_time = game.start_time
+            needs_wait_counter = game.move_blocks_down()
+            full_lines = game.find_full_lines()
             for player in needs_wait_counter:
                 threading.Thread(
-                    target=self._countdown, args=[player, start_time]
+                    target=self._countdown, args=[player, game, start_time]
                 ).start()
 
         if full_lines:
             print("Full:", full_lines)
             for color in [47, 0, 47, 0]:
-                with self.access_game() as state:
-                    if state.start_time != start_time:
+                with self.access_game(game_class) as game:
+                    if game.start_time != start_time:
                         return
-                    state.set_color_of_full_lines(full_lines, color)
+                    game.set_color_of_full_lines(full_lines, color)
                 time.sleep(0.1)
-            with self.access_game() as state:
-                if state.start_time != start_time:
+            with self.access_game(game_class) as game:
+                if game.start_time != start_time:
                     return
-                state.clear_full_lines(full_lines)
+                game.clear_full_lines(full_lines)
 
-    def _move_blocks_down_thread(self) -> None:
+    def _move_blocks_down_thread(self, game_class: type[Game]) -> None:
         while True:
-            self._move_blocks_down_once()
-            with self.access_game(render=False) as state:
-                score = state.score
+            self._move_blocks_down_once(game_class)
+            with self.access_game(game_class, render=False) as game:
+                score = game.score
             time.sleep(0.5 / (1 + score / 1000))
 
 
@@ -921,6 +933,7 @@ class AskNameView:
         self._client = client
         self._name_so_far = b""
         self._error: str | None = None
+        self._backslash_r_received = False
 
     def _get_name(self) -> str:
         return "".join(
@@ -952,9 +965,11 @@ class AskNameView:
         # Linux/MacOS cooked mode (not supported): b"YourName\n"
         # Windows: b"\r\n" (handled as if it was \r and \n separately)
         if received == b"\r":
-            self._start_playing()  # Will change view, so we won't receive \n
+            self._on_enter_pressed()
+            self._backslash_r_received = True
         elif received == b"\n":
-            self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
+            if not self._backslash_r_received:
+                self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received in BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
             # with a single backspace press
@@ -963,33 +978,26 @@ class AskNameView:
             if len(self._name_so_far) < NAME_MAX_LENGTH:
                 self._name_so_far += received
 
-    def _start_playing(self) -> None:
+    def _on_enter_pressed(self) -> None:
         name = self._get_name().strip()
         if not name:
             self._error = "Please write a name before pressing Enter."
             return
-        if "\r" in name or "\n" in name:
-            self._error = "The name must not contain newline characters."
-            return
-        if "\t" in name:
-            self._error = "The name must not contain tab characters."
+        if any(c.isspace() and c != " " for c in name):
+            self._error = (
+                "The name can contain spaces, but not other whitespace characters."
+            )
             return
 
         # Must lock while assigning name and color, so can't get duplicates
-        with self._client.server.access_game() as state:
+        with self._client.server.lock:
+            # Prevent two simultaneous clients with the same name.
+            # But it's fine if you leave and then join back with the same name.
             names_of_connected_players = {
                 client.name
                 for client in self._client.server.clients
                 if client.name is not None
             }
-            names_in_use = names_of_connected_players | {p.name for p in state.players}
-
-            if len(names_in_use) == len(PLAYER_COLORS):
-                self._error = "Server is full. Please try again later."
-                return
-
-            # Prevent two simultaneous clients with the same name.
-            # But it's fine if you leave and then join back with the same name.
             if name.lower() in (n.lower() for n in names_of_connected_players):
                 self._error = "This name is in use. Try a different name."
                 return
@@ -997,19 +1005,153 @@ class AskNameView:
             print(self._client.client_address, f"name asking done: {name!r}")
             self._client.send_queue.put(HIDE_CURSOR)
             self._client.name = name
-            player = state.get_existing_player_or_add_new_player(name)
-            self._client.view = PlayingView(self._client, player)
+            self._client.view = ChooseGameView(self._client)
+
+
+class MenuView:
+    def __init__(self) -> None:
+        self.menu_items: list[str] = []
+        self.selected_index = 0
+
+    def get_lines_to_render(self) -> list[bytes]:
+        item_width = 30
+        result = [b"", b""]
+        for index, item in enumerate(self.menu_items):
+            display_text = item.center(item_width).encode("utf-8")
+            if index == self.selected_index:
+                display_text = (COLOR % 47) + display_text  # white background
+                display_text = (COLOR % 30) + display_text  # black foreground
+                display_text += COLOR % 0
+            result.append(b" " * ((80 - item_width) // 2) + display_text)
+        return result
+
+    # Return True to quit the game
+    @abstractmethod
+    def on_enter_pressed(self) -> bool | None:
+        pass
+
+    def handle_key_press(self, received: bytes) -> bool:
+        if received in (UP_ARROW_KEY, b"W", b"w") and self.selected_index > 0:
+            self.selected_index -= 1
+        if received in (DOWN_ARROW_KEY, b"S", b"s") and self.selected_index + 1 < len(
+            self.menu_items
+        ):
+            self.selected_index += 1
+        if received == b"\r":
+            return bool(self.on_enter_pressed())
+        return False  # do not quit yet
+
+
+class ChooseGameView(MenuView):
+    def __init__(
+        self, client: Client, previous_game_class: type[Game] = GAME_CLASSES[0]
+    ):
+        super().__init__()
+        self._client = client
+        self.selected_index = GAME_CLASSES.index(previous_game_class)
+
+    def get_lines_to_render(self) -> list[bytes]:
+        with self._client.server.lock:
+            self.menu_items.clear()
+            for game_class in GAME_CLASSES:
+                text = game_class.NAME
+                with self._client.server.access_game(game_class, render=False) as game:
+                    if len(game.players) == 1:
+                        text += " (1 player)"
+                    else:
+                        text += f" ({len(game.players)} players)"
+                self.menu_items.append(text)
+            self.menu_items.append("Quit")
+            return (
+                ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+            )
+
+    def on_enter_pressed(self) -> bool:
+        if self.menu_items[self.selected_index] == "Quit":
+            return True
+
+        with self._client.server.access_game(GAME_CLASSES[self.selected_index]) as game:
+            assert self._client.name is not None
+            player = game.get_existing_player_or_add_new_player(self._client.name)
+            self._client.view = PlayingView(self._client, game, player)
+
+        return False
+
+
+class GameOverView(MenuView):
+    def __init__(
+        self,
+        client: Client,
+        game_class: type[Game],
+        new_high_score: HighScore,
+        high_scores: list[HighScore],
+    ):
+        super().__init__()
+        self.menu_items.extend(["New Game", "Choose a different game", "Quit"])
+        self._client = client
+        self._game_class = game_class
+        self._new_high_score = new_high_score
+        self._high_scores = high_scores
+
+    def get_lines_to_render(self) -> list[bytes]:
+        lines = [b"", b"", b""]
+        lines.append(b"Game Over :(".center(80).rstrip())
+        lines.append(
+            f"Your score was {self._new_high_score.score}.".encode("ascii")
+            .center(80)
+            .rstrip()
+        )
+
+        lines.extend(super().get_lines_to_render())
+
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"=== HIGH SCORES ".ljust(80, b"="))
+        lines.append(b"")
+        lines.append(b"| Score | Duration | Players")
+        lines.append(b"|-------|----------|-------".ljust(80, b"-"))
+
+        for hs in self._high_scores:
+            player_string = ", ".join(hs.players)
+            line_string = (
+                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
+            )
+            line = line_string.encode("utf-8")
+            if hs == self._new_high_score:
+                lines.append((COLOR % 42) + line)
+            else:
+                lines.append((COLOR % 0) + line)
+
+        lines.append(COLOR % 0)  # Needed if last score was highlighted
+        return lines
+
+    def on_enter_pressed(self) -> bool:
+        text = self.menu_items[self.selected_index]
+        if text == "New Game":
+            assert self._client.name is not None
+            with self._client.server.access_game(self._game_class) as game:
+                player = game.get_existing_player_or_add_new_player(self._client.name)
+                self._client.view = PlayingView(self._client, game, player)
+        elif text == "Choose a different game":
+            self._client.view = ChooseGameView(self._client, self._game_class)
+        elif text == "Quit":
+            return True
+        else:
+            raise NotImplementedError(text)
+
+        return False
 
 
 class PlayingView:
-    def __init__(self, client: Client, player: Player):
+    def __init__(self, client: Client, game: Game, player: Player):
         self._client = client
+        self.game = game
         self.player = player
 
     def get_lines_to_render(self) -> list[bytes]:
-        with self._client.server.access_game(render=False) as state:
-            lines = state.get_lines_to_render(self.player)
-            lines[5] += f"  Score: {state.score}".encode("ascii")
+        with self._client.server.access_game(type(self.game), render=False) as game:
+            lines = game.get_lines_to_render(self.player)
+            lines[5] += f"  Score: {game.score}".encode("ascii")
             if self._client.rotate_counter_clockwise:
                 lines[6] += b"  Counter-clockwise"
             if isinstance(self.player.moving_block_or_wait_counter, int):
@@ -1019,101 +1161,30 @@ class PlayingView:
 
     def handle_key_press(self, received: bytes) -> None:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
-            with self._client.server.access_game() as state:
-                state.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
+            with self._client.server.access_game(type(self.game)) as game:
+                game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
-            with self._client.server.access_game() as state:
-                state.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
+            with self._client.server.access_game(type(self.game)) as game:
+                game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-            with self._client.server.access_game() as state:
-                state.rotate(self.player, self._client.rotate_counter_clockwise)
+            with self._client.server.access_game(type(self.game)) as game:
+                game.rotate(self.player, self._client.rotate_counter_clockwise)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-            with self._client.server.access_game() as state:
-                state.move_down_all_the_way(self.player)
+            with self._client.server.access_game(type(self.game)) as game:
+                game.move_down_all_the_way(self.player)
         elif received in (b"R", b"r"):
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
             )
-        elif received in (b"F", b"f"):
-            with self._client.server.access_game() as state:
-                if isinstance(state, RingGame) and len(state.players) == 1:
+        elif received in (b"F", b"f") and isinstance(self.game, RingGame):
+            with self._client.server.access_game(RingGame) as state:
+                if len(state.players) == 1:
                     old_landed_blocks = state.landed_blocks.copy()
                     state.landed_blocks = {
                         (-x, -y): color for (x, y), color in state.landed_blocks.items()
                     }
                     if not state.is_valid():
                         state.landed_blocks = old_landed_blocks
-
-
-class GameOverView:
-    def __init__(self, client: Client, high_score: HighScore):
-        self._client = client
-        self._high_score = high_score
-        self._all_menu_items = ["New Game", "Quit"]
-        self._selected_item = "New Game"
-
-    def get_lines_to_render(self) -> list[bytes]:
-        lines = [b""] * 7
-        lines[3] = b"Game Over :(".center(80).rstrip()
-        lines[4] = (
-            f"Your score was {self._high_score.score}.".encode("ascii")
-            .center(80)
-            .rstrip()
-        )
-
-        item_width = 20
-
-        for menu_item in self._all_menu_items:
-            display_text = menu_item.center(item_width).encode("utf-8")
-            if menu_item == self._selected_item:
-                display_text = (COLOR % 47) + display_text  # white background
-                display_text = (COLOR % 30) + display_text  # black foreground
-                display_text += COLOR % 0
-            lines.append(b" " * ((80 - item_width) // 2) + display_text)
-
-        lines.append(b"")
-        lines.append(b"")
-        lines.append(b"=== HIGH SCORES ".ljust(80, b"="))
-        lines.append(b"")
-        lines.append(b"| Score | Duration | Players")
-        lines.append(b"|-------|----------|-------".ljust(80, b"-"))
-
-        for hs in self._client.server.high_scores[:5]:
-            player_string = ", ".join(hs.players)
-            line_string = (
-                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
-            )
-            line = line_string.encode("utf-8")
-            if hs == self._high_score:
-                lines.append((COLOR % 42) + line)
-            else:
-                lines.append((COLOR % 0) + line)
-
-        lines.append(COLOR % 0)  # Needed if last score was highlighted
-        return lines
-
-    def handle_key_press(self, received: bytes) -> bool:
-        i = self._all_menu_items.index(self._selected_item)
-        if received in (UP_ARROW_KEY, b"W", b"w") and i > 0:
-            self._selected_item = self._all_menu_items[i - 1]
-        # fmt: off
-        if received in (DOWN_ARROW_KEY, b"S", b"s") and i+1 < len(self._all_menu_items):
-            self._selected_item = self._all_menu_items[i + 1]
-        # fmt: on
-        if received == b"\r":
-            if self._selected_item == "New Game":
-                assert self._client.name is not None
-                with self._client.server.access_game() as state:
-                    player = state.get_existing_player_or_add_new_player(
-                        self._client.name
-                    )
-                    self._client.view = PlayingView(self._client, player)
-            elif self._selected_item == "Quit":
-                return True
-            else:
-                raise NotImplementedError(self._selected_item)
-
-        return False  # do not quit yet
 
 
 class Client(socketserver.BaseRequestHandler):
@@ -1125,7 +1196,9 @@ class Client(socketserver.BaseRequestHandler):
         self.last_displayed_lines: list[bytes] = []
         self.send_queue: queue.Queue[bytes | None] = queue.Queue()
         self.name: str | None = None
-        self.view: AskNameView | PlayingView | GameOverView = AskNameView(self)
+        self.view: AskNameView | ChooseGameView | PlayingView | GameOverView = (
+            AskNameView(self)
+        )
         self.rotate_counter_clockwise = False
 
     def render(self) -> None:
@@ -1190,12 +1263,13 @@ class Client(socketserver.BaseRequestHandler):
                 except OSError as e:
                     print(self.client_address, e)
 
-            with self.server.access_game():
+            with self.server.lock:
                 self.server.clients.remove(self)
                 if isinstance(self.view, PlayingView) and isinstance(
                     self.view.player.moving_block_or_wait_counter, MovingBlock
                 ):
-                    self.view.player.moving_block_or_wait_counter = None
+                    with self.server.access_game(type(self.view.game)):
+                        self.view.player.moving_block_or_wait_counter = None
 
             print(self.client_address, "Disconnect")
             try:
@@ -1211,14 +1285,24 @@ class Client(socketserver.BaseRequestHandler):
             break
 
     def handle(self) -> None:
+        with self.server.lock:
+            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+                full = True
+            else:
+                full = False
+                self.server.clients.add(self)
+
+        # do not send while locked, would freeze ongoing games
+        if full:
+            print(self.client_address, "Sending server full message")
+            self.request.sendall(b"The server is full. Please try again later.\r\n")
+            return
+
         send_queue_thread = threading.Thread(target=self._send_queue_thread)
         send_queue_thread.start()
 
         try:
-            with self.server.lock:
-                self.server.clients.add(self)
             self.send_queue.put(CLEAR_SCREEN)
-
             received = b""
 
             while True:
@@ -1254,17 +1338,7 @@ class Client(socketserver.BaseRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        epilog=ASCII_ART, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--ring",
-        action="store_true",
-        help="something quite different from the classic game :)",
-    )
-    args = parser.parse_args()
-
-    server = Server(12345, args.ring)
+    server = Server(12345)
     print("Listening on port 12345...")
     server.serve_forever()
 
