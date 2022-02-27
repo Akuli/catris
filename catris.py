@@ -817,7 +817,7 @@ class Server(socketserver.ThreadingTCPServer):
                         )
                     )
         except FileNotFoundError:
-            print("Creating high scores file:", file_name)
+            print("Creating", file_name)
         except (ValueError, OSError) as e:
             print(f"Reading {file_name} failed:", e)
         else:
