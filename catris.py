@@ -197,6 +197,11 @@ class Game:
                 result.append(player.moving_block_or_wait_counter)
         return result
 
+    # For clearing squares when a player's wait time ends
+    @abstractmethod
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
+        pass
+
     def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
         assert player.moving_block_or_wait_counter == 0
         if not client_currently_connected:
@@ -207,11 +212,6 @@ class Game:
             if self.square_belongs_to_player(player, x, y):
                 self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(player)
-
-    # For clearing squares when a player's wait time ends
-    @abstractmethod
-    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
-        pass
 
     # Return value is a list of numbers describing what will be removed soon.
     # The numbers don't have to be y coordinates. In ring mode, they are radiuses.
@@ -402,7 +402,7 @@ class TraditionalGame(Game):
         super().reset()
         self.landed_blocks = {}
 
-    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
         x_min = self.WIDTH_PER_PLAYER * index
         x_max = x_min + self.WIDTH_PER_PLAYER
@@ -617,7 +617,7 @@ class RingGame(Game):
             if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
         }
 
-    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         # Let me know if you need to understand how this works. I'll explain.
         dot = x * player.up_x + y * player.up_y
         return dot >= 0 and 2 * dot ** 2 >= x * x + y * y
