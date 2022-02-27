@@ -276,6 +276,8 @@ class Player:
 
 
 class Game:
+    landed_blocks: dict[tuple[int, int], int | None]
+
     def __init__(self) -> None:
         self.reset()
 
@@ -357,6 +359,15 @@ class Game:
             self.score += single_player_score * 2 ** (n - 1)
 
         self.delete_full_lines(full_lines)
+
+        # When landed blocks move, they can go on top of moving blocks.
+        # This is quite rare, but results in invalid state errors.
+        # When this happens, just delete the landed block.
+        for moving_block in self._get_moving_blocks():
+            for point in moving_block.get_coords():
+                if self.landed_blocks.get(point) is not None:
+                    self.landed_blocks[point] = None
+
         assert self.is_valid()
 
     def move_if_possible(
@@ -468,18 +479,24 @@ class Game:
             if block_not_fully_visible:
                 needs_wait_counter.add(player)
             else:
-                if RING_MODE:
-                    for point in coords:
-                        assert point in self._landed_blocks
-                        self._landed_blocks[point] = BLOCK_COLORS[letter]
-                else:
-                    for x, y in coords:
-                        self._landed_blocks[y][x] = BLOCK_COLORS[letter]
+                for point in coords:
+                    assert point in self.landed_blocks
+                    self.landed_blocks[point] = BLOCK_COLORS[letter]
                 player.moving_block_or_wait_counter = MovingBlock(player)
 
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
         return needs_wait_counter
+
+    def get_square_colors(self) -> dict[tuple[int, int], int | None]:
+        assert self.is_valid()
+        result = self.landed_blocks.copy()
+        for moving_block in self._get_moving_blocks():
+            for point in moving_block.get_coords():
+                if point in result:
+                    result[point] = BLOCK_COLORS[moving_block.shape_letter]
+
+        return result
 
     @abstractmethod
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
@@ -489,14 +506,15 @@ class Game:
 class TraditionalGame(Game):
     def reset(self) -> None:
         super().reset()
-        self._landed_blocks: list[list[int | None]] = [[] for y in range(HEIGHT)]
+        self.landed_blocks = {}
 
     def wipe_playing_area(self, player: Player) -> None:
         index = self.players.index(player)
         x_min = WIDTH_PER_PLAYER * index
         x_max = x_min + WIDTH_PER_PLAYER
-        for row in self._landed_blocks:
-            row[x_min:x_max] = [None] * WIDTH_PER_PLAYER
+        for x in range(x_min, x_max):
+            for y in range(HEIGHT):
+                self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(index)
 
     # TODO: can this be _non_public()?
@@ -506,8 +524,7 @@ class TraditionalGame(Game):
     def is_valid(self) -> bool:
         seen = set()
 
-        for y, row in enumerate(self._landed_blocks):
-            for x, color in enumerate(row):
+        for (x, y), color in self.landed_blocks.items():
                 if color is not None:
                     seen.add((x, y))
 
@@ -521,41 +538,36 @@ class TraditionalGame(Game):
         return True
 
     def find_full_lines(self) -> list[int]:
-        return [
-            y for y, row in enumerate(self._landed_blocks) if row and None not in row
-        ]
-
-    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
-        for y in full_lines:
-            self._landed_blocks[y] = [color] * self.get_width()
-
-    def delete_full_lines(self, full_lines: list[int]) -> None:
-        self._landed_blocks = [
-            row for y, row in enumerate(self._landed_blocks) if y not in full_lines
-        ]
-        while len(self._landed_blocks) < HEIGHT:
-            self._landed_blocks.insert(0, [None] * self.get_width())
-
-        # When landed blocks move, they can go on top of moving blocks.
-        # This is quite rare, but results in invalid state errors.
-        # When this happens, just delete the landed block.
-        for moving_block in self._get_moving_blocks():
-            for x, y in moving_block.get_coords():
-                if y >= 0:
-                    self._landed_blocks[y][x] = None
-
-    def get_square_colors(self) -> list[list[int | None]]:
-        assert self.is_valid()
-        result = copy.deepcopy(self._landed_blocks)
-        for moving_block in self._get_moving_blocks():
-            for x, y in moving_block.get_coords():
-                if y >= 0:
-                    result[y][x] = BLOCK_COLORS[moving_block.shape_letter]
+        result = []
+        for y in range(HEIGHT):
+            row = [color for point, color in self.landed_blocks.items() if point[1] == y]
+            if row and None not in row:
+                result.append(y)
         return result
 
+    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+        for point in self.landed_blocks.keys():
+            if point[1] in full_lines:
+                self.landed_blocks[point] = color
+
+    def delete_full_lines(self, full_lines: list[int]) -> None:
+        for full_y in sorted(full_lines):
+            new_landed_blocks = {}
+            for (x, y), color in self.landed_blocks.items():
+                if y < full_y:
+                    new_landed_blocks[x, y+1] = color
+                if y > full_y:
+                    new_landed_blocks[x, y] = color
+            self.landed_blocks = {point: new_landed_blocks.get(point, None) for point in self.landed_blocks.keys()}
+
     def instantiate_player(self, name: str, color: int) -> Player:
-        for row in self._landed_blocks:
-            row.extend([None] * WIDTH_PER_PLAYER)
+        x_min = len(self.players) * WIDTH_PER_PLAYER
+        x_max = x_min + WIDTH_PER_PLAYER
+        for y in range(HEIGHT):
+            for x in range(x_min, x_max):
+                assert (x, y) not in self.landed_blocks.keys()
+                self.landed_blocks[x, y] = None
+
         return Player(
             name,
             color,
@@ -588,10 +600,12 @@ class TraditionalGame(Game):
         header_line += b"o"
 
         lines = [name_line, header_line]
+        square_colors = self.get_square_colors()
 
-        for blink_y, row in enumerate(self.get_square_colors()):
+        for y in range(HEIGHT):
             line = b"|"
-            for color in row:
+            for x in range(self.get_width()):
+                color = square_colors[x, y]
                 if color is None:
                     line += b"  "
                 else:
@@ -608,7 +622,7 @@ class TraditionalGame(Game):
 class RingGame(Game):
     def reset(self) -> None:
         super().reset()
-        self._landed_blocks: dict[tuple[int, int], int | None] = {
+        self.landed_blocks = {
             (x, y): None
             for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
@@ -616,16 +630,16 @@ class RingGame(Game):
         }
 
     def wipe_playing_area(self, player: Player) -> None:
-        for x, y in self._landed_blocks.keys():
+        for x, y in self.landed_blocks.keys():
             # Math magic to check if (x,y) is in the player's triangle-shaped area.
             # Have fun figuring out how it works :)
             dot = x * player.direction_x + y * player.direction_y
             if dot >= 0 and 2 * dot ** 2 >= x * x + y * y:
-                self._landed_blocks[x, y] = None
+                self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(player)
 
     def is_valid(self) -> bool:
-        assert self._landed_blocks.keys() == {
+        assert self.landed_blocks.keys() == {
             (x, y)
             for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
@@ -633,7 +647,7 @@ class RingGame(Game):
         }
 
         seen = {
-            point for point, color in self._landed_blocks.items() if color is not None
+            point for point, color in self.landed_blocks.items() if color is not None
         }
 
         for block in self._get_moving_blocks():
@@ -654,19 +668,19 @@ class RingGame(Game):
             for r in range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)
             if not any(
                 color is None
-                for (x, y), color in self._landed_blocks.items()
+                for (x, y), color in self.landed_blocks.items()
                 if max(abs(x), abs(y)) == r
             )
         ]
 
     def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
-        for x, y in self._landed_blocks.keys():
+        for x, y in self.landed_blocks.keys():
             if max(abs(x), abs(y)) in full_lines:
-                self._landed_blocks[x, y] = color
+                self.landed_blocks[x, y] = color
 
     def _delete_ring(self, r: int) -> None:
         new_landed_blocks = {}
-        for (x, y), color in self._landed_blocks.items():
+        for (x, y), color in self.landed_blocks.items():
             if color is None:
                 continue
 
@@ -696,32 +710,14 @@ class RingGame(Game):
 
             new_landed_blocks[x, y] = color
 
-        self._landed_blocks = {
+        self.landed_blocks = {
             (x, y): new_landed_blocks.get((x, y), None)
-            for x, y in self._landed_blocks.keys()
+            for x, y in self.landed_blocks.keys()
         }
 
     def delete_full_lines(self, full_lines: list[int]) -> None:
         for r in sorted(full_lines, reverse=True):
             self._delete_ring(r)
-
-        # When landed blocks move, they can go on top of moving blocks.
-        # This is quite rare, but results in invalid state errors.
-        # When this happens, just delete the landed block.
-        for moving_block in self._get_moving_blocks():
-            for point in moving_block.get_coords():
-                if self._landed_blocks.get(point) is not None:
-                    self._landed_blocks[point] = None
-
-    def get_square_colors(self) -> dict[tuple[int, int], int | None]:
-        assert self.is_valid()
-        result = self._landed_blocks.copy()
-        for moving_block in self._get_moving_blocks():
-            for point in moving_block.get_coords():
-                if point in result:
-                    result[point] = BLOCK_COLORS[moving_block.shape_letter]
-
-        return result
 
     def instantiate_player(self, name: str, color: int) -> None:
         used_directions = {(p.direction_x, p.direction_y) for p in self.players}
@@ -1049,13 +1045,13 @@ class PlayingView:
         # TODO: remove, for development only
         elif received == b"2" and RING_MODE:
             with self._client.server.access_game() as state:
-                state._landed_blocks = {
-                    (-x, -y): color for (x, y), color in state._landed_blocks.items()
+                state.landed_blocks = {
+                    (-x, -y): color for (x, y), color in state.landed_blocks.items()
                 }
                 if not state.is_valid():
-                    state._landed_blocks = {
+                    state.landed_blocks = {
                         (-x, -y): color
-                        for (x, y), color in state._landed_blocks.items()
+                        for (x, y), color in state.landed_blocks.items()
                     }
 
 
