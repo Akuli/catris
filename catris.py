@@ -1172,8 +1172,9 @@ class ChooseGameView(MenuView):
         super().__init__()
         self._client = client
         self.selected_index = GAME_CLASSES.index(previous_game_class)
+        self._fill_menu()
 
-    def get_lines_to_render(self) -> list[bytes]:
+    def _fill_menu(self) -> None:
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
             text = game_class.NAME
@@ -1184,6 +1185,9 @@ class ChooseGameView(MenuView):
                     text += f" ({len(game.players)} players)"
             self.menu_items.append(text)
         self.menu_items.append("Quit")
+
+    def get_lines_to_render(self) -> list[bytes]:
+        self._fill_menu()
         return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
 
     def on_enter_pressed(self) -> bool:
@@ -1204,8 +1208,6 @@ class CheckTerminalSizeView:
         asyncio.create_task(self._refresh_loop())
 
     async def _refresh_loop(self) -> None:
-        assert self._client.view == self
-
         while self._client.view == self:
             self._client.render()
             await asyncio.sleep(0.5)
@@ -1417,6 +1419,7 @@ class Client:
     async def _receive_bytes(self) -> bytes | None:
         # TODO: is the error handling needed?
         try:
+            await asyncio.sleep(0)  # Makes game playable while fuzzer is running
             result = await self._reader.read(10)
         except OSError as e:
             print("Receive error:", self.name, e)
@@ -1485,12 +1488,18 @@ class Client:
             self.writer.close()
 
 
+async def bloop() -> None:
+    while True:
+        print("bloop")
+        await asyncio.sleep(1)
+
+
 async def main() -> None:
     my_server = Server()
     asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
     async with asyncio_server:
         print("Listening on port 12345...")
-        await asyncio.gather(asyncio_server.serve_forever(), *my_server.tasks)
+        await asyncio.gather(asyncio_server.serve_forever(), bloop(), *my_server.tasks)
 
 
 asyncio.run(main())
