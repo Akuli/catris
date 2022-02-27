@@ -285,6 +285,19 @@ class Game:
         self.players: list[Player] = []
         self.score = 0
 
+    def is_valid(self) -> bool:
+        seen = {
+            point for point, color in self.landed_blocks.items() if color is not None
+        }
+
+        for block in self._get_moving_blocks():
+            coords = block.get_coords()
+            if coords & seen:
+                return False
+            seen.update(coords)
+
+        return True
+
     def game_is_over(self) -> bool:
         return bool(self.players) and not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
@@ -307,10 +320,6 @@ class Game:
 
     @abstractmethod
     def wipe_playing_area(self, player: Player) -> None:
-        pass
-
-    @abstractmethod
-    def is_valid(self) -> bool:
         pass
 
     # In ring mode, full lines are actually full squares.
@@ -509,25 +518,16 @@ class TraditionalGame(Game):
                 self.landed_blocks[x, y] = None
         player.moving_block_or_wait_counter = MovingBlock(index)
 
-    # TODO: can this be _non_public()?
-    def get_width(self) -> int:
+    def _get_width(self) -> int:
         return WIDTH_PER_PLAYER * len(self.players)
 
     def is_valid(self) -> bool:
-        seen = set()
-
-        for (x, y), color in self.landed_blocks.items():
-                if color is not None:
-                    seen.add((x, y))
-
-        for block in self._get_moving_blocks():
-            coords = block.get_coords()
-            if coords & seen or not all(
-                x in range(self.get_width()) and y < HEIGHT for x, y in coords
-            ):
-                return False
-            seen.update(coords)
-        return True
+        assert self.landed_blocks.keys() == {(x, y) for x in range(self._get_width()) for y in range(HEIGHT)}
+        return super().is_valid() and all(
+            x in range(self._get_width()) and y < HEIGHT
+            for block in self._get_moving_blocks()
+            for x, y in block.get_coords()
+        )
 
     def find_full_lines(self) -> list[int]:
         result = []
@@ -596,7 +596,7 @@ class TraditionalGame(Game):
 
         for y in range(HEIGHT):
             line = b"|"
-            for x in range(self.get_width()):
+            for x in range(self._get_width()):
                 color = square_colors[x, y]
                 if color is None:
                     line += b"  "
@@ -607,7 +607,7 @@ class TraditionalGame(Game):
             line += b"|"
             lines.append(line)
 
-        lines.append(b"o" + b"--" * self.get_width() + b"o")
+        lines.append(b"o" + b"--" * self._get_width() + b"o")
         return lines
 
 
@@ -638,20 +638,14 @@ class RingGame(Game):
             if max(abs(x), abs(y)) > MIDDLE_AREA_RADIUS
         }
 
-        seen = {
-            point for point, color in self.landed_blocks.items() if color is not None
-        }
+        if not super().is_valid():
+            return False
 
         for block in self._get_moving_blocks():
             for x, y in block.get_coords():
-                if (x, y) in seen or max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
-                    return False
-                seen.add((x, y))
-
                 player_x, player_y = block.player.world_to_player(x, y)
                 if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
                     return False
-
         return True
 
     def find_full_lines(self) -> list[int]:
