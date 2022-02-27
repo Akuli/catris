@@ -222,7 +222,7 @@ class Game:
     # Between find_full_lines and clear_full_lines, there's a flashing animation.
     # Color can't be None, otherwise it is possible to put blocks into a currently flashing ring.
     @abstractmethod
-    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
         pass
 
     @abstractmethod
@@ -431,7 +431,7 @@ class TraditionalGame(Game):
                 result.append(y)
         return result
 
-    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
         for point in self.landed_blocks.keys():
             if point[1] in full_lines:
                 self.landed_blocks[point] = color
@@ -655,7 +655,7 @@ class RingGame(Game):
             )
         ]
 
-    def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
+    def set_color_of_full_lines(self, full_lines: list[int], color: int) -> None:
         for x, y in self.landed_blocks.keys():
             if max(abs(x), abs(y)) in full_lines:
                 self.landed_blocks[x, y] = color
@@ -897,7 +897,7 @@ class Server(socketserver.ThreadingTCPServer):
                 with self.access_game() as state:
                     if state.start_time != start_time:
                         return
-                    state.set_color_of_lines(full_lines, color)
+                    state.set_color_of_full_lines(full_lines, color)
                 time.sleep(0.1)
             with self.access_game() as state:
                 if state.start_time != start_time:
