@@ -1,4 +1,3 @@
-# TODO: terminal size check before game starts
 from __future__ import annotations
 import dataclasses
 import time
@@ -163,6 +162,7 @@ class Game:
     landed_blocks: dict[tuple[int, int], int | None]
     NAME: ClassVar[str]
     HIGH_SCORES_FILE: ClassVar[str]
+    TERMINAL_HEIGHT_NEEDED: ClassVar[int]
 
     def __init__(self) -> None:
         self.reset()
@@ -397,6 +397,7 @@ class Game:
 class TraditionalGame(Game):
     NAME = "Traditional game"
     HIGH_SCORES_FILE = "high_scores.txt"
+    TERMINAL_HEIGHT_NEEDED = 24
 
     # Width varies as people join/leave
     HEIGHT = 20
@@ -522,6 +523,7 @@ class RingGame(Game):
 
     # Game size is actually 2*GAME_RADIUS + 1 in each direction.
     GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
+    TERMINAL_HEIGHT_NEEDED = 2 * GAME_RADIUS + 4
 
     MIDDLE_AREA_RADIUS = 3
     MIDDLE_AREA = [
@@ -1069,13 +1071,59 @@ class ChooseGameView(MenuView):
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
             return True
-
-        with self._client.server.access_game(GAME_CLASSES[self.selected_index]) as game:
-            assert self._client.name is not None
-            player = game.get_existing_player_or_add_new_player(self._client.name)
-            self._client.view = PlayingView(self._client, game, player)
-
+        self._client.view = CheckTerminalSizeView(
+            self._client, GAME_CLASSES[self.selected_index]
+        )
         return False
+
+
+class CheckTerminalSizeView:
+    def __init__(self, client: Client, game_class: type[Game]):
+        self._client = client
+        self._game_class = game_class
+
+        # Terminal needs to be refreshed frequently as the user resizes it.
+        threading.Thread(target=self._refresh_loop).start()
+
+    def _refresh_loop(self) -> None:
+        # Wait until the view is assigned to the client (lol)
+        time.sleep(0.1)
+        assert self._client.view == self
+
+        while True:
+            with self._client.server.lock:
+                if self._client.view != self:
+                    return
+                self._client.last_displayed_lines.clear()
+                self._client.render()
+            time.sleep(0.5)
+
+    def get_lines_to_render(self) -> list[bytes]:
+        width = 80
+        height = self._game_class.TERMINAL_HEIGHT_NEEDED
+
+        text = """
+        Please adjust your terminal size so that you can
+        see the entire rectangle. Press Enter when done.
+        """
+        text_lines = [
+            line.strip().encode("ascii") for line in text.strip().splitlines()
+        ]
+
+        lines = [b"|" + b" " * (width - 2) + b"|"] * height
+        lines[0] = lines[-1] = b"o" + b"-" * (width - 2) + b"o"
+        for index, line in enumerate(text_lines):
+            lines[2 + index] = b"|" + line.center(width - 2) + b"|"
+            lines[-2 - len(text_lines) + index] = b"|" + line.center(width - 2) + b"|"
+
+        return lines
+
+    def handle_key_press(self, received: bytes) -> None:
+        if received == b"\r":
+            with self._client.server.access_game(self._game_class) as game:
+                assert self._client.name is not None
+                player = game.get_existing_player_or_add_new_player(self._client.name)
+                self._client.view = PlayingView(self._client, game, player)
 
 
 class GameOverView(MenuView):
@@ -1196,16 +1244,30 @@ class Client(socketserver.BaseRequestHandler):
         self.last_displayed_lines: list[bytes] = []
         self.send_queue: queue.Queue[bytes | None] = queue.Queue()
         self.name: str | None = None
-        self.view: AskNameView | ChooseGameView | PlayingView | GameOverView = (
-            AskNameView(self)
-        )
+        self.view: (
+            AskNameView
+            | ChooseGameView
+            | CheckTerminalSizeView
+            | PlayingView
+            | GameOverView
+        ) = AskNameView(self)
         self.rotate_counter_clockwise = False
 
     def render(self) -> None:
+        if isinstance(self.view, CheckTerminalSizeView):
+            # Very different from other views
+            self.last_displayed_lines.clear()
+            self.send_queue.put(
+                CLEAR_SCREEN
+                + (MOVE_CURSOR % (1, 1))
+                + b"\r\n".join(self.view.get_lines_to_render())
+            )
+            return
+
         if isinstance(self.view, AskNameView):
             lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
         else:
-            # Bottom of game. If user types something, it's unlikely to be
+            # Bottom of view. If user types something, it's unlikely to be
             # noticed here before it gets wiped by the next refresh.
             lines = self.view.get_lines_to_render()
             cursor_pos = (len(lines) + 1, 1)
