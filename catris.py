@@ -1265,3 +1265,6 @@ def main():
     server = Server(12345, args.ring)
     print("Listening on port 12345...")
     server.serve_forever()
+
+
+main()
