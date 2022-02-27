@@ -643,6 +643,8 @@ class RingGame(Game):
 
         for block in self._get_moving_blocks():
             for x, y in block.get_coords():
+                if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
+                    return False
                 player_x, player_y = block.player.world_to_player(x, y)
                 if player_x < -GAME_RADIUS or player_x > GAME_RADIUS or player_y > 0:
                     return False
