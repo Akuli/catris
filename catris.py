@@ -225,7 +225,6 @@ class Game:
     def set_color_of_lines(self, full_lines: list[int], color: int) -> None:
         pass
 
-    # FIXME: this method has too much copy/pasta in implementations
     @abstractmethod
     def delete_full_lines(self, full_lines: list[int]) -> None:
         pass
