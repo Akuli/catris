@@ -1473,7 +1473,9 @@ class Client:
         finally:
             print("Closing connection:", self.name)
             self.server.clients.remove(self)
-            if isinstance(self.view, PlayingView) and isinstance(self.view.player.moving_block_or_wait_counter, MovingBlock):
+            if isinstance(self.view, PlayingView) and isinstance(
+                self.view.player.moving_block_or_wait_counter, MovingBlock
+            ):
                 with self.server.access_game(type(self.view.game)):
                     self.view.player.moving_block_or_wait_counter = None
 
