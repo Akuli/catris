@@ -202,10 +202,15 @@ class Game:
         if not client_currently_connected:
             player.moving_block_or_wait_counter = None
             return
-        self.wipe_playing_area(player)
 
+        for x, y in self.landed_blocks.keys():
+            if self.square_belongs_to_player(player, x, y):
+                self.landed_blocks[x, y] = None
+        player.moving_block_or_wait_counter = MovingBlock(player)
+
+    # For clearing squares when a player's wait time ends
     @abstractmethod
-    def wipe_playing_area(self, player: Player) -> None:
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
         pass
 
     # In ring mode, full lines are actually full squares.
@@ -399,14 +404,11 @@ class TraditionalGame(Game):
         super().reset()
         self.landed_blocks = {}
 
-    def wipe_playing_area(self, player: Player) -> None:
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
         index = self.players.index(player)
         x_min = self.WIDTH_PER_PLAYER * index
         x_max = x_min + self.WIDTH_PER_PLAYER
-        for x in range(x_min, x_max):
-            for y in range(self.HEIGHT):
-                self.landed_blocks[x, y] = None
-        player.moving_block_or_wait_counter = MovingBlock(player)
+        return x in range(x_min, x_max)
 
     def _get_width(self) -> int:
         return self.WIDTH_PER_PLAYER * len(self.players)
@@ -615,14 +617,10 @@ class RingGame(Game):
             if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
         }
 
-    def wipe_playing_area(self, player: Player) -> None:
-        for x, y in self.landed_blocks.keys():
-            # Math magic to check if (x,y) is in the player's triangle-shaped area.
-            # Have fun figuring out how it works :)
-            dot = x * player.up_x + y * player.up_y
-            if dot >= 0 and 2 * dot ** 2 >= x * x + y * y:
-                self.landed_blocks[x, y] = None
-        player.moving_block_or_wait_counter = MovingBlock(player)
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
+        # Let me know if you need to understand how this works. I'll explain.
+        dot = x * player.up_x + y * player.up_y
+        return dot >= 0 and 2 * dot ** 2 >= x * x + y * y
 
     def is_valid(self) -> bool:
         assert self.landed_blocks.keys() == {
