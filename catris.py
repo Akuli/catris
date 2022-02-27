@@ -3,10 +3,24 @@ import asyncio
 import dataclasses
 import time
 import contextlib
+import sys
 import textwrap
 import random
 from abc import abstractmethod
 from typing import ClassVar, Iterator
+
+if sys.version_info >= (3, 9):
+    from asyncio import to_thread
+else:
+    # copied from source code with slight modifications
+    async def to_thread(func, *args, **kwargs):  # type: ignore
+        import contextvars, functools
+
+        loop = asyncio.get_running_loop()
+        ctx = contextvars.copy_context()
+        func_call = functools.partial(ctx.run, func, *args, **kwargs)
+        return await loop.run_in_executor(None, func_call)
+
 
 ASCII_ART = r"""
                    __     ___    _____   _____   _____   ___
@@ -925,7 +939,7 @@ class Server:
     async def _high_score_task(
         self, game_class: type[Game], high_score: HighScore
     ) -> None:
-        high_scores = await asyncio.to_thread(
+        high_scores = await to_thread(
             self._add_high_score, game_class.HIGH_SCORES_FILE, high_score
         )
         high_scores.sort(key=(lambda hs: hs.score), reverse=True)
