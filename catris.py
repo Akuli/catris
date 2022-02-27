@@ -309,20 +309,18 @@ class Game:
             if not self.is_valid():
                 block.rotation = old_rotation
 
-    # Low level. Used by add_player().
-    # TODO: this suck ass
     @abstractmethod
-    def instantiate_player(self, name: str, color: int) -> Player:
+    def add_player(self, name: str, color: int) -> Player:
         pass
 
-    def add_player(self, name: str) -> Player:
+    # Name can exist already, if player quits and comes back
+    def get_existing_player_or_add_new_player(self, name: str) -> Player:
         print(f"{name!r} joins a game with {len(self.players)} existing players")
         if not self.players:
             self.reset()
 
         game_over = self.game_is_over()
 
-        # Name can exist already, if player quits and comes back
         for player in self.players:
             if player.name.lower() == name.lower():
                 # Let's say your caps lock was on accidentally and you type
@@ -333,8 +331,7 @@ class Game:
         else:
             # Add new player
             color = min(PLAYER_COLORS - {p.color for p in self.players})
-            player = self.instantiate_player(name, color)
-            self.players.append(player)
+            player = self.add_player(name, color)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             player.moving_block_or_wait_counter = MovingBlock(player)
@@ -452,7 +449,7 @@ class TraditionalGame(Game):
                 for point in self.landed_blocks.keys()
             }
 
-    def instantiate_player(self, name: str, color: int) -> Player:
+    def add_player(self, name: str, color: int) -> Player:
         x_min = len(self.players) * self.WIDTH_PER_PLAYER
         x_max = x_min + self.WIDTH_PER_PLAYER
         for y in range(self.HEIGHT):
@@ -460,7 +457,7 @@ class TraditionalGame(Game):
                 assert (x, y) not in self.landed_blocks.keys()
                 self.landed_blocks[x, y] = None
 
-        return Player(
+        player = Player(
             name,
             color,
             up_x=0,
@@ -470,6 +467,8 @@ class TraditionalGame(Game):
             ),
             moving_block_start_y=-1,
         )
+        self.players.append(player)
+        return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         header_line = b"o"
@@ -702,7 +701,7 @@ class RingGame(Game):
         for r in sorted(full_lines, reverse=True):
             self._delete_ring(r)
 
-    def instantiate_player(self, name: str, color: int) -> Player:
+    def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
         opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
         unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
@@ -714,7 +713,7 @@ class RingGame(Game):
         except ValueError:
             up_x, up_y = min(unused_directions)
 
-        return Player(
+        player =  Player(
             name,
             color,
             up_x,
@@ -722,6 +721,8 @@ class RingGame(Game):
             moving_block_start_x=(self.GAME_RADIUS + 1) * up_x,
             moving_block_start_y=(self.GAME_RADIUS + 1) * up_y,
         )
+        self.players.append(player)
+        return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         lines = []
@@ -993,7 +994,7 @@ class AskNameView:
             print(self._client.client_address, f"name asking done: {name!r}")
             self._client.send_queue.put(HIDE_CURSOR)
             self._client.name = name
-            player = state.add_player(name)
+            player = state.get_existing_player_or_add_new_player(name)
             self._client.view = PlayingView(self._client, player)
 
 
@@ -1101,7 +1102,7 @@ class GameOverView:
             if self._selected_item == "New Game":
                 assert self._client.name is not None
                 with self._client.server.access_game() as state:
-                    player = state.add_player(self._client.name)
+                    player = state.get_existing_player_or_add_new_player(self._client.name)
                     self._client.view = PlayingView(self._client, player)
             elif self._selected_item == "Quit":
                 return True
