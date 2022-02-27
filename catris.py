@@ -211,30 +211,21 @@ class HighScore:
 
 
 class MovingBlock:
-    if RING_MODE:
+    def __init__(self, player: Player):
+        self.player = player
+        self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
+        self.center_x = player.moving_block_start_x
+        self.center_y = player.moving_block_start_y
 
-        def __init__(self, player: Player):
-            self.player = player
-            self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-            self.center_x, self.center_y = player.player_to_world(0, -GAME_RADIUS - 1)
-
-            # Orient initial block so that it always looks the same.
-            # Otherwise may create subtle bugs near end of game, where freshly
-            # added block overlaps with landed blocks.
-            self.rotation = {
-                (0, -1): 0,
-                (1, 0): 1,
-                (0, 1): 2,
-                (-1, 0): 3,
-            }[(player.direction_x, player.direction_y)]
-
-    else:
-
-        def __init__(self, player_index: int):
-            self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-            self.center_x = (WIDTH_PER_PLAYER * player_index) + (WIDTH_PER_PLAYER // 2)
-            self.center_y = -1
-            self.rotation = 0
+        # Orient initial block so that it always looks the same.
+        # Otherwise may create subtle bugs near end of game, where freshly
+        # added block overlaps with landed blocks.
+        self.rotation = {
+            (0, -1): 0,
+            (1, 0): 1,
+            (0, 1): 2,
+            (-1, 0): 3,
+        }[(player.direction_x, player.direction_y)]
 
     def get_coords(self) -> set[tuple[int, int]]:
         result = set()
@@ -249,9 +240,13 @@ class MovingBlock:
 class Player:
     name: str
     color: int
-    if RING_MODE:
-        direction_x: int
-        direction_y: int
+    # What direction is up? TODO: rename variables
+    direction_x: int
+    direction_y: int
+    # These should be barely above the top of the game.
+    # For example, in traditional tetris, that means moving_block_start_y = -1.
+    moving_block_start_x: int
+    moving_block_start_y: int
     rotate_counter_clockwise: bool = False
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
@@ -419,13 +414,9 @@ class Game:
                 block.rotation = old_rotation
 
     # Low level. Used by add_player().
-    # TODO: these suck ass
+    # TODO: this suck ass
     @abstractmethod
     def instantiate_player(self, name: str, color: int) -> Player:
-        pass
-
-    @abstractmethod
-    def instantiate_moving_block(self, player: Player) -> MovingBlock:
         pass
 
     def add_player(self, name: str) -> Player:
@@ -450,7 +441,7 @@ class Game:
             self.players.append(player)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            player.moving_block_or_wait_counter = self.instantiate_moving_block(player)
+            player.moving_block_or_wait_counter = MovingBlock(player)
             assert not self.game_is_over()
         return player
 
@@ -494,12 +485,10 @@ class Game:
                     for point in coords:
                         assert point in self._landed_blocks
                         self._landed_blocks[point] = BLOCK_COLORS[letter]
-                    player.moving_block_or_wait_counter = MovingBlock(player)
                 else:
                     for x, y in coords:
                         self._landed_blocks[y][x] = BLOCK_COLORS[letter]
-                    index = self.players.index(player)
-                    player.moving_block_or_wait_counter = MovingBlock(index)
+                player.moving_block_or_wait_counter = MovingBlock(player)
 
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
@@ -576,10 +565,16 @@ class TraditionalGame(Game):
     def instantiate_player(self, name: str, color: int) -> Player:
         for row in self._landed_blocks:
             row.extend([None] * WIDTH_PER_PLAYER)
-        return Player(name, color)
-
-    def instantiate_moving_block(self, player: Player):
-        return MovingBlock(self.players.index(player))
+        return Player(
+            name,
+            color,
+            direction_x=0,
+            direction_y=-1,
+            moving_block_start_x=(
+                len(self.players) * WIDTH_PER_PLAYER + (WIDTH_PER_PLAYER // 2)
+            ),
+            moving_block_start_y=-1,
+        )
 
 
 class RingGame(Game):
@@ -712,10 +707,14 @@ class RingGame(Game):
         except ValueError:
             dir_x, dir_y = min(unused_directions)
 
-        return Player(name, color, dir_x, dir_y)
-
-    def instantiate_moving_block(self, player: Player) -> MovingBlock:
-        return MovingBlock(player)
+        return Player(
+            name,
+            color,
+            dir_x,
+            dir_y,
+            moving_block_start_x=(GAME_RADIUS + 1) * dir_x,
+            moving_block_start_y=(GAME_RADIUS + 1) * dir_y,
+        )
 
 
 class Server(socketserver.ThreadingTCPServer):
