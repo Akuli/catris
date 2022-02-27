@@ -259,7 +259,7 @@ class Game:
         # When this happens, just delete the landed block.
         for moving_block in self._get_moving_blocks():
             for point in moving_block.get_coords():
-                if self.landed_blocks.get(point) is not None:
+                if self.landed_blocks.get(point, None) is not None:
                     self.landed_blocks[point] = None
 
         assert self.is_valid()
