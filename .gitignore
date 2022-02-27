@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 /high_scores.txt
+/ring_high_scores.txt
