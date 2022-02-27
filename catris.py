@@ -795,12 +795,12 @@ class Server(socketserver.ThreadingTCPServer):
         super().__init__(("", port), Client)
 
         # RLock because state usage triggers rendering, which uses state
-        self.lock = threading.RLock()  # clients and games are locked with this
+        self.lock = threading.RLock()  # clients and __games are locked with this
         self.clients: set[Client] = set()
-        self.games = []
+        self.__games = {}
 
         for klass in GAME_CLASSES:
-            self.games.append(klass())
+            self.__games[klass] = klass()
             threading.Thread(target=self._move_blocks_down_thread, args=[klass]).start()
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
@@ -837,8 +837,7 @@ class Server(socketserver.ThreadingTCPServer):
         self, game_class: type[Game], *, render: bool = True
     ) -> Iterator[Game]:
         with self.lock:
-            [game] = [g for g in self.games if isinstance(g, game_class)]
-
+            game = self.__games[game_class]
             assert game.is_valid()
             assert not game.game_is_over()
             yield game
