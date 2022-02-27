@@ -644,6 +644,7 @@ class RingGame(Game):
                     return False
         return True
 
+    # In ring mode, full lines are actually full squares.
     def find_full_lines(self) -> list[int]:
         return [
             r
