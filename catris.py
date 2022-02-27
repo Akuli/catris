@@ -481,6 +481,10 @@ class Game:
             player.moving_block_or_wait_counter = WAIT_TIME
         return needs_wait_counter
 
+    @abstractmethod
+    def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
+        pass
+
 
 class TraditionalGame(Game):
     def reset(self) -> None:
@@ -562,6 +566,43 @@ class TraditionalGame(Game):
             ),
             moving_block_start_y=-1,
         )
+
+    def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
+        header_line = b"o"
+        name_line = b" "
+        for player in self.players:
+            name_text = player.get_name_string(max_length=2 * WIDTH_PER_PLAYER)
+
+            color_bytes = COLOR % player.color
+            header_line += color_bytes
+            name_line += color_bytes
+
+            if player == rendering_for_this_player:
+                header_line += b"==" * WIDTH_PER_PLAYER
+            else:
+                header_line += b"--" * WIDTH_PER_PLAYER
+            name_line += name_text.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
+
+        name_line += COLOR % 0
+        header_line += COLOR % 0
+        header_line += b"o"
+
+        lines = [name_line, header_line]
+
+        for blink_y, row in enumerate(self.get_square_colors()):
+            line = b"|"
+            for color in row:
+                if color is None:
+                    line += b"  "
+                else:
+                    line += COLOR % color
+                    line += b"  "
+                    line += COLOR % 0
+            line += b"|"
+            lines.append(line)
+
+        lines.append(b"o" + b"--" * self.get_width() + b"o")
+        return lines
 
 
 class RingGame(Game):
@@ -702,6 +743,56 @@ class RingGame(Game):
             moving_block_start_x=(GAME_RADIUS + 1) * dir_x,
             moving_block_start_y=(GAME_RADIUS + 1) * dir_y,
         )
+
+    def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
+        lines = []
+        lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
+
+        players_by_letter = {}
+        for player in self.players:
+            relative_direction = rendering_for_this_player.world_to_player(
+                player.direction_x, player.direction_y
+            )
+            letter = {
+                (0, -1): "w",
+                (-1, 0): "a",
+                (0, 1): "s",
+                (1, 0): "d",
+            }[relative_direction]
+            players_by_letter[letter] = player
+
+        middle_area_content = get_middle_area_content(players_by_letter)
+        square_colors = self.get_square_colors()
+
+        for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
+            insert_middle_area_here = None
+            line = b"|"
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1):
+                if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
+                    insert_middle_area_here = len(line)
+                    continue
+
+                color = square_colors[rendering_for_this_player.player_to_world(x, y)]
+                if color is None:
+                    line += b"  "
+                else:
+                    line += COLOR % color
+                    line += b"  "
+                    line += COLOR % 0
+
+            line += b"|"
+
+            if insert_middle_area_here is not None:
+                line = (
+                    line[:insert_middle_area_here]
+                    + middle_area_content[y + MIDDLE_AREA_RADIUS]
+                    + line[insert_middle_area_here:]
+                )
+
+            lines.append(line)
+
+        lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
+        return lines
 
 
 class Server(socketserver.ThreadingTCPServer):
@@ -928,91 +1019,7 @@ class PlayingView:
 
     def get_lines_to_render(self) -> list[bytes]:
         with self._client.server.access_game(render=False) as state:
-            if RING_MODE:
-                lines = []
-                lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
-
-                players_by_letter = {}
-                for player in state.players:
-                    relative_direction = self.player.world_to_player(
-                        player.direction_x, player.direction_y
-                    )
-                    letter = {
-                        (0, -1): "w",
-                        (-1, 0): "a",
-                        (0, 1): "s",
-                        (1, 0): "d",
-                    }[relative_direction]
-                    players_by_letter[letter] = player
-
-                middle_area_content = get_middle_area_content(players_by_letter)
-                square_colors = state.get_square_colors()
-
-                for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
-                    insert_middle_area_here = None
-                    line = b"|"
-                    for x in range(-GAME_RADIUS, GAME_RADIUS + 1):
-                        if max(abs(x), abs(y)) <= MIDDLE_AREA_RADIUS:
-                            insert_middle_area_here = len(line)
-                            continue
-
-                        color = square_colors[self.player.player_to_world(x, y)]
-                        if color is None:
-                            line += b"  "
-                        else:
-                            line += COLOR % color
-                            line += b"  "
-                            line += COLOR % 0
-
-                    line += b"|"
-
-                    if insert_middle_area_here is not None:
-                        line = (
-                            line[:insert_middle_area_here]
-                            + middle_area_content[y + MIDDLE_AREA_RADIUS]
-                            + line[insert_middle_area_here:]
-                        )
-
-                    lines.append(line)
-
-                lines.append(b"o" + b"--" * (2 * GAME_RADIUS + 1) + b"o")
-
-            else:
-                header_line = b"o"
-                name_line = b" "
-                for player in state.players:
-                    name_text = player.get_name_string(max_length=2 * WIDTH_PER_PLAYER)
-
-                    color_bytes = COLOR % player.color
-                    header_line += color_bytes
-                    name_line += color_bytes
-
-                    if player == self.player:
-                        header_line += b"==" * WIDTH_PER_PLAYER
-                    else:
-                        header_line += b"--" * WIDTH_PER_PLAYER
-                    name_line += name_text.center(2 * WIDTH_PER_PLAYER).encode("utf-8")
-
-                name_line += COLOR % 0
-                header_line += COLOR % 0
-                header_line += b"o"
-
-                lines = [name_line, header_line]
-
-                for blink_y, row in enumerate(state.get_square_colors()):
-                    line = b"|"
-                    for color in row:
-                        if color is None:
-                            line += b"  "
-                        else:
-                            line += COLOR % color
-                            line += b"  "
-                            line += COLOR % 0
-                    line += b"|"
-                    lines.append(line)
-
-                lines.append(b"o" + b"--" * state.get_width() + b"o")
-
+            lines = state.get_lines_to_render(self.player)
             lines[5] += f"  Score: {state.score}".encode("ascii")
             if self.player.rotate_counter_clockwise:
                 lines[6] += b"  Counter-clockwise"
