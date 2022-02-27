@@ -516,7 +516,7 @@ class TraditionalGame(Game):
         for x in range(x_min, x_max):
             for y in range(HEIGHT):
                 self.landed_blocks[x, y] = None
-        player.moving_block_or_wait_counter = MovingBlock(index)
+        player.moving_block_or_wait_counter = MovingBlock(player)
 
     def _get_width(self) -> int:
         return WIDTH_PER_PLAYER * len(self.players)
@@ -707,7 +707,7 @@ class RingGame(Game):
         for r in sorted(full_lines, reverse=True):
             self._delete_ring(r)
 
-    def instantiate_player(self, name: str, color: int) -> None:
+    def instantiate_player(self, name: str, color: int) -> Player:
         used_directions = {(p.direction_x, p.direction_y) for p in self.players}
         opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
         unused_directions = {(0, -1), (0, 1), (-1, 0), (1, 0)} - used_directions
@@ -788,6 +788,7 @@ class Server(socketserver.ThreadingTCPServer):
         # RLock because state usage triggers rendering, which uses state
         self.lock = threading.RLock()  # __game and clients are locked with this
         self.clients: set[Client] = set()
+        self.__game: Game
         if RING_MODE:
             self.__game = RingGame()
         else:
