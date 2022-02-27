@@ -1,2 +1,3 @@
 black==21.12b0
 mypy==0.931
+pyflakes==2.4.0
