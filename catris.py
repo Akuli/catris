@@ -1034,7 +1034,6 @@ class PlayingView:
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
             )
-        # TODO: remove, for development only
         elif received == b"F":
             with self._client.server.access_game() as state:
                 if isinstance(state, RingGame) and len(state.players) == 2:
