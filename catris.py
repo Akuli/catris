@@ -715,13 +715,14 @@ class RingGame(Game):
             if None not in (self.landed_blocks[p] for p in points)
         ]
 
-        yield ( {
-            point for dx, dy, points in full_lines for point in points
-        } | {
-            (x, y)
-            for x, y in self.landed_blocks.keys()
-            if max(abs(x), abs(y)) in radiuses
-        })
+        yield (
+            {point for dx, dy, points in full_lines for point in points}
+            | {
+                (x, y)
+                for x, y in self.landed_blocks.keys()
+                if max(abs(x), abs(y)) in radiuses
+            }
+        )
 
         # Remove lines in order where removing first line doesn't mess up
         # coordinates of second, etc
