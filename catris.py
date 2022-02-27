@@ -1465,18 +1465,12 @@ class Client:
             print(self.name, "Connection closed")
 
 
-async def bloop() -> None:
-    while True:
-        print("bloop")
-        await asyncio.sleep(1)
-
-
 async def main() -> None:
     my_server = Server()
     asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
     async with asyncio_server:
         print("Listening on port 12345...")
-        await asyncio.gather(asyncio_server.serve_forever(), *my_server.tasks, bloop())
+        await asyncio.gather(asyncio_server.serve_forever(), *my_server.tasks)
 
 
 asyncio.run(main())
