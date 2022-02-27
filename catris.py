@@ -131,7 +131,6 @@ class Player:
     moving_block_start_y: int
     moving_block_or_wait_counter: MovingBlock | int | None = None
 
-    # TODO: use get_name_string even in non-ring mode
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
             format = "[%s]"
