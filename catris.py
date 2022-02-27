@@ -1286,14 +1286,24 @@ class Client(socketserver.BaseRequestHandler):
             break
 
     def handle(self) -> None:
+        with self.server.lock:
+            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+                full = True
+            else:
+                full = False
+                self.server.clients.add(self)
+
+        # do not send while locked, would freeze ongoing games
+        if full:
+            print(self.client_address, "Sending server full message")
+            self.request.sendall(b"The server is full. Please try again later.\r\n")
+            return
+
         send_queue_thread = threading.Thread(target=self._send_queue_thread)
         send_queue_thread.start()
 
         try:
-            with self.server.lock:
-                self.server.clients.add(self)
             self.send_queue.put(CLEAR_SCREEN)
-
             received = b""
 
             while True:
