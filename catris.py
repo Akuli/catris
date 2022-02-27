@@ -1,7 +1,6 @@
 # TODO: terminal size check before game starts
 from __future__ import annotations
 import argparse
-import copy
 import dataclasses
 import time
 import contextlib
@@ -469,14 +468,7 @@ class Game:
             letter = player.moving_block_or_wait_counter.shape_letter
             coords = player.moving_block_or_wait_counter.get_coords()
 
-            # FIXME: use inheritance
-            if RING_MODE:
-                block_not_fully_visible = any(
-                    player.world_to_player(x, y)[1] < -GAME_RADIUS for x, y in coords
-                )
-            else:
-                block_not_fully_visible = any(y < 0 for x, y in coords)
-            if block_not_fully_visible:
+            if any(point not in self.landed_blocks.keys() for point in coords):
                 needs_wait_counter.add(player)
             else:
                 for point in coords:
