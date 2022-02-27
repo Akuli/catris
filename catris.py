@@ -213,8 +213,8 @@ class Game:
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> None:
         pass
 
-    # In ring mode, full lines are actually full squares.
-    # Return value is a list of y coordinates or radiuses, depending on mode.
+    # Return value is a list of numbers describing what will be removed soon.
+    # The numbers don't have to be y coordinates. In ring mode, they are radiuses.
     @abstractmethod
     def find_full_lines(self) -> list[int]:
         pass
