@@ -817,7 +817,7 @@ class Server(socketserver.ThreadingTCPServer):
                         )
                     )
         except FileNotFoundError:
-            print("Creating high scores file:", file_name)
+            print("Creating", file_name)
         except (ValueError, OSError) as e:
             print(f"Reading {file_name} failed:", e)
         else:
@@ -1176,9 +1176,9 @@ class PlayingView:
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
             )
-        elif received in (b"F", b"f"):
-            with self._client.server.access_game(type(self.game)) as state:
-                if isinstance(state, RingGame) and len(state.players) == 1:
+        elif received in (b"F", b"f") and isinstance(self.game, RingGame):
+            with self._client.server.access_game(RingGame) as state:
+                if len(state.players) == 1:
                     old_landed_blocks = state.landed_blocks.copy()
                     state.landed_blocks = {
                         (-x, -y): color for (x, y), color in state.landed_blocks.items()
