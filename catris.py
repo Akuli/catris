@@ -1438,13 +1438,13 @@ class Client:
     async def handle(self) -> None:
         print("New connection")
 
-        try:
-            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
-                print("Sending server full message")
-                self.writer.write(b"The server is full. Please try again later.\r\n")
-                return
+        if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+            print("Sending server full message")
+            self.writer.write(b"The server is full. Please try again later.\r\n")
+            return
+        self.server.clients.add(self)
 
-            self.server.clients.add(self)
+        try:
             self.writer.write(CLEAR_SCREEN)
             received = b""
 
@@ -1471,11 +1471,16 @@ class Client:
                         return
 
         finally:
+            print("Closing connection:", self.name)
+            self.server.clients.remove(self)
+            if isinstance(self.view, PlayingView) and isinstance(self.view.player.moving_block_or_wait_counter, MovingBlock):
+                with self.server.access_game(type(self.view.game)):
+                    self.view.player.moving_block_or_wait_counter = None
+
             # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
             await self.writer.drain()
             self.writer.close()
-            print(self.name, "Connection closed")
 
 
 async def main() -> None:
