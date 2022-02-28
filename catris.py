@@ -1484,7 +1484,10 @@ class Client:
 
             # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
-            await self.writer.drain()
+            try:
+                await self.writer.drain()
+            except OSError:
+                pass
             self.writer.close()
 
 
