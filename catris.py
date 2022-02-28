@@ -229,7 +229,8 @@ class Game:
     #   1. Yield the points that are about to be removed. The yielded value
     #      will be used for the flashing animation.
     #   2. Remove them.
-    #   3. Call finish_wiping_full_lines().
+    #   3. Increment score.
+    #   4. Call finish_wiping_full_lines().
     #
     # In ring mode, a full "line" can be a line or a ring. That's why returning
     # a list of full lines would be unnecessarily difficult.
@@ -239,33 +240,7 @@ class Game:
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         pass
 
-    def finish_wiping_full_lines(self, count: int) -> None:
-        if count == 0:
-            single_player_score = 0
-        elif count == 1:
-            single_player_score = 10
-        elif count == 2:
-            single_player_score = 30
-        elif count == 3:
-            single_player_score = 60
-        else:
-            single_player_score = 100
-
-        # It's more difficult to get full lines with more players.
-        # A line is full in the game, if all players have it player-specifically full.
-        # If players stick to their own areas and are independent:
-        #
-        #     P(line clear with n players)
-        #   = P(player 1 full AND player 2 full AND ... AND player n full)
-        #   = P(player 1 full) * P(player 2 full) * ... * P(player n full)
-        #   = P(line clear with 1 player)^n
-        #
-        # This means the game gets exponentially more difficult with more players.
-        # We try to compensate for this by giving exponentially more points.
-        n = len(self.players)
-        if n >= 1:  # avoid floats
-            self.score += single_player_score * 3 ** (n - 1)
-
+    def finish_wiping_full_lines(self) -> None:
         # When landed blocks move, they can go on top of moving blocks.
         # This is quite rare, but results in invalid state errors.
         # When this happens, just delete the landed block.
@@ -447,6 +422,32 @@ class TraditionalGame(Game):
 
         yield points
 
+        if len(y_coords) == 0:
+            single_player_score = 0
+        elif len(y_coords) == 1:
+            single_player_score = 10
+        elif len(y_coords) == 2:
+            single_player_score = 30
+        elif len(y_coords) == 3:
+            single_player_score = 60
+        else:
+            single_player_score = 100
+
+        # It's more difficult to get full lines with more players.
+        # A line is full in the game, if all players have it player-specifically full.
+        # If players stick to their own areas and are independent:
+        #
+        #     P(line clear with n players)
+        #   = P(player 1 full AND player 2 full AND ... AND player n full)
+        #   = P(player 1 full) * P(player 2 full) * ... * P(player n full)
+        #   = P(line clear with 1 player)^n
+        #
+        # This means the game gets exponentially more difficult with more players.
+        # We try to compensate for this by giving exponentially more points.
+        n = len(self.players)
+        if n >= 1:  # avoid floats
+            self.score += single_player_score * 3 ** (n - 1)
+
         for full_y in sorted(y_coords):
             new_landed_blocks = {}
             for (x, y), color in self.landed_blocks.items():
@@ -459,7 +460,7 @@ class TraditionalGame(Game):
                 for point in self.landed_blocks.keys()
             }
 
-        self.finish_wiping_full_lines(len(y_coords))
+        self.finish_wiping_full_lines()
 
     def add_player(self, name: str, color: int) -> Player:
         x_min = len(self.players) * self.WIDTH_PER_PLAYER
@@ -735,6 +736,8 @@ class RingGame(Game):
             }
         )
 
+        self.score += 10 * len(full_lines) + 100 * len(radiuses)
+
         # Remove lines in order where removing first line doesn't mess up
         # coordinates of second, etc
         def sorting_key(line: tuple[int, int, list[tuple[int, int]]]) -> int:
@@ -747,7 +750,7 @@ class RingGame(Game):
         for r in radiuses:
             self._delete_ring(r)
 
-        self.finish_wiping_full_lines(len(lines) + len(radiuses))
+        self.finish_wiping_full_lines()
 
     def _delete_line(
         self, dir_x: int, dir_y: int, points: list[tuple[int, int]]
