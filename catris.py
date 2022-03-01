@@ -893,6 +893,18 @@ class Server:
         self.clients: set[Client] = set()
         self.games_and_tasks: dict[Game, list[asyncio.Task[Any]]] = {}
 
+        # These tasks are not game specific
+        self.server_tasks: list[asyncio.Task[Any]] = []
+        self.server_tasks.append(
+            asyncio.create_task(self._refresh_check_terminal_size_views())
+        )
+
+    async def _refresh_check_terminal_size_views(self) -> None:
+        for client in self.clients:
+            if isinstance(client.view, CheckTerminalSizeView):
+                client.render()
+        await asyncio.sleep(0.5)
+
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
 
@@ -1208,16 +1220,6 @@ class CheckTerminalSizeView:
         self._client = client
         self._game_class = game_class
 
-        # Terminal needs to be refreshed frequently as the user resizes it.
-        asyncio.create_task(self._refresh_loop())
-
-    async def _refresh_loop(self) -> None:
-        assert self._client.view == self
-
-        while self._client.view == self:
-            self._client.render()
-            await asyncio.sleep(0.5)
-
     def get_lines_to_render(self) -> list[bytes]:
         width = 80
         height = self._game_class.TERMINAL_HEIGHT_NEEDED
@@ -1493,10 +1495,16 @@ class Client:
 
 async def main() -> None:
     my_server = Server()
-    asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
-    async with asyncio_server:
-        print("Listening on port 12345...")
-        await asyncio_server.serve_forever()
+    try:
+        asyncio_server = await asyncio.start_server(
+            my_server.handle_connection, port=12345
+        )
+        async with asyncio_server:
+            print("Listening on port 12345...")
+            await asyncio_server.serve_forever()
+    finally:
+        for task in my_server.server_tasks:
+            task.cancel()
 
 
 asyncio.run(main())
