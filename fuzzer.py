@@ -14,6 +14,9 @@ commands = [
     b"a",
     b"s",
     b"d",
+    b"f",
+    b"x",
+    b"hello world :)",
 ]
 conn = socket.create_connection(("localhost", 12345))
 while True:
