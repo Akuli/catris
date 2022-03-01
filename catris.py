@@ -896,12 +896,16 @@ class Server:
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
 
-        existing_games = [game for game in self.games_and_tasks.keys() if isinstance(game, game_class)]
+        existing_games = [
+            game for game in self.games_and_tasks.keys() if isinstance(game, game_class)
+        ]
         if existing_games:
             [game] = existing_games
         else:
             game = game_class()
-            self.games_and_tasks[game] = [asyncio.create_task(self._move_blocks_down_task(game))]
+            self.games_and_tasks[game] = [
+                asyncio.create_task(self._move_blocks_down_task(game))
+            ]
 
         assert client.name is not None
         player = game.get_existing_player_or_add_new_player(client.name)
@@ -936,19 +940,14 @@ class Server:
         high_scores.append(hs)
         return high_scores
 
-    async def _high_score_task(
-        self, game: Game, high_score: HighScore
-    ) -> None:
+    async def _high_score_task(self, game: Game, high_score: HighScore) -> None:
         high_scores = await to_thread(
             self._add_high_score, game.HIGH_SCORES_FILE, high_score
         )
         high_scores.sort(key=(lambda hs: hs.score), reverse=True)
         best5 = high_scores[:5]
         for client in self.clients:
-            if (
-                isinstance(client.view, GameOverView)
-                and client.view.game == game
-            ):
+            if isinstance(client.view, GameOverView) and client.view.game == game:
                 client.view.set_high_scores(best5)
                 client.render()
 
@@ -957,8 +956,10 @@ class Server:
         assert game.is_valid()
 
         playing_clients = [
-                c for c in self.clients if isinstance(c.view, PlayingView) and c.view.game == game
-            ]
+            c
+            for c in self.clients
+            if isinstance(c.view, PlayingView) and c.view.game == game
+        ]
 
         if game.game_is_over():
             tasks = self.games_and_tasks.pop(game)
@@ -991,9 +992,7 @@ class Server:
             if isinstance(client.view, ChooseGameView):
                 client.render()
 
-    async def _countdown(
-        self, player: Player, game: Game
-    ) -> None:
+    async def _countdown(self, player: Player, game: Game) -> None:
         while True:
             await asyncio.sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
@@ -1003,8 +1002,7 @@ class Server:
                 continue
 
             client_currently_connected = any(
-                isinstance(client.view, PlayingView)
-                and client.view.player == player
+                isinstance(client.view, PlayingView) and client.view.player == player
                 for client in self.clients
             )
             game.end_waiting(player, client_currently_connected)
@@ -1020,7 +1018,9 @@ class Server:
         full_lines_iter = game.find_and_then_wipe_full_lines()
         full_points = next(full_lines_iter)
         for player in needs_wait_counter:
-            self.games_and_tasks[game].append(asyncio.create_task(self._countdown(player, game)))
+            self.games_and_tasks[game].append(
+                asyncio.create_task(self._countdown(player, game))
+            )
         self.render_game(game)
 
         if full_points:
@@ -1173,7 +1173,11 @@ class ChooseGameView(MenuView):
     def get_lines_to_render(self) -> list[bytes]:
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
-            ongoing_games = [g for g in self._client.server.games_and_tasks.keys() if isinstance(g, game_class)]
+            ongoing_games = [
+                g
+                for g in self._client.server.games_and_tasks.keys()
+                if isinstance(g, game_class)
+            ]
             if ongoing_games:
                 [game] = ongoing_games
                 player_count = len(game.players)
@@ -1345,7 +1349,11 @@ class PlayingView:
                 not self._client.rotate_counter_clockwise
             )
             self._client.render()
-        elif received in (b"F", b"f") and isinstance(self.game, RingGame) and len(self.game.players) == 1:
+        elif (
+            received in (b"F", b"f")
+            and isinstance(self.game, RingGame)
+            and len(self.game.players) == 1
+        ):
             old_landed_blocks = self.game.landed_blocks.copy()
             self.game.landed_blocks = {
                 (-x, -y): color for (x, y), color in self.game.landed_blocks.items()
