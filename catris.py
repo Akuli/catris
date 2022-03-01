@@ -1195,6 +1195,7 @@ class ChooseGameView(MenuView):
         super().__init__()
         self._client = client
         self.selected_index = GAME_CLASSES.index(previous_game_class)
+        self._fill_menu()
 
     def _should_show_cannot_join_error(self) -> bool:
         assert self._client.name is not None
@@ -1204,7 +1205,7 @@ class ChooseGameView(MenuView):
             for g in self._client.server.games_and_tasks.keys()
         )
 
-    def get_lines_to_render(self) -> list[bytes]:
+    def _fill_menu(self) -> None:
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
             ongoing_games = [
@@ -1227,6 +1228,8 @@ class ChooseGameView(MenuView):
 
         self.menu_items.append("Quit")
 
+    def get_lines_to_render(self) -> list[bytes]:
+        self._fill_menu()
         result = ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
         if self._should_show_cannot_join_error():
             result.append(b"")
@@ -1467,7 +1470,7 @@ class Client:
         self.writer.write(to_send)
 
     async def _receive_bytes(self) -> bytes | None:
-        # TODO: is the error handling needed?
+        await asyncio.sleep(0)  # Makes game playable while fuzzer is running
         try:
             result = await self._reader.read(10)
         except OSError as e:
@@ -1533,7 +1536,10 @@ class Client:
 
             # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
-            await self.writer.drain()
+            try:
+                await self.writer.drain()
+            except OSError:
+                pass
             self.writer.close()
 
 
