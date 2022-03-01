@@ -1440,7 +1440,7 @@ class Client:
         while len(lines) < len(self.last_displayed_lines):
             lines.append(b"")
         while len(lines) > len(self.last_displayed_lines):
-            self.last_displayed_lines.append(b"aa")
+            self.last_displayed_lines.append(b"")
 
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow
