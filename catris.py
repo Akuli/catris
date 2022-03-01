@@ -276,8 +276,10 @@ class Game:
         # Stop moving if we go back to same place.
         # This makes arrow down do nothing, if the block would wrap all the way
         # around.
-        while self.move_if_possible(player, dx=0, dy=1, in_player_coords=True) and \
-        self.get_moving_block_coords(block) != old_points:
+        while (
+            self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
+            and self.get_moving_block_coords(block) != old_points
+        ):
             pass
 
     def rotate(self, player: Player, counter_clockwise: bool) -> None:
@@ -662,10 +664,7 @@ class RingGame(Game):
                 if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     return False
                 player_x, player_y = block.player.world_to_player(x, y)
-                if (
-                    player_x < -self.GAME_RADIUS
-                    or player_x > self.GAME_RADIUS
-                ):
+                if player_x < -self.GAME_RADIUS or player_x > self.GAME_RADIUS:
                     return False
         return True
 
@@ -676,9 +675,9 @@ class RingGame(Game):
         down_y = -block.player.up_y
         for x, y in super().get_moving_block_coords(block):
             # Wrap back to top, if coordinates go too far down
-            while x*down_x + y*down_y > cls.GAME_RADIUS:
-                x += (2*cls.GAME_RADIUS+1)*block.player.up_x
-                y += (2*cls.GAME_RADIUS+1)*block.player.up_y
+            while x * down_x + y * down_y > cls.GAME_RADIUS:
+                x += (2 * cls.GAME_RADIUS + 1) * block.player.up_x
+                y += (2 * cls.GAME_RADIUS + 1) * block.player.up_y
             result.add((x, y))
         return result
 
