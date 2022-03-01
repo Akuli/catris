@@ -2,7 +2,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import time
-import contextlib
 import sys
 import textwrap
 import random
@@ -170,18 +169,15 @@ class Player:
 
 
 class Game:
-    landed_blocks: dict[tuple[int, int], int | None]
     NAME: ClassVar[str]
     HIGH_SCORES_FILE: ClassVar[str]
     TERMINAL_HEIGHT_NEEDED: ClassVar[int]
 
     def __init__(self) -> None:
-        self.reset()
-
-    def reset(self) -> None:
         self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
         self.score = 0
+        self.landed_blocks: dict[tuple[int, int], int | None] = {}
 
     def is_valid(self) -> bool:
         seen = {
@@ -299,8 +295,6 @@ class Game:
     # Name can exist already, if player quits and comes back
     def get_existing_player_or_add_new_player(self, name: str) -> Player:
         print(f"{name!r} joins a game with {len(self.players)} existing players")
-        if not self.players:
-            self.reset()
 
         game_over = self.game_is_over()
 
@@ -382,10 +376,6 @@ class TraditionalGame(Game):
     # Width varies as people join/leave
     HEIGHT = 20
     WIDTH_PER_PLAYER = 7
-
-    def reset(self) -> None:
-        super().reset()
-        self.landed_blocks = {}
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
@@ -542,8 +532,17 @@ class RingGame(Game):
         "o------------o",
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.landed_blocks = {
+            (x, y): None
+            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
+            if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
+        }
+
     @classmethod
-    def get_middle_area_content(
+    def _get_middle_area_content(
         cls, players_by_letter: dict[str, Player]
     ) -> list[bytes]:
         wrapped_names = {}
@@ -622,15 +621,6 @@ class RingGame(Game):
             result.append(result_line)
 
         return result
-
-    def reset(self) -> None:
-        super().reset()
-        self.landed_blocks = {
-            (x, y): None
-            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-            for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-            if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
-        }
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         # Let me know if you need to understand how this works. I'll explain.
@@ -861,7 +851,7 @@ class RingGame(Game):
             }[relative_direction]
             players_by_letter[letter] = player
 
-        middle_area_content = self.get_middle_area_content(players_by_letter)
+        middle_area_content = self._get_middle_area_content(players_by_letter)
         square_colors = self.get_square_colors()
 
         for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
@@ -900,15 +890,26 @@ GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame]
 
 class Server:
     def __init__(self) -> None:
-        # RLock because state usage triggers rendering, which uses state
         self.clients: set[Client] = set()
-        self.__games = {}
-        for klass in GAME_CLASSES:
-            self.__games[klass] = klass()
-        self.tasks = [
-            asyncio.create_task(self._move_blocks_down_task(klass))
-            for klass in GAME_CLASSES
+        self.games_and_tasks: dict[Game, list[asyncio.Task[Any]]] = {}
+
+    def start_game(self, client: Client, game_class: type[Game]) -> None:
+        assert client in self.clients
+
+        existing_games = [
+            game for game in self.games_and_tasks.keys() if isinstance(game, game_class)
         ]
+        if existing_games:
+            [game] = existing_games
+        else:
+            game = game_class()
+            self.games_and_tasks[game] = [
+                asyncio.create_task(self._move_blocks_down_task(game))
+            ]
+
+        assert client.name is not None
+        player = game.get_existing_player_or_add_new_player(client.name)
+        client.view = PlayingView(client, game, player)
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
         high_scores = []
@@ -939,34 +940,32 @@ class Server:
         high_scores.append(hs)
         return high_scores
 
-    async def _high_score_task(
-        self, game_class: type[Game], high_score: HighScore
-    ) -> None:
+    async def _high_score_task(self, game: Game, high_score: HighScore) -> None:
         high_scores = await to_thread(
-            self._add_high_score, game_class.HIGH_SCORES_FILE, high_score
+            self._add_high_score, game.HIGH_SCORES_FILE, high_score
         )
         high_scores.sort(key=(lambda hs: hs.score), reverse=True)
         best5 = high_scores[:5]
         for client in self.clients:
-            if (
-                isinstance(client.view, GameOverView)
-                and client.view.game_class == game_class
-                and client.view.new_high_score == high_score
-            ):
+            if isinstance(client.view, GameOverView) and client.view.game == game:
                 client.view.set_high_scores(best5)
                 client.render()
 
-    @contextlib.contextmanager
-    def access_game(
-        self, game_class: type[Game], *, render: bool = True
-    ) -> Iterator[Game]:
-        game = self.__games[game_class]
+    def render_game(self, game: Game) -> None:
+        assert game in self.games_and_tasks
         assert game.is_valid()
-        assert not game.game_is_over()
-        yield game
 
-        assert game.is_valid()
+        playing_clients = [
+            c
+            for c in self.clients
+            if isinstance(c.view, PlayingView) and c.view.game == game
+        ]
+
         if game.game_is_over():
+            tasks = self.games_and_tasks.pop(game)
+            for task in tasks:
+                task.cancel()
+
             duration_ns = time.monotonic_ns() - game.start_time
             high_score = HighScore(
                 score=game.score,
@@ -976,77 +975,72 @@ class Server:
             print("Game over!", high_score)
             game.players.clear()
 
-            playing_clients = [
-                c for c in self.clients if isinstance(c.view, PlayingView)
-            ]
-
-            assert render
             if playing_clients:
                 for client in playing_clients:
-                    client.view = GameOverView(client, type(game), high_score)
+                    client.view = GameOverView(client, game, high_score)
                     client.render()
-                asyncio.create_task(self._high_score_task(type(game), high_score))
+                asyncio.create_task(self._high_score_task(game, high_score))
             else:
                 print("Not adding high score because everyone disconnected")
 
-        elif render:
-            for client in self.clients:
-                if isinstance(client.view, (PlayingView, ChooseGameView)):
-                    client.render()
+        else:
+            for client in playing_clients:
+                client.render()
 
-    # TODO: instantiate new Game instead of resetting, so won't need to pass start_time
-    async def _countdown(
-        self, player: Player, original_game: Game, start_time: int
-    ) -> None:
+        # ChooseGameViews display how many players are currently playing each game
+        for client in self.clients:
+            if isinstance(client.view, ChooseGameView):
+                client.render()
+
+    async def _countdown(self, player: Player, game: Game) -> None:
         while True:
             await asyncio.sleep(1)
-            with self.access_game(type(original_game)) as game:
-                if game.start_time != start_time:
-                    return
+            assert isinstance(player.moving_block_or_wait_counter, int)
+            player.moving_block_or_wait_counter -= 1
+            if player.moving_block_or_wait_counter > 0:
+                self.render_game(game)
+                continue
 
-                assert isinstance(player.moving_block_or_wait_counter, int)
-                player.moving_block_or_wait_counter -= 1
-                if player.moving_block_or_wait_counter == 0:
-                    client_currently_connected = any(
-                        isinstance(client.view, PlayingView)
-                        and client.view.player == player
-                        for client in self.clients
-                    )
-                    game.end_waiting(player, client_currently_connected)
-                    return
+            client_currently_connected = any(
+                isinstance(client.view, PlayingView) and client.view.player == player
+                for client in self.clients
+            )
+            game.end_waiting(player, client_currently_connected)
+            self.render_game(game)
 
-    async def _move_blocks_down_once(self, game_class: type[Game]) -> None:
-        with self.access_game(game_class) as game:
-            start_time = game.start_time
-            needs_wait_counter = game.move_blocks_down()
-            full_lines_iter = game.find_and_then_wipe_full_lines()
-            full_points = next(full_lines_iter)
-            for player in needs_wait_counter:
-                asyncio.create_task(self._countdown(player, game, start_time))
+            me = asyncio.current_task()
+            if me in self.games_and_tasks.get(game, []):
+                self.games_and_tasks[game].remove(me)
+            return
+
+    async def _move_blocks_down_once(self, game: Game) -> None:
+        needs_wait_counter = game.move_blocks_down()
+        full_lines_iter = game.find_and_then_wipe_full_lines()
+        full_points = next(full_lines_iter)
+        for player in needs_wait_counter:
+            self.games_and_tasks[game].append(
+                asyncio.create_task(self._countdown(player, game))
+            )
+        self.render_game(game)
 
         if full_points:
             print(f"Flashing and wiping {len(full_points)} points")
             for color in [47, 0, 47, 0]:
-                with self.access_game(game_class) as game:
-                    if game.start_time != start_time:
-                        return
-                    for point in full_points:
-                        game.landed_blocks[point] = color
+                for point in full_points:
+                    game.landed_blocks[point] = color
+                self.render_game(game)
                 await asyncio.sleep(0.1)
-            with self.access_game(game_class) as game:
-                if game.start_time != start_time:
-                    return
-                try:
-                    next(full_lines_iter)  # run past yield, which deletes points
-                except StopIteration:
-                    pass  # function ended without a second yield
 
-    async def _move_blocks_down_task(self, game_class: type[Game]) -> None:
+            try:
+                next(full_lines_iter)  # run past yield, which deletes points
+            except StopIteration:
+                pass  # function ended without a second yield
+            self.render_game(game)
+
+    async def _move_blocks_down_task(self, game: Game) -> None:
         while True:
-            await self._move_blocks_down_once(game_class)
-            with self.access_game(game_class, render=False) as game:
-                score = game.score
-            await asyncio.sleep(0.5 / (1 + score / 1000))
+            await self._move_blocks_down_once(game)
+            await asyncio.sleep(0.5 / (1 + game.score / 1000))
 
     async def handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -1179,13 +1173,24 @@ class ChooseGameView(MenuView):
     def get_lines_to_render(self) -> list[bytes]:
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
+            ongoing_games = [
+                g
+                for g in self._client.server.games_and_tasks.keys()
+                if isinstance(g, game_class)
+            ]
+            if ongoing_games:
+                [game] = ongoing_games
+                player_count = len(game.players)
+            else:
+                player_count = 0
+
             text = game_class.NAME
-            with self._client.server.access_game(game_class, render=False) as game:
-                if len(game.players) == 1:
-                    text += " (1 player)"
-                else:
-                    text += f" ({len(game.players)} players)"
+            if player_count == 1:
+                text += " (1 player)"
+            else:
+                text += f" ({player_count} players)"
             self.menu_items.append(text)
+
         self.menu_items.append("Quit")
         return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
 
@@ -1235,23 +1240,20 @@ class CheckTerminalSizeView:
 
     def handle_key_press(self, received: bytes) -> None:
         if received == b"\r":
-            with self._client.server.access_game(self._game_class) as game:
-                assert self._client.name is not None
-                player = game.get_existing_player_or_add_new_player(self._client.name)
-                self._client.view = PlayingView(self._client, game, player)
+            self._client.server.start_game(self._client, self._game_class)
 
 
 class GameOverView(MenuView):
     def __init__(
         self,
         client: Client,
-        game_class: type[Game],
+        game: Game,
         new_high_score: HighScore,
     ):
         super().__init__()
         self.menu_items.extend(["New Game", "Choose a different game", "Quit"])
         self._client = client
-        self.game_class = game_class
+        self.game = game
         self.new_high_score = new_high_score
         self._high_scores: list[HighScore] | None = None
 
@@ -1300,11 +1302,9 @@ class GameOverView(MenuView):
         text = self.menu_items[self.selected_index]
         if text == "New Game":
             assert self._client.name is not None
-            with self._client.server.access_game(self.game_class) as game:
-                player = game.get_existing_player_or_add_new_player(self._client.name)
-                self._client.view = PlayingView(self._client, game, player)
+            self._client.server.start_game(self._client, type(self.game))
         elif text == "Choose a different game":
-            self._client.view = ChooseGameView(self._client, self.game_class)
+            self._client.view = ChooseGameView(self._client, type(self.game))
         elif text == "Quit":
             return True
         else:
@@ -1316,46 +1316,52 @@ class GameOverView(MenuView):
 class PlayingView:
     def __init__(self, client: Client, game: Game, player: Player):
         self._client = client
-        self.game = game
-        self.player = player
+        self._server = client.server
+        # no idea why these need explicit type annotations
+        self.game: Game = game
+        self.player: Player = player
 
     def get_lines_to_render(self) -> list[bytes]:
-        with self._client.server.access_game(type(self.game), render=False) as game:
-            lines = game.get_lines_to_render(self.player)
-            lines[5] += f"  Score: {game.score}".encode("ascii")
-            if self._client.rotate_counter_clockwise:
-                lines[6] += b"  Counter-clockwise"
-            if isinstance(self.player.moving_block_or_wait_counter, int):
-                n = self.player.moving_block_or_wait_counter
-                lines[8] += f"  Please wait: {n}".encode("ascii")
-            return lines
+        lines = self.game.get_lines_to_render(self.player)
+        lines[5] += f"  Score: {self.game.score}".encode("ascii")
+        if self._client.rotate_counter_clockwise:
+            lines[6] += b"  Counter-clockwise"
+        if isinstance(self.player.moving_block_or_wait_counter, int):
+            n = self.player.moving_block_or_wait_counter
+            lines[8] += f"  Please wait: {n}".encode("ascii")
+        return lines
 
     def handle_key_press(self, received: bytes) -> None:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
-            with self._client.server.access_game(type(self.game)) as game:
-                game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
+            self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
+            self._server.render_game(self.game)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
-            with self._client.server.access_game(type(self.game)) as game:
-                game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
+            self.game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
+            self._server.render_game(self.game)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-            with self._client.server.access_game(type(self.game)) as game:
-                game.rotate(self.player, self._client.rotate_counter_clockwise)
+            self.game.rotate(self.player, self._client.rotate_counter_clockwise)
+            self._server.render_game(self.game)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-            with self._client.server.access_game(type(self.game)) as game:
-                game.move_down_all_the_way(self.player)
+            self.game.move_down_all_the_way(self.player)
+            self._server.render_game(self.game)
         elif received in (b"R", b"r"):
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
             )
-        elif received in (b"F", b"f") and isinstance(self.game, RingGame):
-            with self._client.server.access_game(RingGame) as state:
-                if len(state.players) == 1:
-                    old_landed_blocks = state.landed_blocks.copy()
-                    state.landed_blocks = {
-                        (-x, -y): color for (x, y), color in state.landed_blocks.items()
-                    }
-                    if not state.is_valid():
-                        state.landed_blocks = old_landed_blocks
+            self._client.render()
+        elif (
+            received in (b"F", b"f")
+            and isinstance(self.game, RingGame)
+            and len(self.game.players) == 1
+        ):
+            old_landed_blocks = self.game.landed_blocks.copy()
+            self.game.landed_blocks = {
+                (-x, -y): color for (x, y), color in self.game.landed_blocks.items()
+            }
+            if self.game.is_valid():
+                self._server.render_game(self.game)
+            else:
+                self.game.landed_blocks = old_landed_blocks
 
 
 class Client:
@@ -1479,8 +1485,8 @@ class Client:
             if isinstance(self.view, PlayingView) and isinstance(
                 self.view.player.moving_block_or_wait_counter, MovingBlock
             ):
-                with self.server.access_game(type(self.view.game)):
-                    self.view.player.moving_block_or_wait_counter = None
+                self.view.player.moving_block_or_wait_counter = None
+                self.server.render_game(self.view.game)
 
             # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
@@ -1493,7 +1499,7 @@ async def main() -> None:
     asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
     async with asyncio_server:
         print("Listening on port 12345...")
-        await asyncio.gather(asyncio_server.serve_forever(), *my_server.tasks)
+        await asyncio_server.serve_forever()
 
 
 asyncio.run(main())
