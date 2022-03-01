@@ -956,6 +956,10 @@ class Server:
         assert game in self.games_and_tasks
         assert game.is_valid()
 
+        playing_clients = [
+                c for c in self.clients if isinstance(c.view, PlayingView) and c.view.game == game
+            ]
+
         if game.game_is_over():
             tasks = self.games_and_tasks.pop(game)
             for task in tasks:
@@ -970,10 +974,6 @@ class Server:
             print("Game over!", high_score)
             game.players.clear()
 
-            playing_clients = [
-                c for c in self.clients if isinstance(c.view, PlayingView)
-            ]
-
             if playing_clients:
                 for client in playing_clients:
                     client.view = GameOverView(client, game, high_score)
@@ -983,10 +983,13 @@ class Server:
                 print("Not adding high score because everyone disconnected")
 
         else:
-            # TODO: don't render PlayingViews that are for different games
-            for client in self.clients:
-                if isinstance(client.view, (PlayingView, ChooseGameView)):
-                    client.render()
+            for client in playing_clients:
+                client.render()
+
+        # ChooseGameViews display how many players are currently playing each game
+        for client in self.clients:
+            if isinstance(client.view, ChooseGameView):
+                client.render()
 
     async def _countdown(
         self, player: Player, game: Game
@@ -1310,8 +1313,9 @@ class PlayingView:
     def __init__(self, client: Client, game: Game, player: Player):
         self._client = client
         self._server = client.server
-        self.game = game
-        self.player: Player = player  # no idea why this needs explicit type annotation
+        # no idea why these need explicit type annotations
+        self.game: Game = game
+        self.player: Player = player
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
