@@ -1451,7 +1451,9 @@ class Client:
         to_send += b"\r"  # move cursor to start of line
         to_send += CLEAR_TO_END_OF_LINE
 
-        for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines), start=1):
+        for y, (old_line, new_line) in enumerate(
+            zip(self.last_displayed_lines, lines), start=1
+        ):
             # Re-rendering cursor line helps with AskNameView
             if old_line != new_line or y == cursor_pos[0]:
                 to_send += MOVE_CURSOR % (y, 1)
