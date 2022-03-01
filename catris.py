@@ -293,9 +293,11 @@ class Game:
         pass
 
     # Name can exist already, if player quits and comes back
-    def get_existing_player_or_add_new_player(self, name: str) -> Player:
-        print(f"{name!r} joins a game with {len(self.players)} existing players")
+    def get_existing_player_or_add_new_player(self, name: str) -> Player | None:
+        if not self.player_can_join(name):
+            return None
 
+        print(f"{name!r} joins a game with {len(self.players)} existing players")
         game_over = self.game_is_over()
 
         for player in self.players:
@@ -314,6 +316,11 @@ class Game:
             player.moving_block_or_wait_counter = MovingBlock(player)
             assert not self.game_is_over()
         return player
+
+    def player_can_join(self, name: str) -> bool:
+        return len(self.players) < len(PLAYER_COLORS) or name.lower() in (
+            p.name.lower() for p in self.players
+        )
 
     def move_blocks_down(self) -> set[Player]:
         # Blocks of different users can be on each other's way, but should
@@ -909,7 +916,15 @@ class Server:
 
         assert client.name is not None
         player = game.get_existing_player_or_add_new_player(client.name)
-        client.view = PlayingView(client, game, player)
+        if player is None:
+            client.view = ChooseGameView(client, game_class)
+        else:
+            client.view = PlayingView(client, game, player)
+
+        # ChooseGameViews display how many players are currently playing each game
+        for client in self.clients:
+            if isinstance(client.view, ChooseGameView):
+                client.render()
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
         high_scores = []
@@ -1113,12 +1128,11 @@ class AskNameView:
 
         # Prevent two simultaneous clients with the same name.
         # But it's fine if you leave and then join back with the same name.
-        names_of_connected_players = {
-            client.name
+        if name.lower() in (
+            client.name.lower()
             for client in self._client.server.clients
             if client.name is not None
-        }
-        if name.lower() in (n.lower() for n in names_of_connected_players):
+        ):
             self._error = "This name is in use. Try a different name."
             return
 
@@ -1170,9 +1184,17 @@ class ChooseGameView(MenuView):
         self._client = client
         self.selected_index = GAME_CLASSES.index(previous_game_class)
 
+    def _should_show_cannot_join_error(self) -> bool:
+        assert self._client.name is not None
+        return self.selected_index in range(len(GAME_CLASSES)) and any(
+            isinstance(g, GAME_CLASSES[self.selected_index])
+            and not g.player_can_join(self._client.name)
+            for g in self._client.server.games_and_tasks.keys()
+        )
+
     def get_lines_to_render(self) -> list[bytes]:
         self.menu_items.clear()
-        for game_class in GAME_CLASSES:
+        for index, game_class in enumerate(GAME_CLASSES):
             ongoing_games = [
                 g
                 for g in self._client.server.games_and_tasks.keys()
@@ -1192,14 +1214,24 @@ class ChooseGameView(MenuView):
             self.menu_items.append(text)
 
         self.menu_items.append("Quit")
-        return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+
+        result = ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+        if self._should_show_cannot_join_error():
+            result.append(b"")
+            result.append(b"")
+            result.append(
+                (COLOR % 31) + b"This game is full.".center(80).rstrip() + (COLOR % 0)
+            )
+        return result
 
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
             return True
-        self._client.view = CheckTerminalSizeView(
-            self._client, GAME_CLASSES[self.selected_index]
-        )
+
+        if not self._should_show_cannot_join_error():
+            self._client.view = CheckTerminalSizeView(
+                self._client, GAME_CLASSES[self.selected_index]
+            )
         return False
 
 
@@ -1237,6 +1269,12 @@ class CheckTerminalSizeView:
 
     def handle_key_press(self, received: bytes) -> None:
         if received == b"\r":
+            # rendering this view is a bit special :)
+            #
+            # Make sure screen clears before changing view, even if the next
+            # view isn't actually as tall as this view. This can happen if a
+            # game was full and you're thrown back to main menu.
+            self._client.writer.write(CLEAR_SCREEN)
             self._client.server.start_game(self._client, self._game_class)
 
 
@@ -1402,21 +1440,26 @@ class Client:
         while len(lines) < len(self.last_displayed_lines):
             lines.append(b"")
         while len(lines) > len(self.last_displayed_lines):
-            self.last_displayed_lines.append(b"")
+            self.last_displayed_lines.append(b"aa")
 
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow
         to_send = b""
 
-        for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines)):
-            if old_line != new_line:
-                to_send += MOVE_CURSOR % (y + 1, 1)
+        # Hide user's key press at cursor location. Needs to be done at
+        # whatever cursor location is currently, before we move it.
+        to_send += b"\r"  # move cursor to start of line
+        to_send += CLEAR_TO_END_OF_LINE
+
+        for y, (old_line, new_line) in enumerate(zip(self.last_displayed_lines, lines), start=1):
+            # Re-rendering cursor line helps with AskNameView
+            if old_line != new_line or y == cursor_pos[0]:
+                to_send += MOVE_CURSOR % (y, 1)
                 to_send += new_line
                 to_send += CLEAR_TO_END_OF_LINE
         self.last_displayed_lines = lines.copy()
 
         to_send += MOVE_CURSOR % cursor_pos
-        to_send += CLEAR_TO_END_OF_LINE
 
         self.writer.write(to_send)
 
