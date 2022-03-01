@@ -1186,7 +1186,7 @@ class ChooseGameView(MenuView):
 
     def _should_show_cannot_join_error(self) -> bool:
         assert self._client.name is not None
-        return self.selected_index in range(len(GAME_CLASSES)) and any(
+        return self.selected_index < len(GAME_CLASSES) and any(
             isinstance(g, GAME_CLASSES[self.selected_index])
             and not g.player_can_join(self._client.name)
             for g in self._client.server.games_and_tasks.keys()
