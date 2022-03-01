@@ -1470,7 +1470,6 @@ class Client:
         self.writer.write(to_send)
 
     async def _receive_bytes(self) -> bytes | None:
-        # TODO: is the error handling needed?
         try:
             await asyncio.sleep(0)  # Makes game playable while fuzzer is running
             result = await self._reader.read(10)
