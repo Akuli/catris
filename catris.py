@@ -1460,7 +1460,6 @@ class Client:
         self.last_displayed_lines = lines.copy()
 
         to_send += MOVE_CURSOR % cursor_pos
-
         self.writer.write(to_send)
 
     async def _receive_bytes(self) -> bytes | None:
