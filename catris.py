@@ -1470,8 +1470,8 @@ class Client:
         self.writer.write(to_send)
 
     async def _receive_bytes(self) -> bytes | None:
+        await asyncio.sleep(0)  # Makes game playable while fuzzer is running
         try:
-            await asyncio.sleep(0)  # Makes game playable while fuzzer is running
             result = await self._reader.read(10)
         except OSError as e:
             print("Receive error:", self.name, e)
