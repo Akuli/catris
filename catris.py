@@ -1194,7 +1194,7 @@ class ChooseGameView(MenuView):
 
     def get_lines_to_render(self) -> list[bytes]:
         self.menu_items.clear()
-        for index, game_class in enumerate(GAME_CLASSES):
+        for game_class in GAME_CLASSES:
             ongoing_games = [
                 g
                 for g in self._client.server.games_and_tasks.keys()
