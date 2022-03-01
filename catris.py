@@ -895,7 +895,9 @@ class Server:
 
         # These tasks are not game specific
         self.server_tasks: list[asyncio.Task[Any]] = []
-        self.server_tasks.append(asyncio.create_task(self._refresh_check_terminal_size_views()))
+        self.server_tasks.append(
+            asyncio.create_task(self._refresh_check_terminal_size_views())
+        )
 
     async def _refresh_check_terminal_size_views(self) -> None:
         for client in self.clients:
@@ -1497,7 +1499,9 @@ class Client:
 async def main() -> None:
     my_server = Server()
     try:
-        asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
+        asyncio_server = await asyncio.start_server(
+            my_server.handle_connection, port=12345
+        )
         async with asyncio_server:
             print("Listening on port 12345...")
             await asyncio_server.serve_forever()
