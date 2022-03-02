@@ -117,14 +117,6 @@ class MovingBlock:
             (-1, 0): 3,
         }[player.up_x, player.up_y]
 
-    def get_coords(self) -> set[tuple[int, int]]:
-        result = set()
-        for rel_x, rel_y in BLOCK_SHAPES[self.shape_letter]:
-            for iteration in range(self.rotation % 4):
-                rel_x, rel_y = -rel_y, rel_x
-            result.add((self.center_x + rel_x, self.center_y + rel_y))
-        return result
-
 
 @dataclasses.dataclass(eq=False)
 class Player:
@@ -185,7 +177,7 @@ class Game:
         }
 
         for block in self._get_moving_blocks():
-            coords = block.get_coords()
+            coords = self.get_moving_block_coords(block)
             if coords & seen:
                 return False
             seen.update(coords)
@@ -197,6 +189,16 @@ class Game:
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
             for p in self.players
         )
+
+    # in this class, so that RingGame can override it
+    @classmethod
+    def get_moving_block_coords(cls, block: MovingBlock) -> set[tuple[int, int]]:
+        result = set()
+        for rel_x, rel_y in BLOCK_SHAPES[block.shape_letter]:
+            for iteration in range(block.rotation % 4):
+                rel_x, rel_y = -rel_y, rel_x
+            result.add((block.center_x + rel_x, block.center_y + rel_y))
+        return result
 
     def _get_moving_blocks(self) -> list[MovingBlock]:
         result = []
@@ -241,7 +243,7 @@ class Game:
         # This is quite rare, but results in invalid state errors.
         # When this happens, just delete the landed block.
         for moving_block in self._get_moving_blocks():
-            for point in moving_block.get_coords():
+            for point in self.get_moving_block_coords(moving_block):
                 if self.landed_blocks.get(point, None) is not None:
                     self.landed_blocks[point] = None
 
@@ -265,7 +267,19 @@ class Game:
         return False
 
     def move_down_all_the_way(self, player: Player) -> None:
-        while self.move_if_possible(player, dx=0, dy=1, in_player_coords=True):
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
+            return
+
+        old_points = self.get_moving_block_coords(block)
+
+        # Stop moving if we go back to same place.
+        # This makes arrow down do nothing, if the block would wrap all the way
+        # around.
+        while (
+            self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
+            and self.get_moving_block_coords(block) != old_points
+        ):
             pass
 
     def rotate(self, player: Player, counter_clockwise: bool) -> None:
@@ -346,7 +360,7 @@ class Game:
         for player in todo:
             assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
             letter = player.moving_block_or_wait_counter.shape_letter
-            coords = player.moving_block_or_wait_counter.get_coords()
+            coords = self.get_moving_block_coords(player.moving_block_or_wait_counter)
 
             if any(point not in self.landed_blocks.keys() for point in coords):
                 needs_wait_counter.add(player)
@@ -364,7 +378,7 @@ class Game:
         assert self.is_valid()
         result = self.landed_blocks.copy()
         for moving_block in self._get_moving_blocks():
-            for point in moving_block.get_coords():
+            for point in self.get_moving_block_coords(moving_block):
                 if point in result:
                     result[point] = BLOCK_COLORS[moving_block.shape_letter]
 
@@ -402,7 +416,7 @@ class TraditionalGame(Game):
         return super().is_valid() and all(
             x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks()
-            for x, y in block.get_coords()
+            for x, y in self.get_moving_block_coords(block)
         )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
@@ -646,17 +660,26 @@ class RingGame(Game):
             return False
 
         for block in self._get_moving_blocks():
-            for x, y in block.get_coords():
+            for x, y in self.get_moving_block_coords(block):
                 if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     return False
                 player_x, player_y = block.player.world_to_player(x, y)
-                if (
-                    player_x < -self.GAME_RADIUS
-                    or player_x > self.GAME_RADIUS
-                    or player_y > 0
-                ):
+                if player_x < -self.GAME_RADIUS or player_x > self.GAME_RADIUS:
                     return False
         return True
+
+    @classmethod
+    def get_moving_block_coords(cls, block: MovingBlock) -> set[tuple[int, int]]:
+        result = set()
+        down_x = -block.player.up_x
+        down_y = -block.player.up_y
+        for x, y in super().get_moving_block_coords(block):
+            # Wrap back to top, if coordinates go too far down
+            while x * down_x + y * down_y > cls.GAME_RADIUS:
+                x += (2 * cls.GAME_RADIUS + 1) * block.player.up_x
+                y += (2 * cls.GAME_RADIUS + 1) * block.player.up_y
+            result.add((x, y))
+        return result
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
