@@ -1084,6 +1084,7 @@ class Server:
         # Then one task could be flashing while the other is moving.
         time_to_next_fast_move = 0
         time_to_next_slow_move = 0
+
         while True:
             sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
             await asyncio.sleep(sleep_time)
