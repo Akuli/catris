@@ -106,6 +106,7 @@ class MovingBlock:
         self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         self.center_x = player.moving_block_start_x
         self.center_y = player.moving_block_start_y
+        self.fast_down = False
 
         # Orient initial block so that it always looks the same.
         # Otherwise may create subtle bugs near end of game, where freshly
@@ -158,6 +159,10 @@ class Player:
             (-self.up_y * x - self.up_x * y),
             (self.up_x * x - self.up_y * y),
         )
+
+    def set_fast_down(self, value: bool) -> None:
+        if isinstance(self.moving_block_or_wait_counter, MovingBlock):
+            self.moving_block_or_wait_counter.fast_down = value
 
 
 class Game:
@@ -266,22 +271,6 @@ class Game:
 
         return False
 
-    def move_down_all_the_way(self, player: Player) -> None:
-        block = player.moving_block_or_wait_counter
-        if not isinstance(block, MovingBlock):
-            return
-
-        old_points = self.get_moving_block_coords(block)
-
-        # Stop moving if we go back to same place.
-        # This makes arrow down do nothing, if the block would wrap all the way
-        # around.
-        while (
-            self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
-            and self.get_moving_block_coords(block) != old_points
-        ):
-            pass
-
     def rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             block = player.moving_block_or_wait_counter
@@ -336,7 +325,7 @@ class Game:
             p.name.lower() for p in self.players
         )
 
-    def move_blocks_down(self) -> set[Player]:
+    def move_blocks_down(self, fast: bool) -> set[Player]:
         # Blocks of different users can be on each other's way, but should
         # still be moved if the bottommost block will move.
         #
@@ -345,6 +334,7 @@ class Game:
             player
             for player in self.players
             if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+            and player.moving_block_or_wait_counter.fast_down == fast
         }
         while True:
             something_moved = False
@@ -358,17 +348,18 @@ class Game:
 
         needs_wait_counter = set()
         for player in todo:
-            assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
-            letter = player.moving_block_or_wait_counter.shape_letter
-            coords = self.get_moving_block_coords(player.moving_block_or_wait_counter)
+            block = player.moving_block_or_wait_counter
+            assert isinstance(block, MovingBlock)
+            coords = self.get_moving_block_coords(block)
 
-            if any(point not in self.landed_blocks.keys() for point in coords):
-                needs_wait_counter.add(player)
-            else:
+            if block.fast_down:
+                block.fast_down = False
+            elif coords.issubset(self.landed_blocks.keys()):
                 for point in coords:
-                    assert point in self.landed_blocks
-                    self.landed_blocks[point] = BLOCK_COLORS[letter]
+                    self.landed_blocks[point] = BLOCK_COLORS[block.shape_letter]
                 player.moving_block_or_wait_counter = MovingBlock(player)
+            else:
+                needs_wait_counter.add(player)
 
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
@@ -1051,8 +1042,8 @@ class Server:
                 self.games_and_tasks[game].remove(me)
             return
 
-    async def _move_blocks_down_once(self, game: Game) -> None:
-        needs_wait_counter = game.move_blocks_down()
+    async def _move_blocks_down_once(self, game: Game, fast: bool) -> None:
+        needs_wait_counter = game.move_blocks_down(fast)
         full_lines_iter = game.find_and_then_wipe_full_lines()
         full_points = next(full_lines_iter)
         for player in needs_wait_counter:
@@ -1076,9 +1067,23 @@ class Server:
             self.render_game(game)
 
     async def _move_blocks_down_task(self, game: Game) -> None:
+        # Fast and slow moving from separate tasks is a bad idea.
+        # Then one task could be flashing while the other is moving.
+        time_to_next_fast_move = 0.0
+        time_to_next_slow_move = 0.0
+
         while True:
-            await self._move_blocks_down_once(game)
-            await asyncio.sleep(0.5 / (1 + game.score / 1000))
+            sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
+            await asyncio.sleep(sleep_time)
+            time_to_next_fast_move -= sleep_time
+            time_to_next_slow_move -= sleep_time
+
+            if time_to_next_fast_move == 0:
+                await self._move_blocks_down_once(game, fast=True)
+                time_to_next_fast_move = 0.020
+            if time_to_next_slow_move == 0:
+                await self._move_blocks_down_once(game, fast=False)
+                time_to_next_slow_move = 0.5 / (1 + game.score / 1000)
 
     async def handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -1385,15 +1390,18 @@ class PlayingView:
     def handle_key_press(self, received: bytes) -> None:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
+            self.player.set_fast_down(False)
             self._server.render_game(self.game)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
+            self.player.set_fast_down(False)
             self._server.render_game(self.game)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
             self.game.rotate(self.player, self._client.rotate_counter_clockwise)
+            self.player.set_fast_down(False)
             self._server.render_game(self.game)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
-            self.game.move_down_all_the_way(self.player)
+            self.player.set_fast_down(True)
             self._server.render_game(self.game)
         elif received in (b"R", b"r"):
             self._client.rotate_counter_clockwise = (
