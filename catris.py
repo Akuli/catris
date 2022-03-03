@@ -923,12 +923,6 @@ class Server:
         self.clients: set[Client] = set()
         self.games_and_tasks: dict[Game, list[asyncio.Task[Any]]] = {}
 
-        # These tasks are not game specific
-        self.server_tasks: list[asyncio.Task[Any]] = []
-        self.server_tasks.append(
-            asyncio.create_task(self._refresh_check_terminal_size_views())
-        )
-
     async def _refresh_check_terminal_size_views(self) -> None:
         for client in self.clients:
             if isinstance(client.view, CheckTerminalSizeView):
@@ -1568,16 +1562,10 @@ class Client:
 
 async def main() -> None:
     my_server = Server()
-    try:
-        asyncio_server = await asyncio.start_server(
-            my_server.handle_connection, port=12345
-        )
-        async with asyncio_server:
-            print("Listening on port 12345...")
-            await asyncio_server.serve_forever()
-    finally:
-        for task in my_server.server_tasks:
-            task.cancel()
+    asyncio_server = await asyncio.start_server(my_server.handle_connection, port=12345)
+    async with asyncio_server:
+        print("Listening on port 12345...")
+        await asyncio_server.serve_forever()
 
 
 asyncio.run(main())
