@@ -923,12 +923,6 @@ class Server:
         self.clients: set[Client] = set()
         self.games_and_tasks: dict[Game, list[asyncio.Task[Any]]] = {}
 
-    async def _refresh_check_terminal_size_views(self) -> None:
-        for client in self.clients:
-            if isinstance(client.view, CheckTerminalSizeView):
-                client.render()
-        await asyncio.sleep(0.5)
-
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
 
