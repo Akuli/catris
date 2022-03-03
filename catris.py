@@ -354,7 +354,7 @@ class Game:
 
             if block.fast_down:
                 block.fast_down = False
-            elif any(point not in self.landed_blocks.keys() for point in coords):
+            elif not coords.issubset(self.landed_blocks.keys()):
                 needs_wait_counter.add(player)
             else:
                 for point in coords:
