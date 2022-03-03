@@ -354,13 +354,12 @@ class Game:
 
             if block.fast_down:
                 block.fast_down = False
-            elif not coords.issubset(self.landed_blocks.keys()):
-                needs_wait_counter.add(player)
-            else:
+            elif coords.issubset(self.landed_blocks.keys()):
                 for point in coords:
-                    assert point in self.landed_blocks
                     self.landed_blocks[point] = BLOCK_COLORS[block.shape_letter]
                 player.moving_block_or_wait_counter = MovingBlock(player)
+            else:
+                needs_wait_counter.add(player)
 
         for player in needs_wait_counter:
             player.moving_block_or_wait_counter = WAIT_TIME
@@ -1082,8 +1081,8 @@ class Server:
     async def _move_blocks_down_task(self, game: Game) -> None:
         # Fast and slow moving from separate tasks is a bad idea.
         # Then one task could be flashing while the other is moving.
-        time_to_next_fast_move = 0
-        time_to_next_slow_move = 0
+        time_to_next_fast_move = 0.0
+        time_to_next_slow_move = 0.0
 
         while True:
             sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
