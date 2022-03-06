@@ -1430,6 +1430,7 @@ class PlayingView:
             if self.game.is_valid():
                 self._server.render_game(self.game)
             else:
+                # Can't flip, blocks are on top of each other. Flip again to undo.
                 self.game.players[0].flip_view()
 
 
