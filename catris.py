@@ -170,6 +170,8 @@ class Player:
     def flip_view(self) -> None:
         self.up_x *= -1
         self.up_y *= -1
+        self.moving_block_start_x *= -1
+        self.moving_block_start_y *= -1
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.center_x *= -1
             self.moving_block_or_wait_counter.center_y *= -1
