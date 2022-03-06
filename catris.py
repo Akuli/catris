@@ -164,6 +164,17 @@ class Player:
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.fast_down = value
 
+    # This is called only when there's one player.
+    # Could instead flip the world around, but it would be difficult if there's
+    # currently a blinking row.
+    def flip_view(self) -> None:
+        self.up_x *= -1
+        self.up_y *= -1
+        if isinstance(self.moving_block_or_wait_counter, MovingBlock):
+            self.moving_block_or_wait_counter.center_x *= -1
+            self.moving_block_or_wait_counter.center_y *= -1
+            self.moving_block_or_wait_counter.rotation += 2
+
 
 class Game:
     NAME: ClassVar[str]
@@ -1413,14 +1424,11 @@ class PlayingView:
             and isinstance(self.game, RingGame)
             and len(self.game.players) == 1
         ):
-            old_landed_blocks = self.game.landed_blocks.copy()
-            self.game.landed_blocks = {
-                (-x, -y): color for (x, y), color in self.game.landed_blocks.items()
-            }
+            self.game.players[0].flip_view()
             if self.game.is_valid():
                 self._server.render_game(self.game)
             else:
-                self.game.landed_blocks = old_landed_blocks
+                self.game.players[0].flip_view()
 
 
 class Client:
