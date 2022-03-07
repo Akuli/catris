@@ -1,5 +1,6 @@
 import random
 import socket
+import time
 
 commands = [
     b"\x08",
@@ -21,3 +22,4 @@ commands = [
 conn = socket.create_connection(("localhost", 12345))
 while True:
     conn.send(random.choice(commands))
+    time.sleep(5 / 1000)  # Don't trigger send limit
