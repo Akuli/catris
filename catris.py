@@ -1442,7 +1442,7 @@ class Client:
         self.server = server
         self._reader = reader
         self.writer = writer
-        self._recv_stats = collections.deque()
+        self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
         self.last_displayed_lines: list[bytes] = []
         self.name: str | None = None
