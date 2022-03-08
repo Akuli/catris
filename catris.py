@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import collections
 import dataclasses
 import time
 import sys
@@ -1441,6 +1442,7 @@ class Client:
         self.server = server
         self._reader = reader
         self.writer = writer
+        self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
         self.last_displayed_lines: list[bytes] = []
         self.name: str | None = None
@@ -1502,9 +1504,18 @@ class Client:
     async def _receive_bytes(self) -> bytes | None:
         await asyncio.sleep(0)  # Makes game playable while fuzzer is running
         try:
-            result = await self._reader.read(10)
+            result = await self._reader.read(100)
         except OSError as e:
             print("Receive error:", self.name, e)
+            return None
+
+        # Prevent 100% cpu usage if someone sends a lot of data
+        now = time.monotonic()
+        self._recv_stats.append((now, len(result)))
+        while self._recv_stats and self._recv_stats[0][0] < now - 1:
+            self._recv_stats.popleft()
+        if sum(length for timestamp, length in self._recv_stats) > 2000:
+            print("Received more than 2KB/sec, disconnecting:", self.name)
             return None
 
         # Checking ESC key here is a bad idea.
