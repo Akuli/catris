@@ -371,8 +371,6 @@ class Game:
             else:
                 needs_wait_counter.add(player)
 
-        for player in needs_wait_counter:
-            player.moving_block_or_wait_counter = WAIT_TIME
         return needs_wait_counter
 
     def get_square_colors(self) -> dict[tuple[int, int], int | None]:
@@ -390,7 +388,9 @@ class Game:
         pass
 
     async def _countdown(self, player: Player) -> None:
-        assert isinstance(player.moving_block_or_wait_counter, int)
+        player.moving_block_or_wait_counter = WAIT_TIME
+        self.need_render_event.set()
+
         while player.moving_block_or_wait_counter > 0:
             await asyncio.sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
