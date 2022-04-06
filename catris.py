@@ -104,7 +104,9 @@ class HighScore:
 class MovingBlock:
     def __init__(self, player: Player):
         self.player = player
-        self.shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
+        self.shape_letter = player.next_shape_letter
+        player.next_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
+
         self.center_x = player.moving_block_start_x
         self.center_y = player.moving_block_start_y
         self.fast_down = False
@@ -132,6 +134,9 @@ class Player:
     moving_block_start_x: int
     moving_block_start_y: int
     moving_block_or_wait_counter: MovingBlock | int | None = None
+    next_shape_letter: str = dataclasses.field(
+        default_factory=(lambda: random.choice(list(BLOCK_SHAPES.keys())))
+    )
 
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
@@ -328,6 +333,7 @@ class Game:
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             player.moving_block_or_wait_counter = MovingBlock(player)
             assert not self.game_is_over()
+            self.need_render_event.set()
         return player
 
     def player_can_join(self, name: str) -> bool:
@@ -1384,6 +1390,29 @@ class GameOverView(MenuView):
         return False
 
 
+def get_block_preview(shape_letter: str) -> list[bytes]:
+    points = BLOCK_SHAPES[shape_letter]
+    color_number = BLOCK_COLORS[shape_letter]
+
+    result = []
+    for y in (-1, 0, 1):
+        row = b""
+        color = False
+        for x in (-2, -1, 0, 1):
+            if (x, y) in points and not color:
+                row += COLOR % color_number
+                color = True
+            elif (x, y) not in points and color:
+                row += COLOR % 0
+                color = False
+            row += b"  "
+        if color:
+            row += COLOR % 0
+        result.append(row)
+
+    return result
+
+
 class PlayingView:
     def __init__(self, client: Client, game: Game, player: Player):
         self._client = client
@@ -1397,9 +1426,15 @@ class PlayingView:
         lines[5] += f"  Score: {self.game.score}".encode("ascii")
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
+
+        lines[7] += b"  Next:"
+        for index, row in enumerate(
+            get_block_preview(self.player.next_shape_letter), start=9
+        ):
+            lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
-            lines[8] += f"  Please wait: {n}".encode("ascii")
+            lines[14] += f"  Please wait: {n}".encode("ascii")
         return lines
 
     def handle_key_press(self, received: bytes) -> None:
