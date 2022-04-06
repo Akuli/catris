@@ -130,7 +130,7 @@ def choose_shape() -> str:
 
 
 class MovingBlock:
-    def __init__(self, player: Player, game: Game):
+    def __init__(self, player: Player):
         self.player = player
         self.shape_id = player.next_shape_id
         player.next_shape_id = choose_shape()
@@ -348,9 +348,6 @@ class Game:
     def add_player(self, name: str, color: int) -> Player:
         pass
 
-    def new_block(self, player: Player) -> None:
-        player.moving_block_or_wait_counter = MovingBlock(player, self)
-
     # Name can exist already, if player quits and comes back
     def get_existing_player_or_add_new_player(self, name: str) -> Player | None:
         if not self.player_can_join(name):
@@ -372,7 +369,7 @@ class Game:
             player = self.add_player(name, color)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            self.new_block(player)
+            player.moving_block_or_wait_counter = MovingBlock(player)
             assert not self.game_is_over()
             self.need_render_event.set()
         return player
@@ -417,13 +414,13 @@ class Game:
                         self.landed_blocks[point] = BLOCK_COLORS[block.shape_id]
                     else:
                         self.landed_blocks[point] = block.bomb.copy()
-                self.new_block(player)
+                player.moving_block_or_wait_counter = MovingBlock(player)
             else:
                 needs_wait_counter.add(player)
 
         return needs_wait_counter
 
-    def get_square_bytes(self) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
         result = {
             point: (
@@ -483,7 +480,9 @@ class Game:
                         if (x - bomb_x) ** 2 + (y - bomb_y) ** 2 < radius**2
                     }
                     if player_who_moves_bomb is not None:
-                        self.new_block(player_who_moves_bomb)
+                        player_who_moves_bomb.moving_block_or_wait_counter = (
+                            MovingBlock(player_who_moves_bomb)
+                        )
 
             if exploding_points:
                 async with self.flashing_lock:
@@ -508,7 +507,7 @@ class Game:
             for x, y in self.landed_blocks.keys():
                 if self.square_belongs_to_player(player, x, y):
                     self.landed_blocks[x, y] = None
-            self.new_block(player)
+            player.moving_block_or_wait_counter = MovingBlock(player)
         else:
             player.moving_block_or_wait_counter = None
 
@@ -688,7 +687,7 @@ class TraditionalGame(Game):
         header_line += b"o"
 
         lines = [name_line, header_line]
-        square_bytes = self.get_square_bytes()
+        square_bytes = self.get_square_texts()
 
         for y in range(self.HEIGHT):
             line = b"|"
@@ -1049,7 +1048,7 @@ class RingGame(Game):
             players_by_letter[letter] = player
 
         middle_area_content = self._get_middle_area_content(players_by_letter)
-        square_bytes = self.get_square_bytes()
+        square_bytes = self.get_square_texts()
 
         for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
             insert_middle_area_here = None
