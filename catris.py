@@ -235,16 +235,15 @@ class Game:
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         pass
 
-    def end_waiting(self, player: Player, client_currently_connected: bool) -> None:
+    def end_waiting(self, player: Player) -> None:
         assert player.moving_block_or_wait_counter == 0
-        if not client_currently_connected:
+        if self.player_has_a_connected_client(player):
+            for x, y in self.landed_blocks.keys():
+                if self.square_belongs_to_player(player, x, y):
+                    self.landed_blocks[x, y] = None
+            player.moving_block_or_wait_counter = MovingBlock(player)
+        else:
             player.moving_block_or_wait_counter = None
-            return
-
-        for x, y in self.landed_blocks.keys():
-            if self.square_belongs_to_player(player, x, y):
-                self.landed_blocks[x, y] = None
-        player.moving_block_or_wait_counter = MovingBlock(player)
 
     # This method should:
     #   1. Yield the points that are about to be removed. The yielded value
@@ -409,7 +408,7 @@ class Game:
                 self.need_render_event.set()
                 continue
 
-            self.end_waiting(player, self.player_has_a_connected_client(player))
+            self.end_waiting(player)
             self.need_render_event.set()
             return
 
