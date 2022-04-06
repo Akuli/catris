@@ -1057,7 +1057,7 @@ class RingGame(Game):
                 if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     insert_middle_area_here = len(line)
                     continue
-                line += square_bytes.get((x, y), b"  ")
+                line += square_bytes.get(rendering_for_this_player.player_to_world(x, y), b"  ")
 
             line += b"|"
 
