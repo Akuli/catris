@@ -651,7 +651,7 @@ class RingGame(Game):
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         # Let me know if you need to understand how this works. I'll explain.
         dot = x * player.up_x + y * player.up_y
-        return dot >= 0 and 2 * dot ** 2 >= x * x + y * y
+        return dot >= 0 and 2 * dot**2 >= x * x + y * y
 
     def is_valid(self) -> bool:
         assert self.landed_blocks.keys() == {
