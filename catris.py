@@ -1402,7 +1402,7 @@ def get_block_preview(shape_letter: str) -> list[bytes]:
             if (x, y) in points and not color:
                 row += COLOR % color_number
                 color = True
-            if (x, y) not in points and color:
+            elif (x, y) not in points and color:
                 row += COLOR % 0
                 color = False
             row += b"  "
