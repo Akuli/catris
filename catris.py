@@ -7,7 +7,7 @@ import sys
 import textwrap
 import random
 from abc import abstractmethod
-from typing import Any, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator, Callable
 
 if sys.version_info >= (3, 9):
     from asyncio import to_thread
@@ -189,6 +189,10 @@ class Game:
         self.players: list[Player] = []
         self.score = 0
         self.landed_blocks: dict[tuple[int, int], int | None] = {}
+        self.tasks: list[asyncio.Task[Any]] = []
+        self.tasks.append(asyncio.create_task(self._move_blocks_down_task()))
+        self.need_render_event = asyncio.Event()
+        self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
 
     def is_valid(self) -> bool:
         seen = {
@@ -279,6 +283,7 @@ class Game:
             player.moving_block_or_wait_counter.center_x += dx
             player.moving_block_or_wait_counter.center_y += dy
             if self.is_valid():
+                self.need_render_event.set()
                 return True
             player.moving_block_or_wait_counter.center_x -= dx
             player.moving_block_or_wait_counter.center_y -= dy
@@ -302,7 +307,9 @@ class Game:
 
             assert self.is_valid()
             block.rotation = new_rotation
-            if not self.is_valid():
+            if self.is_valid():
+                self.need_render_event.set()
+            else:
                 block.rotation = old_rotation
 
     @abstractmethod
@@ -392,6 +399,60 @@ class Game:
     @abstractmethod
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         pass
+
+    async def _countdown(self, player: Player) -> None:
+        while True:
+            await asyncio.sleep(1)
+            assert isinstance(player.moving_block_or_wait_counter, int)
+            player.moving_block_or_wait_counter -= 1
+            if player.moving_block_or_wait_counter > 0:
+                self.need_render_event.set()
+                continue
+
+            self.end_waiting(player, self.player_has_a_connected_client(player))
+            self.need_render_event.set()
+            return
+
+    async def _move_blocks_down_once(self, fast: bool) -> None:
+        needs_wait_counter = self.move_blocks_down(fast)
+        full_lines_iter = self.find_and_then_wipe_full_lines()
+        full_points = next(full_lines_iter)
+        for player in needs_wait_counter:
+            self.tasks.append(asyncio.create_task(self._countdown(player)))
+        self.need_render_event.set()
+
+        if full_points:
+            print(f"Flashing and wiping {len(full_points)} points")
+            for color in [47, 0, 47, 0]:
+                for point in full_points:
+                    self.landed_blocks[point] = color
+                self.need_render_event.set()
+                await asyncio.sleep(0.1)
+
+            try:
+                next(full_lines_iter)  # run past yield, which deletes points
+            except StopIteration:
+                pass  # function ended without a second yield
+            self.need_render_event.set()
+
+    async def _move_blocks_down_task(self) -> None:
+        # Fast and slow moving from separate tasks is a bad idea.
+        # Then one task could be flashing while the other is moving.
+        time_to_next_fast_move = 0.0
+        time_to_next_slow_move = 0.0
+
+        while True:
+            sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
+            await asyncio.sleep(sleep_time)
+            time_to_next_fast_move -= sleep_time
+            time_to_next_slow_move -= sleep_time
+
+            if time_to_next_fast_move == 0:
+                await self._move_blocks_down_once(fast=True)
+                time_to_next_fast_move = 0.020
+            if time_to_next_slow_move == 0:
+                await self._move_blocks_down_once(fast=False)
+                time_to_next_slow_move = 0.5 / (1 + self.score / 1000)
 
 
 class TraditionalGame(Game):
@@ -926,21 +987,19 @@ GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame]
 class Server:
     def __init__(self) -> None:
         self.clients: set[Client] = set()
-        self.games_and_tasks: dict[Game, list[asyncio.Task[Any]]] = {}
+        self.games: set[Game] = set()
 
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
 
-        existing_games = [
-            game for game in self.games_and_tasks.keys() if isinstance(game, game_class)
-        ]
+        existing_games = [game for game in self.games if isinstance(game, game_class)]
         if existing_games:
             [game] = existing_games
         else:
             game = game_class()
-            self.games_and_tasks[game] = [
-                asyncio.create_task(self._move_blocks_down_task(game))
-            ]
+            game.player_has_a_connected_client = self._player_has_a_connected_client
+            game.tasks.append(asyncio.create_task(self._render_task(game)))
+            self.games.add(game)
 
         assert client.name is not None
         player = game.get_existing_player_or_add_new_player(client.name)
@@ -953,6 +1012,12 @@ class Server:
         for client in self.clients:
             if isinstance(client.view, ChooseGameView):
                 client.render()
+
+    def _player_has_a_connected_client(self, player: Player) -> bool:
+        return any(
+            isinstance(client.view, PlayingView) and client.view.player == player
+            for client in self.clients
+        )
 
     def _add_high_score(self, file_name: str, hs: HighScore) -> list[HighScore]:
         high_scores = []
@@ -994,8 +1059,14 @@ class Server:
                 client.view.set_high_scores(best5)
                 client.render()
 
+    async def _render_task(self, game: Game) -> None:
+        while True:
+            await game.need_render_event.wait()
+            game.need_render_event.clear()
+            self.render_game(game)
+
     def render_game(self, game: Game) -> None:
-        assert game in self.games_and_tasks
+        assert game in self.games
         assert game.is_valid()
 
         playing_clients = [
@@ -1004,9 +1075,11 @@ class Server:
             if isinstance(c.view, PlayingView) and c.view.game == game
         ]
 
+        game.tasks = [t for t in game.tasks if not t.done()]
+
         if game.game_is_over():
-            tasks = self.games_and_tasks.pop(game)
-            for task in tasks:
+            self.games.remove(game)
+            for task in game.tasks:
                 task.cancel()
 
             duration_ns = time.monotonic_ns() - game.start_time
@@ -1034,70 +1107,6 @@ class Server:
         for client in self.clients:
             if isinstance(client.view, ChooseGameView):
                 client.render()
-
-    async def _countdown(self, player: Player, game: Game) -> None:
-        while True:
-            await asyncio.sleep(1)
-            assert isinstance(player.moving_block_or_wait_counter, int)
-            player.moving_block_or_wait_counter -= 1
-            if player.moving_block_or_wait_counter > 0:
-                self.render_game(game)
-                continue
-
-            client_currently_connected = any(
-                isinstance(client.view, PlayingView) and client.view.player == player
-                for client in self.clients
-            )
-            game.end_waiting(player, client_currently_connected)
-            self.render_game(game)
-
-            me = asyncio.current_task()
-            if me in self.games_and_tasks.get(game, []):
-                self.games_and_tasks[game].remove(me)
-            return
-
-    async def _move_blocks_down_once(self, game: Game, fast: bool) -> None:
-        needs_wait_counter = game.move_blocks_down(fast)
-        full_lines_iter = game.find_and_then_wipe_full_lines()
-        full_points = next(full_lines_iter)
-        for player in needs_wait_counter:
-            self.games_and_tasks[game].append(
-                asyncio.create_task(self._countdown(player, game))
-            )
-        self.render_game(game)
-
-        if full_points:
-            print(f"Flashing and wiping {len(full_points)} points")
-            for color in [47, 0, 47, 0]:
-                for point in full_points:
-                    game.landed_blocks[point] = color
-                self.render_game(game)
-                await asyncio.sleep(0.1)
-
-            try:
-                next(full_lines_iter)  # run past yield, which deletes points
-            except StopIteration:
-                pass  # function ended without a second yield
-            self.render_game(game)
-
-    async def _move_blocks_down_task(self, game: Game) -> None:
-        # Fast and slow moving from separate tasks is a bad idea.
-        # Then one task could be flashing while the other is moving.
-        time_to_next_fast_move = 0.0
-        time_to_next_slow_move = 0.0
-
-        while True:
-            sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
-            await asyncio.sleep(sleep_time)
-            time_to_next_fast_move -= sleep_time
-            time_to_next_slow_move -= sleep_time
-
-            if time_to_next_fast_move == 0:
-                await self._move_blocks_down_once(game, fast=True)
-                time_to_next_fast_move = 0.020
-            if time_to_next_slow_move == 0:
-                await self._move_blocks_down_once(game, fast=False)
-                time_to_next_slow_move = 0.5 / (1 + game.score / 1000)
 
     async def handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -1232,16 +1241,14 @@ class ChooseGameView(MenuView):
         return self.selected_index < len(GAME_CLASSES) and any(
             isinstance(g, GAME_CLASSES[self.selected_index])
             and not g.player_can_join(self._client.name)
-            for g in self._client.server.games_and_tasks.keys()
+            for g in self._client.server.games
         )
 
     def _fill_menu(self) -> None:
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
             ongoing_games = [
-                g
-                for g in self._client.server.games_and_tasks.keys()
-                if isinstance(g, game_class)
+                g for g in self._client.server.games if isinstance(g, game_class)
             ]
             if ongoing_games:
                 [game] = ongoing_games
@@ -1405,18 +1412,14 @@ class PlayingView:
         if received in (b"A", b"a", LEFT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
             self.player.set_fast_down(False)
-            self._server.render_game(self.game)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
             self.player.set_fast_down(False)
-            self._server.render_game(self.game)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
             self.game.rotate(self.player, self._client.rotate_counter_clockwise)
             self.player.set_fast_down(False)
-            self._server.render_game(self.game)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
             self.player.set_fast_down(True)
-            self._server.render_game(self.game)
         elif received in (b"R", b"r"):
             self._client.rotate_counter_clockwise = (
                 not self._client.rotate_counter_clockwise
@@ -1429,7 +1432,7 @@ class PlayingView:
         ):
             self.game.players[0].flip_view()
             if self.game.is_valid():
-                self._server.render_game(self.game)
+                self.game.need_render_event.set()
             else:
                 # Can't flip, blocks are on top of each other. Flip again to undo.
                 self.game.players[0].flip_view()
@@ -1573,7 +1576,7 @@ class Client:
                 self.view.player.moving_block_or_wait_counter, MovingBlock
             ):
                 self.view.player.moving_block_or_wait_counter = None
-                self.server.render_game(self.view.game)
+                self.view.game.need_render_event.set()
 
             # \r moves cursor to start of line
             self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
