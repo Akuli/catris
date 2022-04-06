@@ -235,16 +235,6 @@ class Game:
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         pass
 
-    def end_waiting(self, player: Player) -> None:
-        assert player.moving_block_or_wait_counter == 0
-        if self.player_has_a_connected_client(player):
-            for x, y in self.landed_blocks.keys():
-                if self.square_belongs_to_player(player, x, y):
-                    self.landed_blocks[x, y] = None
-            player.moving_block_or_wait_counter = MovingBlock(player)
-        else:
-            player.moving_block_or_wait_counter = None
-
     # This method should:
     #   1. Yield the points that are about to be removed. The yielded value
     #      will be used for the flashing animation.
@@ -400,17 +390,22 @@ class Game:
         pass
 
     async def _countdown(self, player: Player) -> None:
-        while True:
+        assert isinstance(player.moving_block_or_wait_counter, int)
+        while player.moving_block_or_wait_counter > 0:
             await asyncio.sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
             player.moving_block_or_wait_counter -= 1
-            if player.moving_block_or_wait_counter > 0:
-                self.need_render_event.set()
-                continue
-
-            self.end_waiting(player)
             self.need_render_event.set()
-            return
+
+        if self.player_has_a_connected_client(player):
+            for x, y in self.landed_blocks.keys():
+                if self.square_belongs_to_player(player, x, y):
+                    self.landed_blocks[x, y] = None
+            player.moving_block_or_wait_counter = MovingBlock(player)
+        else:
+            player.moving_block_or_wait_counter = None
+
+        self.need_render_event.set()
 
     async def _move_blocks_down_once(self, fast: bool) -> None:
         needs_wait_counter = self.move_blocks_down(fast)
