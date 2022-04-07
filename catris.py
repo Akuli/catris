@@ -516,18 +516,13 @@ class Game:
                         if (square.x, square.y) in exploding_points:
                             self.landed_squares.remove(square)
                     for player in self.players:
-                        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-                            for (
-                                square
-                            ) in player.moving_block_or_wait_counter.squares.copy():
+                        block = player.moving_block_or_wait_counter
+                        if isinstance(block, MovingBlock):
+                            for square in block.squares.copy():
                                 if (square.x, square.y) in exploding_points:
-                                    player.moving_block_or_wait_counter.squares.remove(
-                                        square
-                                    )
-                            if not player.moving_block_or_wait_counter.squares:
-                                player.moving_block_or_wait_counter = MovingBlock(
-                                    player
-                                )
+                                    block.squares.remove(square)
+                            if not block.squares:
+                                block = MovingBlock(player)
 
             if bombs:
                 self.need_render_event.set()
