@@ -59,6 +59,7 @@ BLOCK_SHAPES = {
     "T": [(-1, 0), (0, 0), (1, 0), (0, -1)],
     "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
     "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
+    "BOMB": [(-1, 0), (0, 0), (0, -1), (-1, -1)],
 }
 BLOCK_COLORS = {
     # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
@@ -69,15 +70,13 @@ BLOCK_COLORS = {
     "T": 45,  # purple
     "Z": 41,  # red
     "S": 42,  # green
+    "BOMB": 33,  # yellow text, others are background colors
 }
 
 # Limited to 4 players:
 #   - Traditional mode: must fit in 80 columns
 #   - Ring mode: for obvious reasons
 PLAYER_COLORS = {31, 32, 33, 34}
-
-# If you mess up, how many seconds should you wait?
-WAIT_TIME = 10
 
 # Longest allowed name will get truncated, that's fine
 NAME_MAX_LENGTH = 15
@@ -101,11 +100,45 @@ class HighScore:
         return f"{seconds}sec"
 
 
+class Bomb:
+    def __init__(self) -> None:
+        self.timer = 15
+
+    def copy(self) -> Bomb:
+        result = Bomb()
+        result.timer = self.timer
+        return result
+
+    def get_text(self) -> bytes:
+        if self.timer <= 3:
+            # red middle text, bomb about to explode
+            color = 31
+        else:
+            color = BLOCK_COLORS["BOMB"]
+        text = str(self.timer).center(2).encode("ascii")
+        return (COLOR % color) + text + (COLOR % 0)
+
+
+def choose_shape() -> str:
+    if random.random() < 0.005:
+        print("Adding special bomb block")
+        return "BOMB"
+
+    choices = list(BLOCK_SHAPES.keys())
+    choices.remove("BOMB")
+    return random.choice(choices)
+
+
 class MovingBlock:
     def __init__(self, player: Player):
         self.player = player
-        self.shape_letter = player.next_shape_letter
-        player.next_shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
+        self.shape_id = player.next_shape_id
+        player.next_shape_id = choose_shape()
+
+        if self.shape_id == "BOMB":
+            self.bomb: Bomb | None = Bomb()
+        else:
+            self.bomb = None
 
         self.center_x = player.moving_block_start_x
         self.center_y = player.moving_block_start_y
@@ -134,9 +167,7 @@ class Player:
     moving_block_start_x: int
     moving_block_start_y: int
     moving_block_or_wait_counter: MovingBlock | int | None = None
-    next_shape_letter: str = dataclasses.field(
-        default_factory=(lambda: random.choice(list(BLOCK_SHAPES.keys())))
-    )
+    next_shape_id: str = dataclasses.field(default_factory=choose_shape)
 
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
@@ -193,15 +224,22 @@ class Game:
         self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
         self.score = 0
-        self.landed_blocks: dict[tuple[int, int], int | None] = {}
+        self.landed_blocks: dict[tuple[int, int], int | Bomb | None] = {}
         self.tasks: list[asyncio.Task[Any]] = []
-        self.tasks.append(asyncio.create_task(self._move_blocks_down_task()))
+        self.tasks.append(asyncio.create_task(self._move_blocks_down_task(False)))
+        self.tasks.append(asyncio.create_task(self._move_blocks_down_task(True)))
+        self.tasks.append(asyncio.create_task(self._bomb_task()))
         self.need_render_event = asyncio.Event()
         self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
 
+        # Hold this when wiping full lines or exploding a bomb or similar.
+        # Prevents moving blocks down and causing weird bugs.
+        self.flashing_lock = asyncio.Lock()
+        self.flashing_squares: dict[tuple[int, int], int] = {}
+
     def is_valid(self) -> bool:
         seen = {
-            point for point, color in self.landed_blocks.items() if color is not None
+            point for point, value in self.landed_blocks.items() if value is not None
         }
 
         for block in self._get_moving_blocks():
@@ -222,7 +260,7 @@ class Game:
     @classmethod
     def get_moving_block_coords(cls, block: MovingBlock) -> set[tuple[int, int]]:
         result = set()
-        for rel_x, rel_y in BLOCK_SHAPES[block.shape_letter]:
+        for rel_x, rel_y in BLOCK_SHAPES[block.shape_id]:
             for iteration in range(block.rotation % 4):
                 rel_x, rel_y = -rel_y, rel_x
             result.add((block.center_x + rel_x, block.center_y + rel_y))
@@ -287,7 +325,7 @@ class Game:
     def rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             block = player.moving_block_or_wait_counter
-            if block.shape_letter == "O":
+            if block.shape_id == "O":
                 return
 
             old_rotation = block.rotation
@@ -296,7 +334,7 @@ class Game:
             else:
                 new_rotation = old_rotation + 1
 
-            if block.shape_letter in "ISZ":
+            if block.shape_id in "ISZ":
                 new_rotation %= 2
 
             assert self.is_valid()
@@ -372,20 +410,42 @@ class Game:
                 block.fast_down = False
             elif coords.issubset(self.landed_blocks.keys()):
                 for point in coords:
-                    self.landed_blocks[point] = BLOCK_COLORS[block.shape_letter]
+                    if block.bomb is None:
+                        self.landed_blocks[point] = BLOCK_COLORS[block.shape_id]
+                    else:
+                        self.landed_blocks[point] = block.bomb.copy()
                 player.moving_block_or_wait_counter = MovingBlock(player)
             else:
                 needs_wait_counter.add(player)
 
         return needs_wait_counter
 
-    def get_square_colors(self) -> dict[tuple[int, int], int | None]:
+    def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
-        result = self.landed_blocks.copy()
+        result = {
+            point: (
+                value.get_text()
+                if isinstance(value, Bomb)
+                else (COLOR % value) + b"  " + (COLOR % 0)
+            )
+            for point, value in self.landed_blocks.items()
+            if value is not None
+        }
         for moving_block in self._get_moving_blocks():
             for point in self.get_moving_block_coords(moving_block):
-                if point in result:
-                    result[point] = BLOCK_COLORS[moving_block.shape_letter]
+                if point in self.landed_blocks:
+                    if moving_block.bomb is None:
+                        result[point] = (
+                            (COLOR % BLOCK_COLORS[moving_block.shape_id])
+                            + b"  "
+                            + (COLOR % 0)
+                        )
+                    else:
+                        result[point] = moving_block.bomb.get_text()
+
+        for point, color in self.flashing_squares.items():
+            if point in self.landed_blocks:
+                result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
         return result
 
@@ -393,8 +453,52 @@ class Game:
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         pass
 
+    async def _bomb_task(self) -> None:
+        while True:
+            await asyncio.sleep(1)
+
+            bombs: list[tuple[int, int, Bomb, Player | None]] = []
+            for (x, y), value in self.landed_blocks.items():
+                if isinstance(value, Bomb):
+                    bombs.append((x, y, value, None))
+
+            for player in self.players:
+                block = player.moving_block_or_wait_counter
+                if isinstance(block, MovingBlock) and block.bomb is not None:
+                    for x, y in self.get_moving_block_coords(block):
+                        bombs.append((x, y, block.bomb, player))
+
+            # Same Bomb object can appear multiple times. Decrement only once.
+            for bomb in set(b for x, y, b, player in bombs):
+                bomb.timer -= 1
+
+            exploding_points = set()
+            for bomb_x, bomb_y, bomb, player_who_moves_bomb in bombs:
+                if bomb.timer == 0:
+                    print("Bomb explodes! BOOOOOOMM!!!11!")
+
+                    radius = 3.5
+                    exploding_points |= {
+                        (x, y)
+                        for x, y in self.landed_blocks.keys()
+                        if (x - bomb_x) ** 2 + (y - bomb_y) ** 2 < radius**2
+                    }
+                    if player_who_moves_bomb is not None:
+                        player_who_moves_bomb.moving_block_or_wait_counter = (
+                            MovingBlock(player_who_moves_bomb)
+                        )
+
+            if exploding_points:
+                async with self.flashing_lock:
+                    await self.flash(exploding_points, 41)
+                    for point in exploding_points:
+                        self.landed_blocks[point] = None
+
+            if bombs:
+                self.need_render_event.set()
+
     async def _countdown(self, player: Player) -> None:
-        player.moving_block_or_wait_counter = WAIT_TIME
+        player.moving_block_or_wait_counter = 10
         self.need_render_event.set()
 
         while player.moving_block_or_wait_counter > 0:
@@ -413,46 +517,51 @@ class Game:
 
         self.need_render_event.set()
 
-    async def _move_blocks_down_once(self, fast: bool) -> None:
-        needs_wait_counter = self.move_blocks_down(fast)
-        full_lines_iter = self.find_and_then_wipe_full_lines()
-        full_points = next(full_lines_iter)
-        for player in needs_wait_counter:
-            self.tasks.append(asyncio.create_task(self._countdown(player)))
+    # Make sure to hold flashing_lock.
+    # If you want to erase landed blocks, do that too while holding the lock.
+    async def flash(self, points: set[tuple[int, int]], color: int) -> None:
+        for display_color in [color, 0, color, 0]:
+            for point in points:
+                self.flashing_squares[point] = display_color
+            self.need_render_event.set()
+            await asyncio.sleep(0.1)
+
+        for point in points:
+            try:
+                del self.flashing_squares[point]
+            except KeyError:
+                # can happen with simultaneous overlapping flashes
+                pass
         self.need_render_event.set()
 
-        if full_points:
-            print(f"Flashing and wiping {len(full_points)} points")
-            for color in [47, 0, 47, 0]:
-                for point in full_points:
-                    self.landed_blocks[point] = color
-                self.need_render_event.set()
-                await asyncio.sleep(0.1)
-
-            try:
-                next(full_lines_iter)  # run past yield, which deletes points
-            except StopIteration:
-                pass  # function ended without a second yield
+    async def _move_blocks_down_once(self, fast: bool) -> None:
+        needs_wait_counter = self.move_blocks_down(fast)
+        async with self.flashing_lock:
+            full_lines_iter = self.find_and_then_wipe_full_lines()
+            full_points = next(full_lines_iter)
+            for player in needs_wait_counter:
+                self.tasks.append(asyncio.create_task(self._countdown(player)))
             self.need_render_event.set()
 
-    async def _move_blocks_down_task(self) -> None:
-        # Fast and slow moving from separate tasks is a bad idea.
-        # Then one task could be flashing while the other is moving.
-        time_to_next_fast_move = 0.0
-        time_to_next_slow_move = 0.0
+            if full_points:
+                await self.flash(full_points, 47)
+                try:
+                    # run past yield, which deletes points
+                    next(full_lines_iter)
+                except StopIteration:
+                    # This means function ended without a second yield.
+                    # It's expected, and in fact happens every time.
+                    pass
 
+            self.need_render_event.set()
+
+    async def _move_blocks_down_task(self, fast: bool) -> None:
         while True:
-            sleep_time = min(time_to_next_fast_move, time_to_next_slow_move)
-            await asyncio.sleep(sleep_time)
-            time_to_next_fast_move -= sleep_time
-            time_to_next_slow_move -= sleep_time
-
-            if time_to_next_fast_move == 0:
-                await self._move_blocks_down_once(fast=True)
-                time_to_next_fast_move = 0.020
-            if time_to_next_slow_move == 0:
-                await self._move_blocks_down_once(fast=False)
-                time_to_next_slow_move = 0.5 / (1 + self.score / 1000)
+            if fast:
+                await asyncio.sleep(0.02)
+            else:
+                await asyncio.sleep(0.5 / (1 + self.score / 1000))
+            await self._move_blocks_down_once(fast)
 
 
 class TraditionalGame(Game):
@@ -494,6 +603,7 @@ class TraditionalGame(Game):
                 color for point, color in self.landed_blocks.items() if point[1] == y
             ]
             if row and None not in row:
+                print("Clearing full row:", row)
                 y_coords.append(y)
                 points.update((x, y) for x in range(self._get_width()))
 
@@ -527,11 +637,11 @@ class TraditionalGame(Game):
 
         for full_y in sorted(y_coords):
             new_landed_blocks = {}
-            for (x, y), color in self.landed_blocks.items():
+            for (x, y), value in self.landed_blocks.items():
                 if y < full_y:
-                    new_landed_blocks[x, y + 1] = color
+                    new_landed_blocks[x, y + 1] = value
                 if y > full_y:
-                    new_landed_blocks[x, y] = color
+                    new_landed_blocks[x, y] = value
             self.landed_blocks = {
                 point: new_landed_blocks.get(point, None)
                 for point in self.landed_blocks.keys()
@@ -581,18 +691,12 @@ class TraditionalGame(Game):
         header_line += b"o"
 
         lines = [name_line, header_line]
-        square_colors = self.get_square_colors()
+        square_bytes = self.get_square_texts()
 
         for y in range(self.HEIGHT):
             line = b"|"
             for x in range(self._get_width()):
-                color = square_colors[x, y]
-                if color is None:
-                    line += b"  "
-                else:
-                    line += COLOR % color
-                    line += b"  "
-                    line += COLOR % 0
+                line += square_bytes.get((x, y), b"  ")
             line += b"|"
             lines.append(line)
 
@@ -753,8 +857,8 @@ class RingGame(Game):
             r
             for r in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
             if not any(
-                color is None
-                for (x, y), color in self.landed_blocks.items()
+                value is None
+                for (x, y), value in self.landed_blocks.items()
                 if max(abs(x), abs(y)) == r
             )
         ]
@@ -846,11 +950,11 @@ class RingGame(Game):
         point_and_dir_dot_product = dir_x * points[0][0] + dir_y * points[0][1]
         point_and_dir_determinants = [dir_y * x - dir_x * y for x, y in points]
 
-        new_landed_blocks: dict[tuple[int, int], int | None] = {
+        new_landed_blocks: dict[tuple[int, int], int | Bomb | None] = {
             (x, y): None for x, y in self.landed_blocks.keys()
         }
-        for (x, y), color in self.landed_blocks.items():
-            if color is None or (x, y) in points:
+        for (x, y), value in self.landed_blocks.items():
+            if value is None or (x, y) in points:
                 continue
 
             # If (x, y) aligns with the line and moving in the direction would
@@ -862,19 +966,19 @@ class RingGame(Game):
                 x += dir_x
                 y += dir_y
 
-            new_landed_blocks[x, y] = color
+            new_landed_blocks[x, y] = value
 
         self.landed_blocks = new_landed_blocks
 
     def _delete_ring(self, r: int) -> None:
         new_landed_blocks = {}
-        for (x, y), color in self.landed_blocks.items():
-            if color is None:
+        for (x, y), value in self.landed_blocks.items():
+            if value is None:
                 continue
 
             # preserve squares inside the ring
             if max(abs(x), abs(y)) < r:
-                new_landed_blocks[x, y] = color
+                new_landed_blocks[x, y] = value
 
             # delete squares on the ring
             if max(abs(x), abs(y)) == r:
@@ -896,7 +1000,7 @@ class RingGame(Game):
             if move_down:
                 y += 1
 
-            new_landed_blocks[x, y] = color
+            new_landed_blocks[x, y] = value
 
         self.landed_blocks = {
             (x, y): new_landed_blocks.get((x, y), None)
@@ -948,7 +1052,7 @@ class RingGame(Game):
             players_by_letter[letter] = player
 
         middle_area_content = self._get_middle_area_content(players_by_letter)
-        square_colors = self.get_square_colors()
+        square_bytes = self.get_square_texts()
 
         for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
             insert_middle_area_here = None
@@ -957,14 +1061,9 @@ class RingGame(Game):
                 if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     insert_middle_area_here = len(line)
                     continue
-
-                color = square_colors[rendering_for_this_player.player_to_world(x, y)]
-                if color is None:
-                    line += b"  "
-                else:
-                    line += COLOR % color
-                    line += b"  "
-                    line += COLOR % 0
+                line += square_bytes.get(
+                    rendering_for_this_player.player_to_world(x, y), b"  "
+                )
 
             line += b"|"
 
@@ -1390,12 +1489,15 @@ class GameOverView(MenuView):
         return False
 
 
-def get_block_preview(shape_letter: str) -> list[bytes]:
-    points = BLOCK_SHAPES[shape_letter]
-    color_number = BLOCK_COLORS[shape_letter]
+def get_block_preview(shape_id: str) -> list[bytes]:
+    if shape_id == "BOMB":
+        return [(COLOR % BLOCK_COLORS["BOMB"]) + b"BOMB!!!" + (COLOR % 0)]
+
+    points = BLOCK_SHAPES[shape_id]
+    color_number = BLOCK_COLORS[shape_id]
 
     result = []
-    for y in (-1, 0, 1):
+    for y in (-1, 0):
         row = b""
         color = False
         for x in (-2, -1, 0, 1):
@@ -1429,7 +1531,7 @@ class PlayingView:
 
         lines[7] += b"  Next:"
         for index, row in enumerate(
-            get_block_preview(self.player.next_shape_letter), start=9
+            get_block_preview(self.player.next_shape_id), start=9
         ):
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
