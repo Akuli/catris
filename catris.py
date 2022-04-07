@@ -394,7 +394,7 @@ class Game:
 
         return False
 
-    # RingGame overrides this to get blocks to wrap back to start
+    # RingGame overrides this to get blocks to wrap back to top
     def fix_moving_square(self, player: Player, square: Square) -> None:
         pass
 
