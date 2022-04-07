@@ -108,33 +108,6 @@ class Square:
         self.offset_y = 0
         self.wrap_around_end = False  # for ring mode
 
-    def create_squares_around(
-        self, relative_coords: list[tuple[int, int]], player: Player
-    ) -> list[Square]:
-        result = []
-
-        for x, y in relative_coords:
-            # Orient initial block so that it always looks the same.
-            # Otherwise may create subtle bugs near end of game, where freshly
-            # added block overlaps with landed blocks.
-            rotation = {
-                (0, -1): 0,
-                (1, 0): 1,
-                (0, 1): 2,
-                (-1, 0): 3,
-            }[player.up_x, player.up_y]
-            for iteration in range(rotation):
-                x, y = -y, x
-
-            square = copy.copy(self)
-            square.x = player.moving_block_start_x + x
-            square.y = player.moving_block_start_y + y
-            square.offset_x = -x
-            square.offset_y = -y
-            result.append(square)
-
-        return result
-
     def rotate(self, counter_clockwise: bool) -> None:
         self.x += self.offset_x
         self.y += self.offset_y
@@ -194,15 +167,37 @@ def create_moving_squares(player: Player) -> list[Square]:
         center_square: Square = BombSquare(
             player.moving_block_start_x, player.moving_block_start_y
         )
-        coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
+        relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     else:
         shape_id = random.choice(list(BLOCK_SHAPES.keys()))
         center_square = NormalSquare(
             player.moving_block_start_x, player.moving_block_start_y, shape_id
         )
-        coords = BLOCK_SHAPES[shape_id]
+        relative_coords = BLOCK_SHAPES[shape_id]
 
-    return center_square.create_squares_around(coords, player)
+    result = []
+
+    for x, y in relative_coords:
+        # Orient initial block so that it always looks the same.
+        # Otherwise may create subtle bugs near end of game, where freshly
+        # added block overlaps with landed blocks.
+        rotation = {
+            (0, -1): 0,
+            (1, 0): 1,
+            (0, 1): 2,
+            (-1, 0): 3,
+        }[player.up_x, player.up_y]
+        for iteration in range(rotation):
+            x, y = -y, x
+
+        square = copy.copy(center_square)
+        square.x = player.moving_block_start_x + x
+        square.y = player.moving_block_start_y + y
+        square.offset_x = -x
+        square.offset_y = -y
+        result.append(square)
+
+    return result
 
 
 class MovingBlock:
