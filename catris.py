@@ -340,7 +340,7 @@ class Game:
     #
     # When this method is done, moving and landed blocks may overlap.
     @abstractmethod
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
         pass
 
     def finish_wiping_full_lines(self) -> None:
@@ -568,13 +568,13 @@ class Game:
         needs_wait_counter = self.move_blocks_down(fast)
         async with self.flashing_lock:
             full_lines_iter = self.find_and_then_wipe_full_lines()
-            full_points = next(full_lines_iter)
+            full_squares = next(full_lines_iter)
             for player in needs_wait_counter:
                 self.tasks.append(asyncio.create_task(self._countdown(player)))
             self.need_render_event.set()
 
-            if full_points:
-                await self.flash(full_points, 47)
+            if full_squares:
+                await self.flash({(s.x, s.y) for s in full_squares}, 47)
                 try:
                     # run past yield, which deletes points
                     next(full_lines_iter)
@@ -624,26 +624,24 @@ class TraditionalGame(Game):
             for square in block.squares
         )
 
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
-        y_coords = []
-        points: set[tuple[int, int]] = set()
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
+        full_rows = {}
 
         for y in range(self.HEIGHT):
-            x_coords = {square.x for square in self.landed_squares if square.y == y}
-            if x_coords == set(range(self._get_width())) and self._get_width() != 0:
+            row = {square for square in self.landed_squares if square.y == y}
+            if len(row) == self._get_width() and self._get_width() != 0:
                 print("Clearing full row:", y)
-                y_coords.append(y)
-                points.update((x, y) for x in range(self._get_width()))
+                full_rows[y] = row
 
-        yield points
+        yield {square for squares in full_rows.values() for square in squares}
 
-        if len(y_coords) == 0:
+        if len(full_rows) == 0:
             single_player_score = 0
-        elif len(y_coords) == 1:
+        elif len(full_rows) == 1:
             single_player_score = 10
-        elif len(y_coords) == 2:
+        elif len(full_rows) == 2:
             single_player_score = 30
-        elif len(y_coords) == 3:
+        elif len(full_rows) == 3:
             single_player_score = 60
         else:
             single_player_score = 100
@@ -663,10 +661,9 @@ class TraditionalGame(Game):
         if n >= 1:  # avoid floats
             self.score += single_player_score * 3 ** (n - 1)
 
-        for full_y in sorted(y_coords):
-            for square in self.landed_squares.copy():
-                if square.y == full_y:
-                    self.landed_squares.remove(square)
+        for full_y, squares in sorted(full_rows.items()):
+            self.landed_squares -= squares
+            for square in self.landed_squares:
                 if square.y < full_y:
                     square.y += 1
 
@@ -852,7 +849,7 @@ class RingGame(Game):
         return True
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
         all_radiuses_with_duplicates = [
             max(abs(square.x), abs(square.y)) for square in self.landed_squares
         ]
@@ -910,17 +907,19 @@ class RingGame(Game):
                 ]
                 lines.append((dir_x, dir_y, points))
 
-        landed_points = {(square.x, square.y) for square in self.landed_squares}
-        full_lines = [
-            (dir_x, dir_y, points)
-            for dir_x, dir_y, points in lines
-            if all(p in landed_points for p in points)
-        ]
+        landed_squares_by_location = {
+            (square.x, square.y): square for square in self.landed_squares
+        }
+        full_lines = []
+        for dir_x, dir_y, points in lines:
+            if all(p in landed_squares_by_location for p in points):
+                squares = [landed_squares_by_location[p] for p in points]
+                full_lines.append((dir_x, dir_y, squares))
 
         yield (
-            {point for dx, dy, points in full_lines for point in points}
+            {square for dx, dy, squares in full_lines for square in squares}
             | {
-                (square.x, square.y)
+                square
                 for square in self.landed_squares
                 if max(abs(square.x), abs(square.y)) in full_radiuses
             }
@@ -930,31 +929,26 @@ class RingGame(Game):
 
         # Remove lines in order where removing first line doesn't mess up
         # coordinates of second, etc
-        def sorting_key(line: tuple[int, int, list[tuple[int, int]]]) -> int:
+        def sorting_key(line: tuple[int, int, list[Square]]) -> int:
             dir_x, dir_y, points = line
-            x, y = points[0]  # any point would do
-            return dir_x * x + dir_y * y
+            square = squares[0]  # any square would do
+            return dir_x * square.x + dir_y * square.y
 
-        for dir_x, dir_y, points in sorted(full_lines, key=sorting_key):
-            self._delete_line(dir_x, dir_y, points)
-        for r in full_radiuses:
+        for dir_x, dir_y, squares in sorted(full_lines, key=sorting_key):
+            self._delete_line(dir_x, dir_y, squares)
+        for r in full_radiuses:  # must be in the correct order!
             self._delete_ring(r)
 
         self.finish_wiping_full_lines()
 
-    def _delete_line(
-        self, dir_x: int, dir_y: int, points: list[tuple[int, int]]
-    ) -> None:
+    def _delete_line(self, dir_x: int, dir_y: int, squares: list[Square]) -> None:
         # dot product describes where it is along the direction, and is same for all points
         # determinant describes where it is in the opposite direction
-        point_and_dir_dot_product = dir_x * points[0][0] + dir_y * points[0][1]
-        point_and_dir_determinants = [dir_y * x - dir_x * y for x, y in points]
+        point_and_dir_dot_product = dir_x * squares[0].x + dir_y * squares[0].y
+        point_and_dir_determinants = [dir_y * s.x - dir_x * s.y for s in squares]
 
-        for square in self.landed_squares.copy():
-            if (square.x, square.y) in points:
-                self.landed_squares.remove(square)
-                continue
-
+        self.landed_squares -= set(squares)
+        for square in self.landed_squares:
             # If square aligns with the line and the direction points towards
             # the line, then move it
             if (
