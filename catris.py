@@ -104,8 +104,9 @@ class Square:
         self.x = x
         self.y = y
         # The offset is a vector from current position (x, y) to center of rotation
-        self._offset_x = 0
-        self._offset_y = 0
+        self.offset_x = 0
+        self.offset_y = 0
+        self.wrap_around_end = False  # for ring mode
 
     def create_squares_around(
         self, relative_coords: list[tuple[int, int]], player: Player
@@ -128,21 +129,21 @@ class Square:
             square = copy.copy(self)
             square.x = player.moving_block_start_x + x
             square.y = player.moving_block_start_y + y
-            square._offset_x = -x
-            square._offset_y = -y
+            square.offset_x = -x
+            square.offset_y = -y
             result.append(square)
 
         return result
 
     def rotate(self, counter_clockwise: bool) -> None:
-        self.x += self._offset_x
-        self.y += self._offset_y
+        self.x += self.offset_x
+        self.y += self.offset_y
         if counter_clockwise:
-            self._offset_x, self._offset_y = self._offset_y, -self._offset_x
+            self.offset_x, self.offset_y = self.offset_y, -self.offset_x
         else:
-            self._offset_x, self._offset_y = -self._offset_y, self._offset_x
-        self.x -= self._offset_x
-        self.y -= self._offset_y
+            self.offset_x, self.offset_y = -self.offset_y, self.offset_x
+        self.x -= self.offset_x
+        self.y -= self.offset_y
 
     @abstractmethod
     def get_text(self) -> bytes:
@@ -272,6 +273,8 @@ class Player:
             for square in self.moving_block_or_wait_counter.squares:
                 square.x *= -1
                 square.y *= -1
+                square.offset_x *= -1
+                square.offset_y *= -1
 
 
 class Game:
@@ -365,22 +368,30 @@ class Game:
             for square in player.moving_block_or_wait_counter.squares:
                 square.x += dx
                 square.y += dy
+                self.fix_moving_square(player, square)
             if self.is_valid():
                 self.need_render_event.set()
                 return True
             for square in player.moving_block_or_wait_counter.squares:
                 square.x -= dx
                 square.y -= dy
+                self.fix_moving_square(player, square)
 
         return False
+
+    # RingGame overrides this to get blocks to wrap back to start
+    def fix_moving_square(self, player: Player, square: Square) -> None:
+        pass
 
     def rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             for square in player.moving_block_or_wait_counter.squares:
                 square.rotate(counter_clockwise)
+                self.fix_moving_square(player, square)
             if not self.is_valid():
                 for square in player.moving_block_or_wait_counter.squares:
                     square.rotate(not counter_clockwise)
+                    self.fix_moving_square(player, square)
 
     @abstractmethod
     def add_player(self, name: str, color: int) -> Player:
@@ -827,11 +838,6 @@ class RingGame(Game):
 
         return result
 
-    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
-        # Let me know if you need to understand how this works. I'll explain.
-        dot = x * player.up_x + y * player.up_y
-        return dot >= 0 and 2 * dot**2 >= x * x + y * y
-
     def is_valid(self) -> bool:
         if not super().is_valid():
             return False
@@ -982,9 +988,24 @@ class RingGame(Game):
             if move_down:
                 square.y += 1
 
-    def delete_full_lines_raw(self, full_lines: list[int]) -> None:
-        for r in sorted(full_lines, reverse=True):
-            self._delete_ring(r)
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
+        # Let me know if you need to understand how this works. I'll explain.
+        dot = x * player.up_x + y * player.up_y
+        return dot >= 0 and 2 * dot**2 >= x * x + y * y
+
+    def fix_moving_square(self, player: Player, square: Square) -> None:
+        x, y = player.world_to_player(square.x, square.y)
+
+        # Moving blocks don't initially wrap, but they start wrapping once they
+        # go below the midpoint
+        if y > 0:
+            square.wrap_around_end = True
+
+        if square.wrap_around_end:
+            y += self.GAME_RADIUS
+            y %= 2*self.GAME_RADIUS + 1
+            y -= self.GAME_RADIUS
+            square.x, square.y = player.player_to_world(x, y)
 
     def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
@@ -1464,12 +1485,12 @@ class GameOverView(MenuView):
         return False
 
 
-def get_block_preview(squares: list[Square]) -> list[bytes]:
-    min_x = min(square.x for square in squares)
-    min_y = min(square.y for square in squares)
-    max_x = max(square.x for square in squares)
-    max_y = max(square.y for square in squares)
-    squares_by_location = {(square.x, square.y): square for square in squares}
+def get_block_preview(player: Player) -> list[bytes]:
+    squares_by_location = {player.world_to_player(square.x, square.y): square for square in player.next_moving_squares}
+    min_x = min(x for x, y in squares_by_location.keys())
+    min_y = min(y for x, y in squares_by_location.keys())
+    max_x = max(x for x, y in squares_by_location.keys())
+    max_y = max(y for x, y in squares_by_location.keys())
 
     result = []
     for y in range(min_y, max_y + 1):
@@ -1499,7 +1520,7 @@ class PlayingView:
 
         lines[7] += b"  Next:"
         for index, row in enumerate(
-            get_block_preview(self.player.next_moving_squares), start=9
+            get_block_preview(self.player), start=9
         ):
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
