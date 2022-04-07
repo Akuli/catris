@@ -853,11 +853,13 @@ class RingGame(Game):
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
-        all_radiuses_with_duplicates = [max(abs(square.x), abs(square.y)) for square in self.landed_squares]
+        all_radiuses_with_duplicates = [
+            max(abs(square.x), abs(square.y)) for square in self.landed_squares
+        ]
         full_radiuses = [
             r
             for r in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
-            if all_radiuses_with_duplicates.count(r) == 8*r
+            if all_radiuses_with_duplicates.count(r) == 8 * r
         ]
 
         # Lines represented as (dir_x, dir_y, list_of_points) tuples.
@@ -1003,7 +1005,7 @@ class RingGame(Game):
 
         if square.wrap_around_end:
             y += self.GAME_RADIUS
-            y %= 2*self.GAME_RADIUS + 1
+            y %= 2 * self.GAME_RADIUS + 1
             y -= self.GAME_RADIUS
             square.x, square.y = player.player_to_world(x, y)
 
@@ -1486,7 +1488,10 @@ class GameOverView(MenuView):
 
 
 def get_block_preview(player: Player) -> list[bytes]:
-    squares_by_location = {player.world_to_player(square.x, square.y): square for square in player.next_moving_squares}
+    squares_by_location = {
+        player.world_to_player(square.x, square.y): square
+        for square in player.next_moving_squares
+    }
     min_x = min(x for x, y in squares_by_location.keys())
     min_y = min(y for x, y in squares_by_location.keys())
     max_x = max(x for x, y in squares_by_location.keys())
@@ -1519,9 +1524,7 @@ class PlayingView:
             lines[6] += b"  Counter-clockwise"
 
         lines[7] += b"  Next:"
-        for index, row in enumerate(
-            get_block_preview(self.player), start=9
-        ):
+        for index, row in enumerate(get_block_preview(self.player), start=9):
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
