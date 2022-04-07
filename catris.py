@@ -135,7 +135,6 @@ class Square:
         return result
 
     def rotate(self, counter_clockwise: bool) -> None:
-        print("Old coords", self.x, self.y)
         self.x += self._offset_x
         self.y += self._offset_y
         if counter_clockwise:
@@ -144,7 +143,6 @@ class Square:
             self._offset_x, self._offset_y = -self._offset_y, self._offset_x
         self.x -= self._offset_x
         self.y -= self._offset_y
-        print("New coords", self.x, self.y)
 
     @abstractmethod
     def get_text(self) -> bytes:
@@ -165,10 +163,8 @@ class NormalSquare(Square):
             return
         elif self.shape_id in "ISZ":
             if self.next_rotate_goes_backwards:
-                print("Foo")
                 super().rotate(counter_clockwise=False)
             else:
-                print("Bar")
                 super().rotate(counter_clockwise=True)
             self.next_rotate_goes_backwards = not self.next_rotate_goes_backwards
         else:
@@ -383,7 +379,6 @@ class Game:
             for square in player.moving_block_or_wait_counter.squares:
                 square.rotate(counter_clockwise)
             if not self.is_valid():
-                print("Rotation not valid!!!")
                 for square in player.moving_block_or_wait_counter.squares:
                     square.rotate(not counter_clockwise)
 
