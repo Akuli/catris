@@ -1,3 +1,4 @@
+# FIXME: After a flip, block wraps when shouldn't
 from __future__ import annotations
 import asyncio
 import copy
@@ -314,7 +315,16 @@ class Game:
 
     def is_valid(self) -> bool:
         squares = self._get_all_squares()
-        return len(squares) == len(set((square.x, square.y) for square in squares))
+        if len(squares) != len(set((square.x, square.y) for square in squares)):
+            # print("Invalid state: duplicate squares")
+            return False
+        if not all(
+            (square.x, square.y) in self.valid_landed_coordinates
+            for square in self.landed_squares
+        ):
+            # print("Invalid state: landed squares outside valid area")
+            return False
+        return True
 
     def game_is_over(self) -> bool:
         return bool(self.players) and not any(
@@ -354,6 +364,8 @@ class Game:
         for square in self.landed_squares.copy():
             if (square.x, square.y) in bad_coords:
                 self.landed_squares.remove(square)
+            else:
+                bad_coords.add((square.x, square.y))  # delete duplicates
 
         assert self.is_valid()
 
@@ -845,9 +857,11 @@ class RingGame(Game):
         for block in self._get_moving_blocks():
             for square in block.squares:
                 if max(abs(square.x), abs(square.y)) <= self.MIDDLE_AREA_RADIUS:
+                    # print("Invalid state: moving block inside middle area")
                     return False
                 player_x, player_y = block.player.world_to_player(square.x, square.y)
                 if player_x < -self.GAME_RADIUS or player_x > self.GAME_RADIUS:
+                    # print("Invalid state: moving block out of horizontal bounds")
                     return False
         return True
 
@@ -950,12 +964,13 @@ class RingGame(Game):
         point_and_dir_dot_product = dir_x * points[0][0] + dir_y * points[0][1]
         point_and_dir_determinants = [dir_y * x - dir_x * y for x, y in points]
 
-        for square in self.landed_squares:
+        for square in self.landed_squares.copy():
             if (square.x, square.y) in points:
+                self.landed_squares.remove(square)
                 continue
 
-            # If (x, y) aligns with the line and moving in the direction would
-            # bring it closer to the line, then move it
+            # If square aligns with the line and the direction points towards
+            # the line, then move it
             if (
                 dir_y * square.x - dir_x * square.y in point_and_dir_determinants
                 and square.x * dir_x + square.y * dir_y < point_and_dir_dot_product
