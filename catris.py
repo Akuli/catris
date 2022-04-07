@@ -59,7 +59,7 @@ BLOCK_SHAPES = {
     "T": [(-1, 0), (0, 0), (1, 0), (0, -1)],
     "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
     "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
-    "BOMB": [(x, y) for x in (-1, 0, 1) for y in (-2, -1, 0)],
+    "BOMB": [(-1, 0), (0, 0), (0, -1), (-1, -1)],
 }
 BLOCK_COLORS = {
     # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
@@ -465,11 +465,15 @@ class Game:
             for player in self.players:
                 block = player.moving_block_or_wait_counter
                 if isinstance(block, MovingBlock) and block.bomb is not None:
-                    bombs.append((block.center_x, block.center_y, block.bomb, player))
+                    for x, y in self.get_moving_block_coords(block):
+                        bombs.append((x, y, block.bomb, player))
+
+            # Same Bomb object can appear multiple times. Decrement only once.
+            for bomb in set(b for x, y, b, player in bombs):
+                bomb.timer -= 1
 
             exploding_points = set()
             for bomb_x, bomb_y, bomb, player_who_moves_bomb in bombs:
-                bomb.timer -= 1
                 if bomb.timer == 0:
                     print("Bomb explodes! BOOOOOOMM!!!11!")
 
