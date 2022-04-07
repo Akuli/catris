@@ -300,11 +300,11 @@ class Game:
         self.flashing_squares: dict[tuple[int, int], int] = {}
 
     def _get_moving_blocks(self) -> list[MovingBlock]:
-        result = []
-        for player in self.players:
-            if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-                result.append(player.moving_block_or_wait_counter)
-        return result
+        return [
+            player.moving_block_or_wait_counter
+            for player in self.players
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        ]
 
     def _get_all_squares(self) -> list[Square]:
         return self.landed_squares + [
