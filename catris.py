@@ -120,7 +120,7 @@ class Bomb:
 
 
 def choose_shape() -> str:
-    if random.random() < 0.01:
+    if random.random() < 0.005:
         print("Adding special bomb block")
         return "BOMB"
 
