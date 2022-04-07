@@ -1,4 +1,3 @@
-# FIXME: After a flip, block wraps when shouldn't
 from __future__ import annotations
 import asyncio
 import copy
@@ -270,12 +269,16 @@ class Player:
         self.up_y *= -1
         self.moving_block_start_x *= -1
         self.moving_block_start_y *= -1
+
+        flipping_squares = self.next_moving_squares.copy()
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            for square in self.moving_block_or_wait_counter.squares:
-                square.x *= -1
-                square.y *= -1
-                square.offset_x *= -1
-                square.offset_y *= -1
+            flipping_squares.extend(self.moving_block_or_wait_counter.squares)
+
+        for square in flipping_squares:
+            square.x *= -1
+            square.y *= -1
+            square.offset_x *= -1
+            square.offset_y *= -1
 
 
 class Game:
