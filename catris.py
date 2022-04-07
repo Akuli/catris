@@ -161,7 +161,7 @@ class BombSquare(Square):
         pass
 
 
-def create_moving_squares(player: Player) -> list[Square]:
+def create_moving_squares(player: Player) -> set[Square]:
     if random.random() < 0.005:
         print("Adding special bomb block")
         center_square: Square = BombSquare(
@@ -175,7 +175,7 @@ def create_moving_squares(player: Player) -> list[Square]:
         )
         relative_coords = BLOCK_SHAPES[shape_id]
 
-    result = []
+    result = set()
 
     for player_x, player_y in relative_coords:
         # Orient initial block so that it always looks the same.
@@ -188,7 +188,7 @@ def create_moving_squares(player: Player) -> list[Square]:
         square.y = player.moving_block_start_y + y
         square.offset_x = -x
         square.offset_y = -y
-        result.append(square)
+        result.add(square)
 
     return result
 
@@ -260,7 +260,7 @@ class Player:
 
         flipping_squares = self.next_moving_squares.copy()
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            flipping_squares.extend(self.moving_block_or_wait_counter.squares)
+            flipping_squares |= self.moving_block_or_wait_counter.squares
 
         for square in flipping_squares:
             square.x *= -1
@@ -279,7 +279,7 @@ class Game:
         self.players: list[Player] = []
         self.score = 0
         self.valid_landed_coordinates: set[tuple[int, int]] = set()
-        self.landed_squares: list[Square] = []
+        self.landed_squares: set[Square] = set()
         self.tasks: list[asyncio.Task[Any]] = []
         self.tasks.append(asyncio.create_task(self._move_blocks_down_task(False)))
         self.tasks.append(asyncio.create_task(self._move_blocks_down_task(True)))
@@ -299,10 +299,10 @@ class Game:
             if isinstance(player.moving_block_or_wait_counter, MovingBlock)
         ]
 
-    def _get_all_squares(self) -> list[Square]:
-        return self.landed_squares + [
+    def _get_all_squares(self) -> set[Square]:
+        return self.landed_squares | {
             square for block in self._get_moving_blocks() for square in block.squares
-        ]
+        }
 
     def is_valid(self) -> bool:
         squares = self._get_all_squares()
@@ -463,7 +463,7 @@ class Game:
                 (square.x, square.y) in self.valid_landed_coordinates
                 for square in block.squares
             ):
-                self.landed_squares.extend(block.squares)
+                self.landed_squares |= block.squares
                 player.moving_block_or_wait_counter = MovingBlock(player)
             else:
                 needs_wait_counter.add(player)
