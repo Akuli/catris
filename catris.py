@@ -177,18 +177,11 @@ def create_moving_squares(player: Player) -> list[Square]:
 
     result = []
 
-    for x, y in relative_coords:
+    for player_x, player_y in relative_coords:
         # Orient initial block so that it always looks the same.
         # Otherwise may create subtle bugs near end of game, where freshly
         # added block overlaps with landed blocks.
-        rotation = {
-            (0, -1): 0,
-            (1, 0): 1,
-            (0, 1): 2,
-            (-1, 0): 3,
-        }[player.up_x, player.up_y]
-        for iteration in range(rotation):
-            x, y = -y, x
+        x, y = player.player_to_world(player_x, player_y)
 
         square = copy.copy(center_square)
         square.x = player.moving_block_start_x + x
