@@ -124,18 +124,18 @@ class Square:
 
 
 class NormalSquare(Square):
-    def __init__(self, x: int, y: int, shape_id: str) -> None:
+    def __init__(self, x: int, y: int, shape_letter: str) -> None:
         super().__init__(x, y)
-        self.shape_id = shape_id
+        self.shape_letter = shape_letter
         self.next_rotate_goes_backwards = False
 
     def get_text(self) -> bytes:
-        return (COLOR % BLOCK_COLORS[self.shape_id]) + b"  " + (COLOR % 0)
+        return (COLOR % BLOCK_COLORS[self.shape_letter]) + b"  " + (COLOR % 0)
 
     def rotate(self, counter_clockwise: bool) -> None:
-        if self.shape_id == "O":
+        if self.shape_letter == "O":
             return
-        elif self.shape_id in "ISZ":
+        elif self.shape_letter in "ISZ":
             if self.next_rotate_goes_backwards:
                 super().rotate(counter_clockwise=False)
             else:
@@ -169,11 +169,11 @@ def create_moving_squares(player: Player) -> set[Square]:
         )
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     else:
-        shape_id = random.choice(list(BLOCK_SHAPES.keys()))
+        shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         center_square = NormalSquare(
-            player.moving_block_start_x, player.moving_block_start_y, shape_id
+            player.moving_block_start_x, player.moving_block_start_y, shape_letter
         )
-        relative_coords = BLOCK_SHAPES[shape_id]
+        relative_coords = BLOCK_SHAPES[shape_letter]
 
     result = set()
 
