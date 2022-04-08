@@ -162,7 +162,7 @@ class BombSquare(Square):
 
 
 def create_moving_squares(player: Player) -> set[Square]:
-    if random.random() < 0.005:
+    if random.random() < 0.01:
         print("Adding special bomb block")
         center_square: Square = BombSquare(
             player.moving_block_start_x, player.moving_block_start_y
