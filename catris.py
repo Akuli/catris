@@ -431,45 +431,6 @@ class Game:
             p.name.lower() for p in self.players
         )
 
-    def move_blocks_down(self, fast: bool) -> set[Player]:
-        # Blocks of different users can be on each other's way, but should
-        # still be moved if the bottommost block will move.
-        #
-        # Solution: repeatedly try to move each one, and stop when nothing moves.
-        todo = {
-            player
-            for player in self.players
-            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
-            and player.moving_block_or_wait_counter.fast_down == fast
-        }
-        while True:
-            something_moved = False
-            for player in todo.copy():
-                moved = self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
-                if moved:
-                    something_moved = True
-                    todo.remove(player)
-            if not something_moved:
-                break
-
-        needs_wait_counter = set()
-        for player in todo:
-            block = player.moving_block_or_wait_counter
-            assert isinstance(block, MovingBlock)
-
-            if block.fast_down:
-                block.fast_down = False
-            elif all(
-                (square.x, square.y) in self.valid_landed_coordinates
-                for square in block.squares
-            ):
-                self.landed_squares |= block.squares
-                player.moving_block_or_wait_counter = MovingBlock(player)
-            else:
-                needs_wait_counter.add(player)
-
-        return needs_wait_counter
-
     def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
         result = {}
@@ -522,7 +483,7 @@ class Game:
                                 if (square.x, square.y) in exploding_points:
                                     block.squares.remove(square)
                             if not block.squares:
-                                block = MovingBlock(player)
+                                player.moving_block_or_wait_counter = MovingBlock(player)
 
             if bombs:
                 self.need_render_event.set()
@@ -565,12 +526,44 @@ class Game:
         self.need_render_event.set()
 
     async def _move_blocks_down_once(self, fast: bool) -> None:
-        needs_wait_counter = self.move_blocks_down(fast)
+        # Blocks of different users can be on each other's way, but should
+        # still be moved if the bottommost block will move.
+        #
+        # Solution: repeatedly try to move each one, and stop when nothing moves.
+        todo = {
+            player
+            for player in self.players
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+            and player.moving_block_or_wait_counter.fast_down == fast
+        }
+        while True:
+            something_moved = False
+            for player in todo.copy():
+                moved = self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
+                if moved:
+                    something_moved = True
+                    todo.remove(player)
+            if not something_moved:
+                break
+
+        for player in todo:
+            block = player.moving_block_or_wait_counter
+            assert isinstance(block, MovingBlock)
+
+            if block.fast_down:
+                block.fast_down = False
+            elif all(
+                (square.x, square.y) in self.valid_landed_coordinates
+                for square in block.squares
+            ):
+                self.landed_squares |= block.squares
+                player.moving_block_or_wait_counter = MovingBlock(player)
+            else:
+                self.tasks.append(asyncio.create_task(self._countdown(player)))
+
         async with self.flashing_lock:
             full_lines_iter = self.find_and_then_wipe_full_lines()
             full_squares = next(full_lines_iter)
-            for player in needs_wait_counter:
-                self.tasks.append(asyncio.create_task(self._countdown(player)))
             self.need_render_event.set()
 
             if full_squares:
