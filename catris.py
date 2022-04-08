@@ -522,7 +522,9 @@ class Game:
                                 if (square.x, square.y) in exploding_points:
                                     block.squares.remove(square)
                             if not block.squares:
-                                block = MovingBlock(player)
+                                player.moving_block_or_wait_counter = MovingBlock(
+                                    player
+                                )
 
             if bombs:
                 self.need_render_event.set()
