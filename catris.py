@@ -1288,7 +1288,7 @@ class AskNameView:
             return
 
         print(f"name asking done: {name!r}")
-        self._client.writer.write(HIDE_CURSOR)
+        self._client._send_bytes(HIDE_CURSOR)
         self._client.name = name
         self._client.view = ChooseGameView(self._client)
 
@@ -1416,7 +1416,7 @@ class CheckTerminalSizeView:
             # Make sure screen clears before changing view, even if the next
             # view isn't actually as tall as this view. This can happen if a
             # game was full and you're thrown back to main menu.
-            self._client.writer.write(CLEAR_SCREEN)
+            self._client._send_bytes(CLEAR_SCREEN)
             self._client.server.start_game(self._client, self._game_class)
 
 
@@ -1588,7 +1588,7 @@ class Client:
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
             self.last_displayed_lines.clear()
-            self.writer.write(
+            self._send_bytes(
                 CLEAR_SCREEN
                 + (MOVE_CURSOR % (1, 1))
                 + b"\r\n".join(self.view.get_lines_to_render())
@@ -1628,7 +1628,16 @@ class Client:
         self.last_displayed_lines = lines.copy()
 
         to_send += MOVE_CURSOR % cursor_pos
-        self.writer.write(to_send)
+        self._send_bytes(to_send)
+
+    def _send_bytes(self, b: bytes) -> None:
+        self.writer.write(b)
+
+        # Prevent filling the server's memory if client sends but never receives.
+        # I don't use .drain() because one client's slowness shouldn't slow others.
+        if self.writer.transport.get_write_buffer_size() > 64*1024:
+            print("More than 64K of data in send buffer, disconnecting:", self.name)
+            self.writer.close()
 
     async def _receive_bytes(self) -> bytes | None:
         await asyncio.sleep(0)  # Makes game playable while fuzzer is running
@@ -1665,12 +1674,12 @@ class Client:
 
         if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
             print("Sending server full message")
-            self.writer.write(b"The server is full. Please try again later.\r\n")
+            self._send_bytes(b"The server is full. Please try again later.\r\n")
             return
         self.server.clients.add(self)
 
         try:
-            self.writer.write(CLEAR_SCREEN)
+            self._send_bytes(CLEAR_SCREEN)
             received = b""
 
             while True:
@@ -1705,7 +1714,7 @@ class Client:
                 self.view.game.need_render_event.set()
 
             # \r moves cursor to start of line
-            self.writer.write(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
+            self._send_bytes(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
             try:
                 await self.writer.drain()
             except OSError:
