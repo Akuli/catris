@@ -162,8 +162,8 @@ class BombSquare(Square):
 
 
 def create_moving_squares(game: Game, player: Player) -> set[Square]:
-    bomb_probability = game.score / 100000
-    if random.random() < bomb_probability:
+    bomb_probability_as_percents = game.score/800 + 1
+    if random.random() < bomb_probability_as_percents/100:
         print("Adding special bomb block")
         center_square: Square = BombSquare(
             player.moving_block_start_x, player.moving_block_start_y
