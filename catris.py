@@ -193,12 +193,11 @@ def create_moving_squares(player: Player) -> set[Square]:
     return result
 
 
+@dataclasses.dataclass(eq=False)
 class MovingBlock:
-    def __init__(self, player: Player):
-        self.player = player
-        self.squares = player.next_moving_squares
-        player.next_moving_squares = create_moving_squares(player)
-        self.fast_down = False
+    player: Player
+    squares: set[Square]
+    fast_down: bool = False
 
 
 @dataclasses.dataclass(eq=False)
@@ -323,6 +322,17 @@ class Game:
             for p in self.players
         )
 
+    def new_block(self, player: Player) -> None:
+        assert self.is_valid()
+        player.moving_block_or_wait_counter = MovingBlock(
+            player, player.next_moving_squares
+        )
+        player.next_moving_squares = create_moving_squares(player)
+        if not self.is_valid():
+            # New block overlaps with someone else's moving block
+            self.start_please_wait_countdown(player)
+            assert self.is_valid()
+
     # For clearing squares when a player's wait time ends
     @abstractmethod
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
@@ -421,8 +431,7 @@ class Game:
             player = self.add_player(name, color)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            player.moving_block_or_wait_counter = MovingBlock(player)
-            assert not self.game_is_over()
+            self.new_block(player)
             self.need_render_event.set()
         return player
 
@@ -483,16 +492,13 @@ class Game:
                                 if (square.x, square.y) in exploding_points:
                                     block.squares.remove(square)
                             if not block.squares:
-                                player.moving_block_or_wait_counter = MovingBlock(
-                                    player
-                                )
+                                self.new_block(player)
 
             if bombs:
                 self.need_render_event.set()
 
-    async def _countdown(self, player: Player) -> None:
-        player.moving_block_or_wait_counter = 10
-        self.need_render_event.set()
+    async def _please_wait_countdown(self, player: Player) -> None:
+        assert isinstance(player.moving_block_or_wait_counter, int)
 
         while player.moving_block_or_wait_counter > 0:
             await asyncio.sleep(1)
@@ -504,11 +510,18 @@ class Game:
             for square in self.landed_squares.copy():
                 if self.square_belongs_to_player(player, square.x, square.y):
                     self.landed_squares.remove(square)
-            player.moving_block_or_wait_counter = MovingBlock(player)
+            self.new_block(player)
         else:
             player.moving_block_or_wait_counter = None
 
         self.need_render_event.set()
+
+    def start_please_wait_countdown(self, player: Player) -> None:
+        # Get rid of moving block immediately to prevent invalid state after
+        # adding a moving block that overlaps someone else's moving block.
+        player.moving_block_or_wait_counter = 10
+        self.need_render_event.set()
+        self.tasks.append(asyncio.create_task(self._please_wait_countdown(player)))
 
     # Make sure to hold flashing_lock.
     # If you want to erase landed blocks, do that too while holding the lock.
@@ -559,9 +572,9 @@ class Game:
                 for square in block.squares
             ):
                 self.landed_squares |= block.squares
-                player.moving_block_or_wait_counter = MovingBlock(player)
+                self.new_block(player)
             else:
-                self.tasks.append(asyncio.create_task(self._countdown(player)))
+                self.start_please_wait_countdown(player)
 
         async with self.flashing_lock:
             full_lines_iter = self.find_and_then_wipe_full_lines()
