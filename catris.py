@@ -1637,12 +1637,12 @@ class Client:
         # I don't use .drain() because one client's slowness shouldn't slow others.
         if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
             print("More than 64K of data in send buffer, disconnecting:", self.name)
-            self.writer.close()
+            self.writer.transport.close()
 
     async def _receive_bytes(self) -> bytes | None:
         await asyncio.sleep(0)  # Makes game playable while fuzzer is running
 
-        if self.writer.is_closing():
+        if self.writer.transport.is_closing():
             return None
 
         try:
@@ -1726,7 +1726,7 @@ class Client:
                 await asyncio.wait_for(self.writer.drain(), timeout=3)
             except (OSError, asyncio.TimeoutError):
                 pass
-            self.writer.close()
+            self.writer.transport.close()
 
 
 async def main() -> None:
