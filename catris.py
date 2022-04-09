@@ -324,7 +324,9 @@ class Game:
 
     def new_block(self, player: Player) -> None:
         assert self.is_valid()
-        player.moving_block_or_wait_counter = MovingBlock(player, player.next_moving_squares)
+        player.moving_block_or_wait_counter = MovingBlock(
+            player, player.next_moving_squares
+        )
         player.next_moving_squares = create_moving_squares(player)
         if not self.is_valid():
             # New block overlaps with someone else's moving block
@@ -496,6 +498,8 @@ class Game:
                 self.need_render_event.set()
 
     async def _please_wait_countdown(self, player: Player) -> None:
+        assert isinstance(player.moving_block_or_wait_counter, int)
+
         while player.moving_block_or_wait_counter > 0:
             await asyncio.sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
