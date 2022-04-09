@@ -1584,6 +1584,8 @@ class Client:
         ) = AskNameView(self)
         self.rotate_counter_clockwise = False
 
+        self._closing = False
+
     def render(self) -> None:
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
@@ -1638,9 +1640,14 @@ class Client:
         if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
             print("More than 64K of data in send buffer, disconnecting:", self.name)
             self.writer.close()
+            self._closing = True
 
     async def _receive_bytes(self) -> bytes | None:
         await asyncio.sleep(0)  # Makes game playable while fuzzer is running
+
+        if self._closing:
+            return None
+
         try:
             result = await self._reader.read(100)
         except OSError as e:
@@ -1672,13 +1679,13 @@ class Client:
     async def handle(self) -> None:
         print("New connection")
 
-        if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
-            print("Sending server full message")
-            self._send_bytes(b"The server is full. Please try again later.\r\n")
-            return
-        self.server.clients.add(self)
-
         try:
+            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+                print("Sending server full message")
+                self._send_bytes(b"The server is full. Please try again later.\r\n")
+                return
+
+            self.server.clients.add(self)
             self._send_bytes(CLEAR_SCREEN)
             received = b""
 
@@ -1706,7 +1713,9 @@ class Client:
 
         finally:
             print("Closing connection:", self.name)
-            self.server.clients.remove(self)
+            if self in self.server.clients:
+                self.server.clients.remove(self)
+
             if isinstance(self.view, PlayingView) and isinstance(
                 self.view.player.moving_block_or_wait_counter, MovingBlock
             ):
@@ -1715,9 +1724,10 @@ class Client:
 
             # \r moves cursor to start of line
             self._send_bytes(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
+
             try:
-                await self.writer.drain()
-            except OSError:
+                await asyncio.wait_for(self.writer.drain(), timeout=3)
+            except (OSError, asyncio.TimeoutError):
                 pass
             self.writer.close()
 
