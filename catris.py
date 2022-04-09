@@ -1635,7 +1635,7 @@ class Client:
 
         # Prevent filling the server's memory if client sends but never receives.
         # I don't use .drain() because one client's slowness shouldn't slow others.
-        if self.writer.transport.get_write_buffer_size() > 64*1024:
+        if self.writer.transport.get_write_buffer_size() > 64*1024:  # type: ignore
             print("More than 64K of data in send buffer, disconnecting:", self.name)
             self.writer.close()
 
