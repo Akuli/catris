@@ -517,7 +517,6 @@ class Game:
         # adding a moving block that overlaps someone else's moving block.
         player.moving_block_or_wait_counter = 10
         self.need_render_event.set()
-
         self.tasks.append(asyncio.create_task(self._please_wait_countdown(player)))
 
     # Make sure to hold flashing_lock.
