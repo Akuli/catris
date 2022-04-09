@@ -667,7 +667,7 @@ class TraditionalGame(Game):
         # We try to compensate for this by giving exponentially more points.
         n = len(self.players)
         if n >= 1:  # avoid floats
-            self.score += single_player_score * 3 ** (n - 1)
+            self.score += single_player_score * 2 ** (n - 1)
 
         for full_y, squares in sorted(full_rows.items()):
             self.landed_squares -= squares
