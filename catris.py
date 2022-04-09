@@ -1710,9 +1710,7 @@ class Client:
 
         finally:
             print("Closing connection:", self.name)
-            if self in self.server.clients:
-                self.server.clients.remove(self)
-
+            self.server.clients.discard(self)
             if isinstance(self.view, PlayingView) and isinstance(
                 self.view.player.moving_block_or_wait_counter, MovingBlock
             ):
