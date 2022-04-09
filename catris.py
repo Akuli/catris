@@ -1584,8 +1584,6 @@ class Client:
         ) = AskNameView(self)
         self.rotate_counter_clockwise = False
 
-        self._closing = False
-
     def render(self) -> None:
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
@@ -1640,12 +1638,11 @@ class Client:
         if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
             print("More than 64K of data in send buffer, disconnecting:", self.name)
             self.writer.close()
-            self._closing = True
 
     async def _receive_bytes(self) -> bytes | None:
         await asyncio.sleep(0)  # Makes game playable while fuzzer is running
 
-        if self._closing:
+        if self.writer.is_closing():
             return None
 
         try:
