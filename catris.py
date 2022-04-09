@@ -193,7 +193,7 @@ def create_moving_squares(player: Player) -> set[Square]:
     return result
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(eq=False)
 class MovingBlock:
     player: Player
     squares: set[Square]
