@@ -161,8 +161,8 @@ class BombSquare(Square):
         pass
 
 
-def create_moving_squares(game: Game, player: Player) -> set[Square]:
-    bomb_probability_as_percents = game.score/800 + 1
+def create_moving_squares(player: Player, score: int) -> set[Square]:
+    bomb_probability_as_percents = score/800 + 1
     if random.random() < bomb_probability_as_percents/100:
         print("Adding special bomb block")
         center_square: Square = BombSquare(
@@ -212,8 +212,12 @@ class Player:
     # For example, in traditional tetris, that means moving_block_start_y = -1.
     moving_block_start_x: int
     moving_block_start_y: int
-    next_moving_squares: set[Square]
     moving_block_or_wait_counter: MovingBlock | int | None = None
+
+    def __post_init__(self) -> None:
+        # score=0 is wrong when a new player joins an existing game.
+        # But it's good enough and accessing the score from here is hard.
+        self.next_moving_squares = create_moving_squares(self, score=0)
 
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
@@ -326,7 +330,7 @@ class Game:
         player.moving_block_or_wait_counter = MovingBlock(
             player, player.next_moving_squares
         )
-        player.next_moving_squares = create_moving_squares(self, player)
+        player.next_moving_squares = create_moving_squares(player, self.score)
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
@@ -693,9 +697,7 @@ class TraditionalGame(Game):
                 len(self.players) * self.WIDTH_PER_PLAYER + (self.WIDTH_PER_PLAYER // 2)
             ),
             moving_block_start_y=-1,
-            next_moving_squares=set(),
         )
-        player.next_moving_squares = create_moving_squares(self, player)
         self.players.append(player)
         return player
 
@@ -1032,9 +1034,7 @@ class RingGame(Game):
             up_y,
             moving_block_start_x=(self.GAME_RADIUS + 1) * up_x,
             moving_block_start_y=(self.GAME_RADIUS + 1) * up_y,
-            next_moving_squares=set()
         )
-        player.next_moving_squares = create_moving_squares(self, player)
         self.players.append(player)
         return player
 
