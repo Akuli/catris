@@ -119,7 +119,7 @@ class Square:
         self.y -= self.offset_y
 
     @abstractmethod
-    def get_text(self) -> bytes:
+    def get_text(self, landed: bool) -> bytes:
         raise NotImplementedError
 
 
@@ -129,7 +129,7 @@ class NormalSquare(Square):
         self.shape_letter = shape_letter
         self.next_rotate_goes_backwards = False
 
-    def get_text(self) -> bytes:
+    def get_text(self, landed: bool) -> bytes:
         return (COLOR % BLOCK_COLORS[self.shape_letter]) + b"  " + (COLOR % 0)
 
     def rotate(self, counter_clockwise: bool) -> None:
@@ -150,7 +150,7 @@ class BombSquare(Square):
         super().__init__(x, y)
         self.timer = 15
 
-    def get_text(self) -> bytes:
+    def get_text(self, landed: bool) -> bytes:
         # red middle text when bomb about to explode
         color = 31 if self.timer <= 3 else 33
         text = str(self.timer).center(2).encode("ascii")
@@ -161,14 +161,74 @@ class BombSquare(Square):
         pass
 
 
+DRILL_HEIGHT = 5
+DRILL_PICTURES = rb"""
+
+| /|
+|/ |
+| .|
+|. |
+ \/
+
+|/ |
+| .|
+|. |
+| /|
+ \/
+
+| .|
+|. |
+| /|
+|/ |
+ \/
+
+|. |
+| /|
+|/ |
+| .|
+ \/
+
+"""
+
+
+class DrillSquare(Square):
+    def __init__(self, x: int, y: int) -> None:
+        super().__init__(x, y)
+        self.picture_x = 0
+        self.picture_y = 0
+        self.picture_counter = 0
+
+    def get_text(self, landed: bool) -> bytes:
+        picture_list = DRILL_PICTURES.strip().split(b"\n\n")
+        picture = picture_list[self.picture_counter % len(picture_list)]
+        start = 2 * self.picture_x
+        end = 2 * (self.picture_x + 1)
+
+        result = picture.splitlines()[self.picture_y].ljust(4)[start:end]
+        if landed:
+            return (COLOR % 100) + result + (COLOR % 0)
+        return result
+
+    # Do not rotate
+    def rotate(self, counter_clockwise: bool) -> None:
+        pass
+
+
 def create_moving_squares(player: Player, score: int) -> set[Square]:
     bomb_probability_as_percents = score / 800 + 1
-    if random.random() < bomb_probability_as_percents / 100:
+    drill_probability_as_percents = score / 2000
+
+    if random.uniform(0, 100) < bomb_probability_as_percents:
         print("Adding special bomb block")
         center_square: Square = BombSquare(
             player.moving_block_start_x, player.moving_block_start_y
         )
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
+    elif random.uniform(0, 100) < drill_probability_as_percents:
+        center_square = DrillSquare(
+            player.moving_block_start_x, player.moving_block_start_y
+        )
+        relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         center_square = NormalSquare(
@@ -189,6 +249,9 @@ def create_moving_squares(player: Player, score: int) -> set[Square]:
         square.y = player.moving_block_start_y + y
         square.offset_x = -x
         square.offset_y = -y
+        if isinstance(square, DrillSquare):
+            square.picture_x = 1 + player_x
+            square.picture_y = DRILL_HEIGHT - 1 + player_y
         result.add(square)
 
     return result
@@ -286,6 +349,7 @@ class Game:
         self.tasks.append(asyncio.create_task(self._move_blocks_down_task(False)))
         self.tasks.append(asyncio.create_task(self._move_blocks_down_task(True)))
         self.tasks.append(asyncio.create_task(self._bomb_task()))
+        self.tasks.append(asyncio.create_task(self._drilling_task()))
         self.need_render_event = asyncio.Event()
         self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
 
@@ -374,24 +438,45 @@ class Game:
         assert self.is_valid()
 
     def move_if_possible(
-        self, player: Player, dx: int, dy: int, in_player_coords: bool
+        self,
+        player: Player,
+        dx: int,
+        dy: int,
+        in_player_coords: bool,
+        *,
+        can_drill: bool = False,
     ) -> bool:
         assert self.is_valid()
         if in_player_coords:
             dx, dy = player.player_to_world(dx, dy)
 
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            drilled = set()
             for square in player.moving_block_or_wait_counter.squares:
                 square.x += dx
                 square.y += dy
                 self.fix_moving_square(player, square)
+
+                if can_drill and isinstance(square, DrillSquare):
+                    for other_square in self.landed_squares.copy():
+                        if (
+                            isinstance(other_square, NormalSquare)
+                            and other_square.x == square.x
+                            and other_square.y == square.y
+                        ):
+                            self.landed_squares.remove(other_square)
+                            drilled.add(other_square)
+
             if self.is_valid():
                 self.need_render_event.set()
                 return True
+
+            self.landed_squares |= drilled
             for square in player.moving_block_or_wait_counter.squares:
                 square.x -= dx
                 square.y -= dy
                 self.fix_moving_square(player, square)
+            assert self.is_valid()
 
         return False
 
@@ -445,9 +530,13 @@ class Game:
 
     def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
+
         result = {}
-        for square in self._get_all_squares():
-            result[square.x, square.y] = square.get_text()
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(landed=True)
+        for block in self._get_moving_blocks():
+            for square in block.squares:
+                result[square.x, square.y] = square.get_text(landed=False)
 
         for point, color in self.flashing_squares.items():
             if point in self.valid_landed_coordinates:
@@ -499,6 +588,20 @@ class Game:
 
             if bombs:
                 self.need_render_event.set()
+
+    async def _drilling_task(self) -> None:
+        while True:
+            await asyncio.sleep(0.1)
+            squares = set()
+            for block in self._get_moving_blocks():
+                squares |= block.squares
+            for player in self.players:
+                squares |= player.next_moving_squares
+
+            for square in squares:
+                if isinstance(square, DrillSquare):
+                    square.picture_counter += 1
+                    self.need_render_event.set()
 
     async def _please_wait_countdown(self, player: Player) -> None:
         assert isinstance(player.moving_block_or_wait_counter, int)
@@ -557,7 +660,9 @@ class Game:
         while True:
             something_moved = False
             for player in todo.copy():
-                moved = self.move_if_possible(player, dx=0, dy=1, in_player_coords=True)
+                moved = self.move_if_possible(
+                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
+                )
                 if moved:
                     something_moved = True
                     todo.remove(player)
@@ -1508,7 +1613,7 @@ def get_block_preview(player: Player) -> list[bytes]:
         row = b""
         for x in range(min_x, max_x + 1):
             if (x, y) in squares_by_location:
-                row += squares_by_location[x, y].get_text()
+                row += squares_by_location[x, y].get_text(landed=False)
             else:
                 row += b"  "
         result.append(row)
@@ -1534,7 +1639,7 @@ class PlayingView:
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
-            lines[14] += f"  Please wait: {n}".encode("ascii")
+            lines[16] += f"  Please wait: {n}".encode("ascii")
         return lines
 
     def handle_key_press(self, received: bytes) -> None:
