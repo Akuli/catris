@@ -853,8 +853,6 @@ class TraditionalGame(Game):
         return lines
 
 
-# TODO:
-#   - bigger bottom area
 class BottleGame(Game):
     NAME = "Bottle game"
     HIGH_SCORES_FILE = "bottle_high_scores.txt"
@@ -868,15 +866,15 @@ xxxx|          |yyyy
 xxxx|          |yyyy
 xxxx|          |yyyy
 xxxx|          |yyyy
+xxxx|          |yyyy
 xxxx/          \yyyy
 xxx/.          .\yyy
-xx|              |yy
-xx|              |yy
-xx|              |yy
-xx|              |yy
-xx|              |yy
+xx/              \yy
 x/.              .\y
 /                  \
+|                  |
+|                  |
+|                  |
 |                  |
 |                  |
 |                  |
