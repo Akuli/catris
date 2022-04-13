@@ -1394,7 +1394,7 @@ class RingGame(Game):
         return lines
 
 
-GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame, BottleGame]
+GAME_CLASSES: list[type[Game]] = [TraditionalGame, BottleGame, RingGame]
 
 
 class Server:
