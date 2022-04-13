@@ -718,7 +718,7 @@ class Game:
     async def _move_blocks_down_task(self, fast: bool) -> None:
         while True:
             if fast:
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.025)
             else:
                 await asyncio.sleep(0.5 / (1 + self.score / 1000))
             await self._move_blocks_down_once(fast)
