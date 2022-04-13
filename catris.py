@@ -997,7 +997,7 @@ class BottleGame(Game):
             repeated_row = bottle_row * len(self.players)
 
             # With multiple players, separators between bottles are already in square_texts
-            repeated_row = repeated_row.replace(b"||", b"  ")
+            repeated_row = repeated_row.replace(b"||", b"xx")
 
             line = b""
             color = 0
