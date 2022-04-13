@@ -158,6 +158,14 @@ class BombSquare(Square):
         pass
 
 
+class BottleSeparatorSquare(Square):
+    def __init__(self, x: int, y: int) -> None:
+        super().__init__(x, y)
+
+    def get_text(self, landed: bool) -> bytes:
+        return b"||"
+
+
 DRILL_HEIGHT = 5
 DRILL_PICTURES = rb"""
 
@@ -845,6 +853,9 @@ class TraditionalGame(Game):
         return lines
 
 
+# TODO:
+#   - color the names
+#   - bigger bottom area
 class BottleGame(Game):
     NAME = "Bottle game"
     HIGH_SCORES_FILE = "bottle_high_scores.txt"
@@ -858,7 +869,6 @@ xxxx|          |yyyy
 xxxx|          |yyyy
 xxxx|          |yyyy
 xxxx|          |yyyy
-xxxx|          |yyyy
 xxxx/          \yyyy
 xxx/.          .\yyy
 xx|              |yy
@@ -866,9 +876,10 @@ xx|              |yy
 xx|              |yy
 xx|              |yy
 xx|              |yy
-xx|              |yy
 x/.              .\y
 /                  \
+|                  |
+|                  |
 |                  |
 |                  |
 |                  |
@@ -885,8 +896,12 @@ o------------------o
         # -1 at the end is the leftmost and rightmost "|" borders
         return self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
 
+    # Boundaries between bottles belong to neither neighbor player
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
-        return x // self.BOTTLE_OUTER_WIDTH == self.players.index(player)
+        i = self.players.index(player)
+        left = self.BOTTLE_OUTER_WIDTH * i
+        right = left + self.BOTTLE_INNER_WIDTH
+        return x in range(left, right)
 
     def is_valid(self) -> bool:
         return super().is_valid() and all(
@@ -902,21 +917,35 @@ o------------------o
             return
 
         full_areas = []
-        for y in range(len(self.BOTTLE) - 1):
-            for player in self.players:
-                points = {
-                    (x, y)
-                    for x in range(self._get_width())
-                    if (x, y) in self.valid_landed_coordinates
-                    and self.square_belongs_to_player(player, x, y)
-                }
+        for y, row in enumerate(self.BOTTLE):
+            if row.startswith(b"o---") and row.endswith(b"---o"):
+                continue
+
+            if row.startswith(b"|") and row.endswith(b"|"):
+                # Whole line
                 squares = {
                     square
                     for square in self.landed_squares
-                    if (square.x, square.y) in points
+                    if square.y == y
                 }
-                if len(squares) == len(points):
+                if len(squares) == self._get_width():
                     full_areas.append(squares)
+            else:
+                # Player-specific parts
+                for player in self.players:
+                    points = {
+                        (x, y)
+                        for x in range(self._get_width())
+                        if (x, y) in self.valid_landed_coordinates
+                        and self.square_belongs_to_player(player, x, y)
+                    }
+                    squares = {
+                        square
+                        for square in self.landed_squares
+                        if (square.x, square.y) in points
+                    }
+                    if len(squares) == len(points):
+                        full_areas.append(squares)
 
         yield {square for square_set in full_areas for square in square_set}
         self.score += calculate_traditional_score(self, len(full_areas))
@@ -938,6 +967,13 @@ o------------------o
                 if row[2 * x + 1 : 2 * x + 3] == b"  ":
                     assert (x + x_offset, y) not in self.valid_landed_coordinates
                     self.valid_landed_coordinates.add((x + x_offset, y))
+
+        if self.players:
+            # Not the first player. Add squares to boundary.
+            for y, row in enumerate(self.BOTTLE):
+                if row.startswith(b"|") and row.endswith(b"|"):
+                    self.landed_squares.add(BottleSeparatorSquare(x_offset - 1, y))
+                    self.valid_landed_coordinates.add((x_offset - 1, y))
 
         player = Player(
             name,
@@ -966,23 +1002,27 @@ o------------------o
 
         result = []
         for y, bottle_row in enumerate(self.BOTTLE):
-            result_line = b""
-            for index, bottle_byte in enumerate(bottle_row * len(self.players)):
+            repeated_row = bottle_row * len(self.players)
+
+            # With multiple players, separators between bottles are Squares
+            repeated_row = repeated_row.replace(b"||", b"  ")
+
+            line = b""
+            for index, bottle_byte in enumerate(repeated_row):
                 if bottle_byte in b"xy":
                     player = self.players[index // len(bottle_row)]
+                    iterator = name_iterators[player, bottle_byte]
                     try:
-                        result_line += next(name_iterators[player, bottle_byte]).encode(
-                            "utf-8"
-                        )
+                        line += next(iterator).encode("utf-8")
                     except StopIteration:
-                        result_line += b" "
+                        line += b" "
                 elif bottle_byte in b" ":
                     if index % 2 == 1:
                         x = index // 2
-                        result_line += square_bytes.get((x, y), b"  ")
+                        line += square_bytes.get((x, y), b"  ")
                 else:
-                    result_line += bytes([bottle_byte])
-            result.append(result_line)
+                    line += bytes([bottle_byte])
+            result.append(line)
 
         return result
 
