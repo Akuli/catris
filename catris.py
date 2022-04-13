@@ -868,31 +868,29 @@ class BottleGame(Game):
 
     # Please make sure the game fits in 80 columns
     MAX_PLAYERS = 3
-    BOTTLE = rb"""
-xxxx|          |yyyy
-xxxx|          |yyyy
-xxxx|          |yyyy
-xxxx|          |yyyy
-xxxx|          |yyyy
-xxxx|          |yyyy
-xxxx/          \yyyy
-xxx/.          .\yyy
-xx/              \yy
-x/.              .\y
-/                  \
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-|                  |
-o------------------o
-""".strip().splitlines()
+    BOTTLE = [
+        rb"    |xxxxxxxxxx|    ",
+        rb"    |xxxxxxxxxx|    ",
+        rb"    |xxxxxxxxxx|    ",
+        rb"    |xxxxxxxxxx|    ",
+        rb"    |xxxxxxxxxx|    ",
+        rb"    |xxxxxxxxxx|    ",
+        rb"    /xxxxxxxxxx\    ",
+        rb"   /.xxxxxxxxxx.\   ",
+        rb"  /xxxxxxxxxxxxxx\  ",
+        rb" /.xxxxxxxxxxxxxx.\ ",
+        rb"/xxxxxxxxxxxxxxxxxx\ ".rstrip(),  # python syntax weirdness
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+        rb"|xxxxxxxxxxxxxxxxxx|",
+    ]
 
     BOTTLE_INNER_WIDTH = 9
     BOTTLE_OUTER_WIDTH = 10
@@ -923,9 +921,6 @@ o------------------o
 
         full_areas = []
         for y, row in enumerate(self.BOTTLE):
-            if row.startswith(b"o---") and row.endswith(b"---o"):
-                continue
-
             if row.startswith(b"|") and row.endswith(b"|"):
                 # Whole line
                 squares = {square for square in self.landed_squares if square.y == y}
@@ -965,7 +960,7 @@ o------------------o
         x_offset = self.BOTTLE_OUTER_WIDTH * len(self.players)
         for y, row in enumerate(self.BOTTLE):
             for x in range(self.BOTTLE_INNER_WIDTH):
-                if row[2 * x + 1 : 2 * x + 3] == b"  ":
+                if row[2 * x + 1 : 2 * x + 3] == b"xx":
                     assert (x + x_offset, y) not in self.valid_landed_coordinates
                     self.valid_landed_coordinates.add((x + x_offset, y))
 
@@ -995,14 +990,6 @@ o------------------o
         return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
-        name_iterators = {}
-        for player in self.players:
-            for byte in b"xy":
-                count = b"".join(self.BOTTLE).count(byte)
-                # centering helps with displaying very short names
-                name = player.get_name_string(max_length=count).center(4)
-                name_iterators[player, byte] = iter(name)
-
         square_texts = self.get_square_texts()
 
         result = []
@@ -1016,32 +1003,42 @@ o------------------o
             color = 0
 
             for index, bottle_byte in enumerate(repeated_row):
-                player = self.players[index // len(bottle_row)]
-
-                target_color = player.color
-                if bottle_byte in b"xy":
-                    iterator = name_iterators[player, bottle_byte]
-                    try:
-                        line_part = next(iterator).encode("utf-8")
-                    except StopIteration:
-                        line_part = b" "
-                elif bottle_byte in b" ":
+                if bottle_byte in b"x":
                     if index % 2 == 0:
                         continue
-                    target_color = 0
-                    line_part = square_texts.get((index // 2, y), b"  ")
+                    if color != 0:
+                        line += COLOR % 0
+                        color = 0
+                    line += square_texts.get((index // 2, y), b"  ")
                 else:
-                    line_part = bytes([bottle_byte])
-
-                if color != target_color:
-                    line += COLOR % target_color
-                    color = target_color
-                line += line_part
+                    player = self.players[index // len(bottle_row)]
+                    if color != player.color:
+                        line += COLOR % player.color
+                        color = player.color
+                    line += bytes([bottle_byte])
 
             if color != 0:
                 line += COLOR % 0
             result.append(line)
 
+        bottom_line = b""
+        name_line = b""
+        for player in self.players:
+            bottom_line += COLOR % player.color
+            name_line += COLOR % player.color
+
+            bottom_line += b"o"
+            if player == rendering_for_this_player:
+                bottom_line += b"==" * self.BOTTLE_INNER_WIDTH
+            else:
+                bottom_line += b"--" * self.BOTTLE_INNER_WIDTH
+            bottom_line += b"o"
+
+            name_text = player.get_name_string(max_length=2 * self.BOTTLE_OUTER_WIDTH)
+            name_line += name_text.center(2 * self.BOTTLE_OUTER_WIDTH).encode("utf-8")
+
+        result.append(bottom_line + (COLOR % 0))
+        result.append(name_line + (COLOR % 0))
         return result
 
 
