@@ -840,12 +840,12 @@ class TraditionalGame(Game):
         header_line += b"o"
 
         lines = [name_line, header_line]
-        square_bytes = self.get_square_texts()
+        square_texts = self.get_square_texts()
 
         for y in range(self.HEIGHT):
             line = b"|"
             for x in range(self._get_width()):
-                line += square_bytes.get((x, y), b"  ")
+                line += square_texts.get((x, y), b"  ")
             line += b"|"
             lines.append(line)
 
@@ -854,7 +854,6 @@ class TraditionalGame(Game):
 
 
 # TODO:
-#   - color the names
 #   - bigger bottom area
 class BottleGame(Game):
     NAME = "Bottle game"
@@ -998,19 +997,26 @@ o------------------o
                 name = player.get_name_string(max_length=count).center(4)
                 name_iterators[player, byte] = iter(name)
 
-        square_bytes = self.get_square_texts()
+        square_texts = self.get_square_texts()
 
         result = []
         for y, bottle_row in enumerate(self.BOTTLE):
             repeated_row = bottle_row * len(self.players)
 
-            # With multiple players, separators between bottles are Squares
+            # With multiple players, separators between bottles are already in square_texts
             repeated_row = repeated_row.replace(b"||", b"  ")
 
             line = b""
+            color = 0
+
             for index, bottle_byte in enumerate(repeated_row):
+                player = self.players[index // len(bottle_row)]
+                target_color = player.color if bottle_byte in b"xy" else 0
+                if color != target_color:
+                    line += COLOR % target_color
+                    color = target_color
+
                 if bottle_byte in b"xy":
-                    player = self.players[index // len(bottle_row)]
                     iterator = name_iterators[player, bottle_byte]
                     try:
                         line += next(iterator).encode("utf-8")
@@ -1019,9 +1025,12 @@ o------------------o
                 elif bottle_byte in b" ":
                     if index % 2 == 1:
                         x = index // 2
-                        line += square_bytes.get((x, y), b"  ")
+                        line += square_texts.get((x, y), b"  ")
                 else:
                     line += bytes([bottle_byte])
+
+            if color != 0:
+                line += COLOR % 0
             result.append(line)
 
         return result
@@ -1350,7 +1359,7 @@ class RingGame(Game):
             players_by_letter[letter] = player
 
         middle_area_content = self._get_middle_area_content(players_by_letter)
-        square_bytes = self.get_square_texts()
+        square_texts = self.get_square_texts()
 
         for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
             insert_middle_area_here = None
@@ -1359,7 +1368,7 @@ class RingGame(Game):
                 if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
                     insert_middle_area_here = len(line)
                     continue
-                line += square_bytes.get(
+                line += square_texts.get(
                     rendering_for_this_player.player_to_world(x, y), b"  "
                 )
 
