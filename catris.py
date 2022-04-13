@@ -72,9 +72,6 @@ BLOCK_COLORS = {
     "S": 42,  # green
 }
 
-# Limited to 4 players:
-#   - Traditional mode: must fit in 80 columns
-#   - Ring mode: for obvious reasons
 PLAYER_COLORS = {31, 32, 33, 34}
 
 # Longest allowed name will get truncated, that's fine
@@ -338,6 +335,7 @@ class Game:
     NAME: ClassVar[str]
     HIGH_SCORES_FILE: ClassVar[str]
     TERMINAL_HEIGHT_NEEDED: ClassVar[int]
+    MAX_PLAYERS: ClassVar[int]
 
     def __init__(self) -> None:
         self.start_time = time.monotonic_ns()
@@ -524,7 +522,7 @@ class Game:
         return player
 
     def player_can_join(self, name: str) -> bool:
-        return len(self.players) < len(PLAYER_COLORS) or name.lower() in (
+        return len(self.players) < self.MAX_PLAYERS or name.lower() in (
             p.name.lower() for p in self.players
         )
 
@@ -710,14 +708,46 @@ class Game:
             await self._move_blocks_down_once(fast)
 
 
+def calculate_traditional_score(game: Game, full_row_count: int) -> int:
+    if full_row_count == 0:
+        single_player_score = 0
+    elif full_row_count == 1:
+        single_player_score = 10
+    elif full_row_count == 2:
+        single_player_score = 30
+    elif full_row_count == 3:
+        single_player_score = 60
+    else:
+        single_player_score = 100
+
+    # It's more difficult to get full lines with more players.
+    # A line is full in the game, if all players have it player-specifically full.
+    # If players stick to their own areas and are independent:
+    #
+    #     P(line clear with n players)
+    #   = P(player 1 full AND player 2 full AND ... AND player n full)
+    #   = P(player 1 full) * P(player 2 full) * ... * P(player n full)
+    #   = P(line clear with 1 player)^n
+    #
+    # This means the game gets exponentially more difficult with more players.
+    # We try to compensate for this by giving exponentially more points.
+    n = len(game.players)
+    if n == 0:  # avoid floats
+        # TODO: does this ever happen?
+        return 0
+    return single_player_score * 2 ** (n - 1)
+
+
 class TraditionalGame(Game):
     NAME = "Traditional game"
     HIGH_SCORES_FILE = "high_scores.txt"
     TERMINAL_HEIGHT_NEEDED = 24
 
-    # Width varies as people join/leave
+    # Width varies as people join/leave. If you adjust these, please make sure
+    # the game fits in 80 columns.
     HEIGHT = 20
     WIDTH_PER_PLAYER = 7
+    MAX_PLAYERS = 4
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
@@ -750,32 +780,7 @@ class TraditionalGame(Game):
                 full_rows[y] = row
 
         yield {square for squares in full_rows.values() for square in squares}
-
-        if len(full_rows) == 0:
-            single_player_score = 0
-        elif len(full_rows) == 1:
-            single_player_score = 10
-        elif len(full_rows) == 2:
-            single_player_score = 30
-        elif len(full_rows) == 3:
-            single_player_score = 60
-        else:
-            single_player_score = 100
-
-        # It's more difficult to get full lines with more players.
-        # A line is full in the game, if all players have it player-specifically full.
-        # If players stick to their own areas and are independent:
-        #
-        #     P(line clear with n players)
-        #   = P(player 1 full AND player 2 full AND ... AND player n full)
-        #   = P(player 1 full) * P(player 2 full) * ... * P(player n full)
-        #   = P(line clear with 1 player)^n
-        #
-        # This means the game gets exponentially more difficult with more players.
-        # We try to compensate for this by giving exponentially more points.
-        n = len(self.players)
-        if n >= 1:  # avoid floats
-            self.score += single_player_score * 2 ** (n - 1)
+        self.score += calculate_traditional_score(self, len(full_rows))
 
         for full_y, squares in sorted(full_rows.items()):
             self.landed_squares -= squares
@@ -840,6 +845,148 @@ class TraditionalGame(Game):
         return lines
 
 
+class BottleGame(Game):
+    NAME = "Bottle game"
+    HIGH_SCORES_FILE = "bottle_high_scores.txt"
+    TERMINAL_HEIGHT_NEEDED = 24
+
+    # Please make sure the game fits in 80 columns
+    MAX_PLAYERS = 3
+    BOTTLE = rb"""
+xxxx|          |yyyy
+xxxx|          |yyyy
+xxxx|          |yyyy
+xxxx|          |yyyy
+xxxx|          |yyyy
+xxxx|          |yyyy
+xxxx/          \yyyy
+xxx/.          .\yyy
+xx|              |yy
+xx|              |yy
+xx|              |yy
+xx|              |yy
+xx|              |yy
+xx|              |yy
+x/.              .\y
+/                  \
+|                  |
+|                  |
+|                  |
+|                  |
+|                  |
+|                  |
+o------------------o
+""".strip().splitlines()
+
+    BOTTLE_INNER_WIDTH = 9
+    BOTTLE_OUTER_WIDTH = 10
+
+    def _get_width(self) -> int:
+        # -1 at the end is the leftmost and rightmost "|" borders
+        return self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
+
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
+        return x // self.BOTTLE_OUTER_WIDTH == self.players.index(player)
+
+    def is_valid(self) -> bool:
+        return super().is_valid() and all(
+            (square.x, max(0, square.y)) in self.valid_landed_coordinates
+            for block in self._get_moving_blocks()
+            for square in block.squares
+        )
+
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
+        if not self.players:
+            # TODO: can this happen?
+            yield set()
+            return
+
+        full_areas = []
+        for y in range(len(self.BOTTLE) - 1):
+            for player in self.players:
+                points = {
+                    (x, y)
+                    for x in range(self._get_width())
+                    if (x, y) in self.valid_landed_coordinates
+                    and self.square_belongs_to_player(player, x, y)
+                }
+                squares = {
+                    square
+                    for square in self.landed_squares
+                    if (square.x, square.y) in points
+                }
+                if len(squares) == len(points):
+                    full_areas.append(squares)
+
+        yield {square for square_set in full_areas for square in square_set}
+        self.score += calculate_traditional_score(self, len(full_areas))
+
+        # This loop must be in the correct order, top to bottom.
+        for removed_squares in full_areas:
+            self.landed_squares -= removed_squares
+            y = list(removed_squares)[0].y
+            for landed in self.landed_squares:
+                if landed.y < y:
+                    landed.y += 1
+
+        self.finish_wiping_full_lines()
+
+    def add_player(self, name: str, color: int) -> Player:
+        x_offset = self.BOTTLE_OUTER_WIDTH * len(self.players)
+        for y, row in enumerate(self.BOTTLE):
+            for x in range(self.BOTTLE_INNER_WIDTH):
+                if row[2 * x + 1 : 2 * x + 3] == b"  ":
+                    assert (x + x_offset, y) not in self.valid_landed_coordinates
+                    self.valid_landed_coordinates.add((x + x_offset, y))
+
+        player = Player(
+            name,
+            color,
+            up_x=0,
+            up_y=-1,
+            moving_block_start_x=(
+                len(self.players) * self.BOTTLE_OUTER_WIDTH
+                + (self.BOTTLE_INNER_WIDTH // 2)
+            ),
+            moving_block_start_y=-1,
+        )
+        self.players.append(player)
+        return player
+
+    def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
+        name_iterators = {}
+        for player in self.players:
+            for byte in b"xy":
+                count = b"".join(self.BOTTLE).count(byte)
+                # centering helps with displaying very short names
+                name = player.get_name_string(max_length=count).center(4)
+                name_iterators[player, byte] = iter(name)
+
+        square_bytes = self.get_square_texts()
+
+        result = []
+        for y, bottle_row in enumerate(self.BOTTLE):
+            result_line = b""
+            for index, bottle_byte in enumerate(bottle_row * len(self.players)):
+                if bottle_byte in b"xy":
+                    player = self.players[index // len(bottle_row)]
+                    try:
+                        result_line += next(name_iterators[player, bottle_byte]).encode(
+                            "utf-8"
+                        )
+                    except StopIteration:
+                        result_line += b" "
+                elif bottle_byte in b" ":
+                    if index % 2 == 1:
+                        x = index // 2
+                        result_line += square_bytes.get((x, y), b"  ")
+                else:
+                    result_line += bytes([bottle_byte])
+            result.append(result_line)
+
+        return result
+
+
 class RingGame(Game):
     NAME = "Ring game"
     HIGH_SCORES_FILE = "ring_high_scores.txt"
@@ -858,6 +1005,8 @@ class RingGame(Game):
         "|ssssssssssss|",
         "o------------o",
     ]
+
+    MAX_PLAYERS = 4
 
     def __init__(self) -> None:
         super().__init__()
@@ -1189,7 +1338,7 @@ class RingGame(Game):
         return lines
 
 
-GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame]
+GAME_CLASSES: list[type[Game]] = [TraditionalGame, RingGame, BottleGame]
 
 
 class Server:
@@ -1785,7 +1934,9 @@ class Client:
         print("New connection")
 
         try:
-            if len(self.server.clients) >= len(GAME_CLASSES) * len(PLAYER_COLORS):
+            if len(self.server.clients) >= sum(
+                klass.MAX_PLAYERS for klass in GAME_CLASSES
+            ):
                 print("Sending server full message")
                 self._send_bytes(b"The server is full. Please try again later.\r\n")
                 return
