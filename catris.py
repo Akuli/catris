@@ -751,7 +751,8 @@ def calculate_traditional_score(game: Game, full_row_count: int) -> int:
     if n == 0:  # avoid floats
         # TODO: does this ever happen?
         return 0
-    return single_player_score * 2 ** (n - 1)
+    result: int = single_player_score * 2 ** (n - 1)
+    return result
 
 
 class TraditionalGame(Game):
