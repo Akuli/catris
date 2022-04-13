@@ -159,11 +159,19 @@ class BombSquare(Square):
 
 
 class BottleSeparatorSquare(Square):
-    def __init__(self, x: int, y: int) -> None:
+    def __init__(self, x: int, y: int, left_color: int, right_color: int) -> None:
         super().__init__(x, y)
+        self._left_color = left_color
+        self._right_color = right_color
 
     def get_text(self, landed: bool) -> bytes:
-        return b"||"
+        return (
+            (COLOR % self._left_color)
+            + b"|"
+            + (COLOR % self._right_color)
+            + b"|"
+            + (COLOR % 0)
+        )
 
 
 DRILL_HEIGHT = 5
@@ -920,11 +928,7 @@ o------------------o
 
             if row.startswith(b"|") and row.endswith(b"|"):
                 # Whole line
-                squares = {
-                    square
-                    for square in self.landed_squares
-                    if square.y == y
-                }
+                squares = {square for square in self.landed_squares if square.y == y}
                 if len(squares) == self._get_width():
                     full_areas.append(squares)
             else:
@@ -969,7 +973,11 @@ o------------------o
             # Not the first player. Add squares to boundary.
             for y, row in enumerate(self.BOTTLE):
                 if row.startswith(b"|") and row.endswith(b"|"):
-                    self.landed_squares.add(BottleSeparatorSquare(x_offset - 1, y))
+                    self.landed_squares.add(
+                        BottleSeparatorSquare(
+                            x_offset - 1, y, self.players[-1].color, color
+                        )
+                    )
                     self.valid_landed_coordinates.add((x_offset - 1, y))
 
         player = Player(
@@ -1009,23 +1017,26 @@ o------------------o
 
             for index, bottle_byte in enumerate(repeated_row):
                 player = self.players[index // len(bottle_row)]
-                target_color = player.color if bottle_byte in b"xy" else 0
-                if color != target_color:
-                    line += COLOR % target_color
-                    color = target_color
 
+                target_color = player.color
                 if bottle_byte in b"xy":
                     iterator = name_iterators[player, bottle_byte]
                     try:
-                        line += next(iterator).encode("utf-8")
+                        line_part = next(iterator).encode("utf-8")
                     except StopIteration:
-                        line += b" "
+                        line_part = b" "
                 elif bottle_byte in b" ":
-                    if index % 2 == 1:
-                        x = index // 2
-                        line += square_texts.get((x, y), b"  ")
+                    if index % 2 == 0:
+                        continue
+                    target_color = 0
+                    line_part = square_texts.get((index // 2, y), b"  ")
                 else:
-                    line += bytes([bottle_byte])
+                    line_part = bytes([bottle_byte])
+
+                if color != target_color:
+                    line += COLOR % target_color
+                    color = target_color
+                line += line_part
 
             if color != 0:
                 line += COLOR % 0
