@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import asyncio
 import time
 from abc import abstractmethod
 from typing import Any, Callable, ClassVar, Iterator
+
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
 from catris.squares import (
@@ -13,8 +15,9 @@ from catris.squares import (
     create_moving_squares,
 )
 
-
 PLAYER_COLORS = {31, 32, 33, 34}
+
+
 class Game:
     NAME: ClassVar[str]
     HIGH_SCORES_FILE: ClassVar[str]

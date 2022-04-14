@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from typing import Iterator
+
 from catris.ansi import COLOR
 from catris.player import Player
 from catris.squares import BottleSeparatorSquare, Square
+
 from .game_base_class import Game
 from .traditional import calculate_score
 
