@@ -5,7 +5,7 @@ This is a Tetris clone for multiple players that connect to a server with netcat
 ![Screenshot](screenshot.png)
 
 Install Python and download all files in the `catris` folder.
-If you already have Git installed, you can use it:
+If you already have Git, you can use it:
 
 ```
 git clone https://github.com/Akuli/catris
