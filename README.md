@@ -37,7 +37,7 @@ just like any other computer in the network.
 Next you need to know the server's IP address within the local network.
 When connecting to the server, players need to specify this IP address.
 It is **not** same as the network's public IP,
-which is what you find by googling "what is my ip address" or similar.
+which is what you find by googling "what is my ip" or similar.
 
 If the server is running Windows, you can run `ipconfig` on a command prompt.
 On Linux, you can use `ip a`, and I think `ifconfig` works on MacOS
