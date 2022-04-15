@@ -138,7 +138,7 @@ class TraditionalGame(Game):
             if player == rendering_for_this_player:
                 header_line += b"=" * name_length
             else:
-                header_line += b"--" * self._get_width_per_player()
+                header_line += b"-" * name_length
             name_line += name_text.center(name_length).encode("utf-8")
 
         name_line += COLOR % 0
