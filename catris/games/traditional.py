@@ -68,7 +68,7 @@ class TraditionalGame(Game):
 
         return super().is_valid() and all(
             square.x in range(self._get_width()) and square.y < self.HEIGHT
-            for block in self._get_moving_blocks()
+            for block in self._get_moving_blocks().values()
             for square in block.squares
         )
 
