@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Union
 
@@ -15,6 +16,7 @@ from catris.ansi import (
 )
 from catris.games import GAME_CLASSES, Game, RingGame
 from catris.player import Player
+from catris.squares import Square
 
 if TYPE_CHECKING:
     from catris.high_scores import HighScore
@@ -303,26 +305,16 @@ class GameOverView(MenuView):
         return False
 
 
-def get_block_preview(player: Player) -> list[bytes]:
-    squares_by_location = {
-        player.world_to_player(square.x, square.y): square
-        for square in player.next_moving_squares
-    }
-    min_x = min(x for x, y in squares_by_location.keys())
-    min_y = min(y for x, y in squares_by_location.keys())
-    max_x = max(x for x, y in squares_by_location.keys())
-    max_y = max(y for x, y in squares_by_location.keys())
+def get_block_preview(squares: set[Square]) -> list[bytes]:
+    min_x = min(square.x for square in squares)
+    min_y = min(square.y for square in squares)
+    max_x = max(square.x for square in squares)
+    max_y = max(square.y for square in squares)
 
-    result = []
-    for y in range(min_y, max_y + 1):
-        row = b""
-        for x in range(min_x, max_x + 1):
-            if (x, y) in squares_by_location:
-                row += squares_by_location[x, y].get_text(landed=False)
-            else:
-                row += b"  "
-        result.append(row)
-    return result
+    result = [[b"  "] * (max_x - min_x + 1) for y in range(min_y, max_y + 1)]
+    for square in squares:
+        result[square.y - min_y][square.x - min_x] = square.get_text(landed=False)
+    return [b"".join(row) for row in result]
 
 
 class PlayingView:
@@ -340,7 +332,9 @@ class PlayingView:
             lines[6] += b"  Counter-clockwise"
 
         lines[7] += b"  Next:"
-        for index, row in enumerate(get_block_preview(self.player), start=9):
+        for index, row in enumerate(
+            get_block_preview(self.player.next_moving_squares), start=9
+        ):
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
