@@ -26,7 +26,7 @@ python3 -m catris
 ```
 
 
-## Connecting to the server
+## Finding the server's IP address
 
 All players must be in the same network with the computer where the server is running.
 For example, the computers could be all connected to the same WiFi network,
