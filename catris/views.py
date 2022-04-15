@@ -7,6 +7,7 @@ from catris.ansi import (
     BACKSPACE,
     CLEAR_SCREEN,
     COLOR,
+    CSI,
     DOWN_ARROW_KEY,
     HIDE_CURSOR,
     LEFT_ARROW_KEY,
@@ -81,6 +82,9 @@ class AskNameView:
             # Don't just delete last byte, so that non-ascii can be erased
             # with a single backspace press
             self._name_so_far = self._get_name()[:-1].encode("utf-8")
+        elif received.startswith(CSI):
+            # arrow keys or similar
+            pass
         else:
             if len(self._name_so_far) < NAME_MAX_LENGTH:
                 self._name_so_far += received
