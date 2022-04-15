@@ -87,7 +87,9 @@ class Game:
         # don't have to be updated if e.g. the player's view or spawning
         # coordinates change.
         for square in squares:
-            square.offset_x, square.offset_y = player.player_to_world(square.offset_x, square.offset_y)
+            square.offset_x, square.offset_y = player.player_to_world(
+                square.offset_x, square.offset_y
+            )
             square.x, square.y = player.player_to_world(square.x, square.y)
             square.x += player.moving_block_start_x
             square.y += player.moving_block_start_y

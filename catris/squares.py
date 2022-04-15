@@ -165,20 +165,14 @@ def create_moving_squares(score: int) -> set[Square]:
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         print("Adding special bomb block")
-        center_square: Square = BombSquare(
-            0, 0
-        )
+        center_square: Square = BombSquare(0, 0)
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     elif random.uniform(0, 100) < drill_probability_as_percents:
-        center_square = DrillSquare(
-            0, 0
-        )
+        center_square = DrillSquare(0, 0)
         relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        center_square = NormalSquare(
-            0, 0, shape_letter
-        )
+        center_square = NormalSquare(0, 0, shape_letter)
         relative_coords = BLOCK_SHAPES[shape_letter]
 
     result = set()
