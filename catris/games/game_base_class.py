@@ -1,0 +1,395 @@
+from __future__ import annotations
+
+import asyncio
+import time
+from abc import abstractmethod
+from typing import Any, Callable, ClassVar, Iterator
+
+from catris.ansi import COLOR
+from catris.player import MovingBlock, Player
+from catris.squares import (
+    BombSquare,
+    DrillSquare,
+    NormalSquare,
+    Square,
+    create_moving_squares,
+)
+
+PLAYER_COLORS = {31, 32, 33, 34}
+
+
+class Game:
+    NAME: ClassVar[str]
+    HIGH_SCORES_FILE: ClassVar[str]
+    TERMINAL_HEIGHT_NEEDED: ClassVar[int]
+    MAX_PLAYERS: ClassVar[int]
+
+    def __init__(self) -> None:
+        self.start_time = time.monotonic_ns()
+        self.players: list[Player] = []
+        self.score = 0
+        self.valid_landed_coordinates: set[tuple[int, int]] = set()
+        self.landed_squares: set[Square] = set()
+        self.tasks: list[asyncio.Task[Any]] = []
+        self.tasks.append(asyncio.create_task(self._move_blocks_down_task(False)))
+        self.tasks.append(asyncio.create_task(self._move_blocks_down_task(True)))
+        self.tasks.append(asyncio.create_task(self._bomb_task()))
+        self.tasks.append(asyncio.create_task(self._drilling_task()))
+        self.need_render_event = asyncio.Event()
+        self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
+
+        # Hold this when wiping full lines or exploding a bomb or similar.
+        # Prevents moving blocks down and causing weird bugs.
+        self.flashing_lock = asyncio.Lock()
+        self.flashing_squares: dict[tuple[int, int], int] = {}
+
+    def _get_moving_blocks(self) -> list[MovingBlock]:
+        return [
+            player.moving_block_or_wait_counter
+            for player in self.players
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        ]
+
+    def _get_all_squares(self) -> set[Square]:
+        return self.landed_squares | {
+            square for block in self._get_moving_blocks() for square in block.squares
+        }
+
+    def is_valid(self) -> bool:
+        squares = self._get_all_squares()
+        if len(squares) != len(set((square.x, square.y) for square in squares)):
+            # print("Invalid state: duplicate squares")
+            return False
+        if not all(
+            (square.x, square.y) in self.valid_landed_coordinates
+            for square in self.landed_squares
+        ):
+            # print("Invalid state: landed squares outside valid area")
+            return False
+        return True
+
+    def game_is_over(self) -> bool:
+        return bool(self.players) and not any(
+            isinstance(p.moving_block_or_wait_counter, MovingBlock)
+            for p in self.players
+        )
+
+    def new_block(self, player: Player) -> None:
+        assert self.is_valid()
+        player.moving_block_or_wait_counter = MovingBlock(
+            player, player.next_moving_squares
+        )
+        player.next_moving_squares = create_moving_squares(player, self.score)
+        if not self.is_valid():
+            # New block overlaps with someone else's moving block
+            self.start_please_wait_countdown(player)
+            assert self.is_valid()
+
+    # For clearing squares when a player's wait time ends
+    @abstractmethod
+    def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
+        pass
+
+    # This method should:
+    #   1. Yield the points that are about to be removed. The yielded value
+    #      will be used for the flashing animation.
+    #   2. Remove them.
+    #   3. Increment score.
+    #   4. Call finish_wiping_full_lines().
+    #
+    # In ring mode, a full "line" can be a line or a ring. That's why returning
+    # a list of full lines would be unnecessarily difficult.
+    #
+    # When this method is done, moving and landed blocks may overlap.
+    @abstractmethod
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
+        pass
+
+    def finish_wiping_full_lines(self) -> None:
+        # When landed blocks move, they can go on top of moving blocks.
+        # This is quite rare, but results in invalid state errors.
+        # When this happens, just delete the landed block.
+        bad_coords = {
+            (square.x, square.y)
+            for block in self._get_moving_blocks()
+            for square in block.squares
+        }
+        for square in self.landed_squares.copy():
+            if (square.x, square.y) in bad_coords:
+                self.landed_squares.remove(square)
+            else:
+                bad_coords.add((square.x, square.y))  # delete duplicates
+
+        assert self.is_valid()
+
+    def move_if_possible(
+        self,
+        player: Player,
+        dx: int,
+        dy: int,
+        in_player_coords: bool,
+        *,
+        can_drill: bool = False,
+    ) -> bool:
+        assert self.is_valid()
+        if in_player_coords:
+            dx, dy = player.player_to_world(dx, dy)
+
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            drilled = set()
+            for square in player.moving_block_or_wait_counter.squares:
+                square.x += dx
+                square.y += dy
+                self.fix_moving_square(player, square)
+
+                if can_drill and isinstance(square, DrillSquare):
+                    for other_square in self.landed_squares.copy():
+                        if (
+                            isinstance(other_square, NormalSquare)
+                            and other_square.x == square.x
+                            and other_square.y == square.y
+                        ):
+                            self.landed_squares.remove(other_square)
+                            drilled.add(other_square)
+
+            if self.is_valid():
+                self.need_render_event.set()
+                return True
+
+            self.landed_squares |= drilled
+            for square in player.moving_block_or_wait_counter.squares:
+                square.x -= dx
+                square.y -= dy
+                self.fix_moving_square(player, square)
+            assert self.is_valid()
+
+        return False
+
+    # RingGame overrides this to get blocks to wrap back to top
+    def fix_moving_square(self, player: Player, square: Square) -> None:
+        pass
+
+    def rotate(self, player: Player, counter_clockwise: bool) -> None:
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            for square in player.moving_block_or_wait_counter.squares:
+                square.rotate(counter_clockwise)
+                self.fix_moving_square(player, square)
+            if not self.is_valid():
+                for square in player.moving_block_or_wait_counter.squares:
+                    square.rotate(not counter_clockwise)
+                    self.fix_moving_square(player, square)
+
+    @abstractmethod
+    def add_player(self, name: str, color: int) -> Player:
+        pass
+
+    # Name can exist already, if player quits and comes back
+    def get_existing_player_or_add_new_player(self, name: str) -> Player | None:
+        if not self.player_can_join(name):
+            return None
+
+        print(f"{name!r} joins a game with {len(self.players)} existing players")
+        game_over = self.game_is_over()
+
+        for player in self.players:
+            if player.name.lower() == name.lower():
+                # Let's say your caps lock was on accidentally and you type
+                # "aKULI" as name when you intended to type "Akuli".
+                # If that happens, you can leave the game and join back.
+                player.name = name
+                break
+        else:
+            # Add new player
+            color = min(PLAYER_COLORS - {p.color for p in self.players})
+            player = self.add_player(name, color)
+
+        if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
+            self.new_block(player)
+            self.need_render_event.set()
+        return player
+
+    def player_can_join(self, name: str) -> bool:
+        return len(self.players) < self.MAX_PLAYERS or name.lower() in (
+            p.name.lower() for p in self.players
+        )
+
+    def get_square_texts(self) -> dict[tuple[int, int], bytes]:
+        assert self.is_valid()
+
+        result = {}
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(landed=True)
+        for block in self._get_moving_blocks():
+            for square in block.squares:
+                result[square.x, square.y] = square.get_text(landed=False)
+
+        for point, color in self.flashing_squares.items():
+            if point in self.valid_landed_coordinates:
+                result[point] = (COLOR % color) + b"  " + (COLOR % 0)
+
+        return result
+
+    @abstractmethod
+    def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
+        pass
+
+    async def _bomb_task(self) -> None:
+        while True:
+            await asyncio.sleep(1)
+
+            bombs: list[BombSquare] = [
+                square
+                for square in self._get_all_squares()
+                if isinstance(square, BombSquare)
+            ]
+
+            exploding_points = set()
+            for bomb in bombs:
+                bomb.timer -= 1
+                if bomb.timer == 0:
+                    print("Bomb explodes! BOOOOOOMM!!!11!")
+
+                    radius = 3.5
+                    exploding_points |= {
+                        (x, y)
+                        for x, y in self.valid_landed_coordinates
+                        if (x - bomb.x) ** 2 + (y - bomb.y) ** 2 < radius**2
+                    }
+
+            if exploding_points:
+                async with self.flashing_lock:
+                    await self.flash(exploding_points, 41)
+                    for square in self.landed_squares.copy():
+                        if (square.x, square.y) in exploding_points:
+                            self.landed_squares.remove(square)
+                    for player in self.players:
+                        block = player.moving_block_or_wait_counter
+                        if isinstance(block, MovingBlock):
+                            for square in block.squares.copy():
+                                if (square.x, square.y) in exploding_points:
+                                    block.squares.remove(square)
+                            if not block.squares:
+                                self.new_block(player)
+
+            if bombs:
+                self.need_render_event.set()
+
+    async def _drilling_task(self) -> None:
+        while True:
+            await asyncio.sleep(0.1)
+            squares = set()
+            for block in self._get_moving_blocks():
+                squares |= block.squares
+            for player in self.players:
+                squares |= player.next_moving_squares
+
+            for square in squares:
+                if isinstance(square, DrillSquare):
+                    square.picture_counter += 1
+                    self.need_render_event.set()
+
+    async def _please_wait_countdown(self, player: Player) -> None:
+        assert isinstance(player.moving_block_or_wait_counter, int)
+
+        while player.moving_block_or_wait_counter > 0:
+            await asyncio.sleep(1)
+            assert isinstance(player.moving_block_or_wait_counter, int)
+            player.moving_block_or_wait_counter -= 1
+            self.need_render_event.set()
+
+        if self.player_has_a_connected_client(player):
+            for square in self.landed_squares.copy():
+                if self.square_belongs_to_player(player, square.x, square.y):
+                    self.landed_squares.remove(square)
+            self.new_block(player)
+        else:
+            player.moving_block_or_wait_counter = None
+
+        self.need_render_event.set()
+
+    def start_please_wait_countdown(self, player: Player) -> None:
+        # Get rid of moving block immediately to prevent invalid state after
+        # adding a moving block that overlaps someone else's moving block.
+        player.moving_block_or_wait_counter = 10
+        self.need_render_event.set()
+        self.tasks.append(asyncio.create_task(self._please_wait_countdown(player)))
+
+    # Make sure to hold flashing_lock.
+    # If you want to erase landed blocks, do that too while holding the lock.
+    async def flash(self, points: set[tuple[int, int]], color: int) -> None:
+        for display_color in [color, 0, color, 0]:
+            for point in points:
+                self.flashing_squares[point] = display_color
+            self.need_render_event.set()
+            await asyncio.sleep(0.1)
+
+        for point in points:
+            try:
+                del self.flashing_squares[point]
+            except KeyError:
+                # can happen with simultaneous overlapping flashes
+                pass
+        self.need_render_event.set()
+
+    async def _move_blocks_down_once(self, fast: bool) -> None:
+        # Blocks of different users can be on each other's way, but should
+        # still be moved if the bottommost block will move.
+        #
+        # Solution: repeatedly try to move each one, and stop when nothing moves.
+        todo = {
+            player
+            for player in self.players
+            if isinstance(player.moving_block_or_wait_counter, MovingBlock)
+            and player.moving_block_or_wait_counter.fast_down == fast
+        }
+        while True:
+            something_moved = False
+            for player in todo.copy():
+                moved = self.move_if_possible(
+                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
+                )
+                if moved:
+                    something_moved = True
+                    todo.remove(player)
+            if not something_moved:
+                break
+
+        for player in todo:
+            block = player.moving_block_or_wait_counter
+            assert isinstance(block, MovingBlock)
+
+            if block.fast_down:
+                block.fast_down = False
+            elif all(
+                (square.x, square.y) in self.valid_landed_coordinates
+                for square in block.squares
+            ):
+                self.landed_squares |= block.squares
+                self.new_block(player)
+            else:
+                self.start_please_wait_countdown(player)
+
+        async with self.flashing_lock:
+            full_lines_iter = self.find_and_then_wipe_full_lines()
+            full_squares = next(full_lines_iter)
+            self.need_render_event.set()
+
+            if full_squares:
+                await self.flash({(s.x, s.y) for s in full_squares}, 47)
+                try:
+                    # run past yield, which deletes points
+                    next(full_lines_iter)
+                except StopIteration:
+                    # This means function ended without a second yield.
+                    # It's expected, and in fact happens every time.
+                    pass
+
+            self.need_render_event.set()
+
+    async def _move_blocks_down_task(self, fast: bool) -> None:
+        while True:
+            if fast:
+                await asyncio.sleep(0.025)
+            else:
+                await asyncio.sleep(0.5 / (1 + self.score / 1000))
+            await self._move_blocks_down_once(fast)
