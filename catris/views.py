@@ -135,14 +135,26 @@ class MenuView:
         pass
 
     def handle_key_press(self, received: bytes) -> bool:
-        if received in (UP_ARROW_KEY, b"W", b"w") and self.selected_index > 0:
-            self.selected_index -= 1
-        if received in (DOWN_ARROW_KEY, b"S", b"s") and self.selected_index + 1 < len(
-            self.menu_items
-        ):
-            self.selected_index += 1
-        if received == b"\r":
+        if received == UP_ARROW_KEY:
+            if self.selected_index > 0:
+                self.selected_index -= 1
+        elif received == DOWN_ARROW_KEY:
+            if self.selected_index + 1 < len(self.menu_items):
+                self.selected_index += 1
+        elif received == b"\r":
             return bool(self.on_enter_pressed())
+        else:
+            # Select menu item whose text starts with pressed key.
+            # Aka press r for ring mode
+            try:
+                received_text = received.decode("utf-8")
+            except UnicodeDecodeError:
+                pass
+            else:
+                for index, text in enumerate(self.menu_items):
+                    if text.lower().startswith(received_text.lower()):
+                        self.selected_index = index
+                        break
         return False  # do not quit yet
 
 
