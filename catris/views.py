@@ -307,10 +307,10 @@ class GameOverView(MenuView):
 def get_block_preview(squares: set[Square]) -> list[bytes]:
     min_x = min(square.x for square in squares)
     min_y = min(square.y for square in squares)
-    max_x = max(square.x for square in squares)
-    max_y = max(square.y for square in squares)
+    width = max(square.x - min_x for square in squares) + 1
+    height = max(square.y - min_y for square in squares) + 1
 
-    result = [[b"  "] * (max_x - min_x + 1) for y in range(min_y, max_y + 1)]
+    result = [[b"  "] * width for y in range(height)]
     for square in squares:
         result[square.y - min_y][square.x - min_x] = square.get_text(landed=False)
     return [b"".join(row) for row in result]
