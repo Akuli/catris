@@ -3,18 +3,14 @@ from __future__ import annotations
 import copy
 import random
 from abc import abstractmethod
-from typing import TYPE_CHECKING
 
 from catris.ansi import COLOR
 
-if TYPE_CHECKING:
-    from catris.player import Player
-
 
 class Square:
-    def __init__(self, x: int, y: int) -> None:
-        self.x = x
-        self.y = y
+    def __init__(self) -> None:
+        self.x = 0
+        self.y = 0
         # The offset is a vector from current position (x, y) to center of rotation
         self.offset_x = 0
         self.offset_y = 0
@@ -57,8 +53,8 @@ BLOCK_COLORS = {
 
 
 class NormalSquare(Square):
-    def __init__(self, x: int, y: int, shape_letter: str) -> None:
-        super().__init__(x, y)
+    def __init__(self, shape_letter: str) -> None:
+        super().__init__()
         self.shape_letter = shape_letter
         self.next_rotate_goes_backwards = False
 
@@ -79,8 +75,8 @@ class NormalSquare(Square):
 
 
 class BombSquare(Square):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y)
+    def __init__(self) -> None:
+        super().__init__()
         self.timer = 15
 
     def get_text(self, landed: bool) -> bytes:
@@ -95,8 +91,8 @@ class BombSquare(Square):
 
 
 class BottleSeparatorSquare(Square):
-    def __init__(self, x: int, y: int, left_color: int, right_color: int) -> None:
-        super().__init__(x, y)
+    def __init__(self, left_color: int, right_color: int) -> None:
+        super().__init__()
         self._left_color = left_color
         self._right_color = right_color
 
@@ -141,8 +137,8 @@ DRILL_PICTURES = rb"""
 
 
 class DrillSquare(Square):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y)
+    def __init__(self) -> None:
+        super().__init__()
         self.picture_x = 0
         self.picture_y = 0
         self.picture_counter = 0
@@ -163,44 +159,33 @@ class DrillSquare(Square):
         pass
 
 
-def create_moving_squares(player: Player, score: int) -> set[Square]:
+def create_moving_squares(score: int) -> set[Square]:
     bomb_probability_as_percents = score / 800 + 1
     drill_probability_as_percents = score / 2000
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         print("Adding special bomb block")
-        center_square: Square = BombSquare(
-            player.moving_block_start_x, player.moving_block_start_y
-        )
+        center_square: Square = BombSquare()
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     elif random.uniform(0, 100) < drill_probability_as_percents:
-        center_square = DrillSquare(
-            player.moving_block_start_x, player.moving_block_start_y
-        )
+        center_square = DrillSquare()
         relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        center_square = NormalSquare(
-            player.moving_block_start_x, player.moving_block_start_y, shape_letter
-        )
+        center_square = NormalSquare(shape_letter)
         relative_coords = BLOCK_SHAPES[shape_letter]
 
     result = set()
 
-    for player_x, player_y in relative_coords:
-        # Orient initial block so that it always looks the same.
-        # Otherwise may create subtle bugs near end of game, where freshly
-        # added block overlaps with landed blocks.
-        x, y = player.player_to_world(player_x, player_y)
-
+    for x, y in relative_coords:
         square = copy.copy(center_square)
-        square.x = player.moving_block_start_x + x
-        square.y = player.moving_block_start_y + y
+        square.x = x
+        square.y = y
         square.offset_x = -x
         square.offset_y = -y
         if isinstance(square, DrillSquare):
-            square.picture_x = 1 + player_x
-            square.picture_y = DRILL_HEIGHT - 1 + player_y
+            square.picture_x = 1 + x
+            square.picture_y = DRILL_HEIGHT - 1 + y
         result.add(square)
 
     return result

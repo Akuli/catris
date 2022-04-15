@@ -28,7 +28,7 @@ class Player:
     def __post_init__(self) -> None:
         # score=0 is wrong when a new player joins an existing game.
         # But it's good enough and accessing the score from here is hard.
-        self.next_moving_squares = create_moving_squares(self, score=0)
+        self.next_moving_squares = create_moving_squares(score=0)
 
     def get_name_string(self, max_length: int) -> str:
         if self.moving_block_or_wait_counter is None:
@@ -65,12 +65,9 @@ class Player:
         self.moving_block_start_x *= -1
         self.moving_block_start_y *= -1
 
-        flipping_squares = self.next_moving_squares.copy()
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            flipping_squares |= self.moving_block_or_wait_counter.squares
-
-        for square in flipping_squares:
-            square.x *= -1
-            square.y *= -1
-            square.offset_x *= -1
-            square.offset_y *= -1
+            for square in self.moving_block_or_wait_counter.squares:
+                square.x *= -1
+                square.y *= -1
+                square.offset_x *= -1
+                square.offset_y *= -1

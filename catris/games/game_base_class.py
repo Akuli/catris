@@ -75,11 +75,26 @@ class Game:
         )
 
     def new_block(self, player: Player) -> None:
+        assert player in self.players
         assert self.is_valid()
-        player.moving_block_or_wait_counter = MovingBlock(
-            player, player.next_moving_squares
-        )
-        player.next_moving_squares = create_moving_squares(player, self.score)
+        squares = player.next_moving_squares
+        player.next_moving_squares = create_moving_squares(self.score)
+
+        # Convert to world coordinates. Rotations are needed to give the user
+        # exactly what the next block display promises and to avoid subtle bugs.
+        #
+        # It's good to do this as late as possible, so that next_moving_squares
+        # don't have to be updated if e.g. the player's view or spawning
+        # coordinates change.
+        for square in squares:
+            square.offset_x, square.offset_y = player.player_to_world(
+                square.offset_x, square.offset_y
+            )
+            square.x, square.y = player.player_to_world(square.x, square.y)
+            square.x += player.moving_block_start_x
+            square.y += player.moving_block_start_y
+
+        player.moving_block_or_wait_counter = MovingBlock(player, squares)
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
