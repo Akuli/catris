@@ -8,9 +8,9 @@ from catris.ansi import COLOR
 
 
 class Square:
-    def __init__(self, x: int, y: int) -> None:
-        self.x = x
-        self.y = y
+    def __init__(self) -> None:
+        self.x = 0
+        self.y = 0
         # The offset is a vector from current position (x, y) to center of rotation
         self.offset_x = 0
         self.offset_y = 0
@@ -53,8 +53,8 @@ BLOCK_COLORS = {
 
 
 class NormalSquare(Square):
-    def __init__(self, x: int, y: int, shape_letter: str) -> None:
-        super().__init__(x, y)
+    def __init__(self, shape_letter: str) -> None:
+        super().__init__()
         self.shape_letter = shape_letter
         self.next_rotate_goes_backwards = False
 
@@ -75,8 +75,8 @@ class NormalSquare(Square):
 
 
 class BombSquare(Square):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y)
+    def __init__(self) -> None:
+        super().__init__()
         self.timer = 15
 
     def get_text(self, landed: bool) -> bytes:
@@ -91,8 +91,8 @@ class BombSquare(Square):
 
 
 class BottleSeparatorSquare(Square):
-    def __init__(self, x: int, y: int, left_color: int, right_color: int) -> None:
-        super().__init__(x, y)
+    def __init__(self, left_color: int, right_color: int) -> None:
+        super().__init__()
         self._left_color = left_color
         self._right_color = right_color
 
@@ -137,8 +137,8 @@ DRILL_PICTURES = rb"""
 
 
 class DrillSquare(Square):
-    def __init__(self, x: int, y: int) -> None:
-        super().__init__(x, y)
+    def __init__(self) -> None:
+        super().__init__()
         self.picture_x = 0
         self.picture_y = 0
         self.picture_counter = 0
@@ -165,14 +165,14 @@ def create_moving_squares(score: int) -> set[Square]:
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         print("Adding special bomb block")
-        center_square: Square = BombSquare(0, 0)
+        center_square: Square = BombSquare()
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     elif random.uniform(0, 100) < drill_probability_as_percents:
-        center_square = DrillSquare(0, 0)
+        center_square = DrillSquare()
         relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        center_square = NormalSquare(0, 0, shape_letter)
+        center_square = NormalSquare(shape_letter)
         relative_coords = BLOCK_SHAPES[shape_letter]
 
     result = set()

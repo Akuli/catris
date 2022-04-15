@@ -117,12 +117,11 @@ class BottleGame(Game):
             # Not the first player. Add squares to boundary.
             for y, row in enumerate(self.BOTTLE):
                 if row.startswith(b"|") and row.endswith(b"|"):
-                    self.landed_squares.add(
-                        BottleSeparatorSquare(
-                            x_offset - 1, y, self.players[-1].color, color
-                        )
-                    )
-                    self.valid_landed_coordinates.add((x_offset - 1, y))
+                    sep = BottleSeparatorSquare(self.players[-1].color, color)
+                    sep.x = x_offset - 1
+                    sep.y = y
+                    self.landed_squares.add(sep)
+                    self.valid_landed_coordinates.add((sep.x, sep.y))
 
         player = Player(
             name,
