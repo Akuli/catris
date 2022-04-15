@@ -48,17 +48,25 @@ class TraditionalGame(Game):
     # Width varies as people join/leave. If you adjust these, please make sure
     # the game fits in 80 columns.
     HEIGHT = 20
-    WIDTH_PER_PLAYER = 7
     MAX_PLAYERS = 4
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
-        x_min = self.WIDTH_PER_PLAYER * index
-        x_max = x_min + self.WIDTH_PER_PLAYER
+        x_min = self._get_width_per_player() * index
+        x_max = x_min + self._get_width_per_player()
         return x in range(x_min, x_max)
 
+    def _get_width_per_player(self) -> int:
+        if len(self.players) >= 2:
+            # Each player has relatively narrow amount of room so we can fit
+            # on 80 columns terminal. On windows with no putty installed, all
+            # you have is 80 columns...
+            return 7
+        else:
+            return 10
+
     def _get_width(self) -> int:
-        return self.WIDTH_PER_PLAYER * len(self.players)
+        return self._get_width_per_player() * len(self.players)
 
     def is_valid(self) -> bool:
         if self.players:
@@ -93,41 +101,45 @@ class TraditionalGame(Game):
         self.finish_wiping_full_lines()
 
     def add_player(self, name: str, color: int) -> Player:
-        x_min = len(self.players) * self.WIDTH_PER_PLAYER
-        x_max = x_min + self.WIDTH_PER_PLAYER
+        self.players.append(
+            Player(
+                name,
+                color,
+                up_x=0,
+                up_y=-1,
+                moving_block_start_x=123,  # changed below
+                moving_block_start_y=-1,
+            )
+        )
+
+        # width per player might have changed, adjust spawning locations
+        w = self._get_width_per_player()
+        for i, player in enumerate(self.players):
+            player.moving_block_start_x = (i * w) + (w // 2)
+
         for y in range(self.HEIGHT):
-            for x in range(x_min, x_max):
-                assert (x, y) not in self.valid_landed_coordinates
+            for x in range(self._get_width()):
                 self.valid_landed_coordinates.add((x, y))
 
-        player = Player(
-            name,
-            color,
-            up_x=0,
-            up_y=-1,
-            moving_block_start_x=(
-                len(self.players) * self.WIDTH_PER_PLAYER + (self.WIDTH_PER_PLAYER // 2)
-            ),
-            moving_block_start_y=-1,
-        )
-        self.players.append(player)
         return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         header_line = b"o"
         name_line = b" "
+        name_length = 2 * self._get_width_per_player()
+
         for player in self.players:
-            name_text = player.get_name_string(max_length=2 * self.WIDTH_PER_PLAYER)
+            name_text = player.get_name_string(max_length=name_length)
 
             color_bytes = COLOR % player.color
             header_line += color_bytes
             name_line += color_bytes
 
             if player == rendering_for_this_player:
-                header_line += b"==" * self.WIDTH_PER_PLAYER
+                header_line += b"=" * name_length
             else:
-                header_line += b"--" * self.WIDTH_PER_PLAYER
-            name_line += name_text.center(2 * self.WIDTH_PER_PLAYER).encode("utf-8")
+                header_line += b"-" * name_length
+            name_line += name_text.center(name_length).encode("utf-8")
 
         name_line += COLOR % 0
         header_line += COLOR % 0
