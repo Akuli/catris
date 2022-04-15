@@ -7,7 +7,6 @@ from catris.squares import Square, create_moving_squares
 
 @dataclasses.dataclass(eq=False)
 class MovingBlock:
-    player: Player
     squares: set[Square]
     fast_down: bool = False
 

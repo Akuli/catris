@@ -43,16 +43,18 @@ class Game:
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
 
-    def _get_moving_blocks(self) -> list[MovingBlock]:
-        return [
-            player.moving_block_or_wait_counter
+    def _get_moving_blocks(self) -> dict[Player, MovingBlock]:
+        return {
+            player: player.moving_block_or_wait_counter
             for player in self.players
             if isinstance(player.moving_block_or_wait_counter, MovingBlock)
-        ]
+        }
 
     def _get_all_squares(self) -> set[Square]:
         return self.landed_squares | {
-            square for block in self._get_moving_blocks() for square in block.squares
+            square
+            for block in self._get_moving_blocks().values()
+            for square in block.squares
         }
 
     def is_valid(self) -> bool:
@@ -94,7 +96,7 @@ class Game:
             square.x += player.moving_block_start_x
             square.y += player.moving_block_start_y
 
-        player.moving_block_or_wait_counter = MovingBlock(player, squares)
+        player.moving_block_or_wait_counter = MovingBlock(squares)
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
@@ -126,7 +128,7 @@ class Game:
         # When this happens, just delete the landed block.
         bad_coords = {
             (square.x, square.y)
-            for block in self._get_moving_blocks()
+            for block in self._get_moving_blocks().values()
             for square in block.squares
         }
         for square in self.landed_squares.copy():
@@ -234,7 +236,7 @@ class Game:
         result = {}
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(landed=True)
-        for block in self._get_moving_blocks():
+        for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(landed=False)
 
@@ -293,7 +295,7 @@ class Game:
         while True:
             await asyncio.sleep(0.1)
             squares = set()
-            for block in self._get_moving_blocks():
+            for block in self._get_moving_blocks().values():
                 squares |= block.squares
             for player in self.players:
                 squares |= player.next_moving_squares

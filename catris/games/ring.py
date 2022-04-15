@@ -125,12 +125,12 @@ class RingGame(Game):
         if not super().is_valid():
             return False
 
-        for block in self._get_moving_blocks():
+        for player, block in self._get_moving_blocks().items():
             for square in block.squares:
                 if max(abs(square.x), abs(square.y)) <= self.MIDDLE_AREA_RADIUS:
                     # print("Invalid state: moving block inside middle area")
                     return False
-                player_x, player_y = block.player.world_to_player(square.x, square.y)
+                player_x, player_y = player.world_to_player(square.x, square.y)
                 if player_x < -self.GAME_RADIUS or player_x > self.GAME_RADIUS:
                     # print("Invalid state: moving block out of horizontal bounds")
                     return False

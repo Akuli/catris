@@ -58,7 +58,7 @@ class BottleGame(Game):
     def is_valid(self) -> bool:
         return super().is_valid() and all(
             (square.x, max(0, square.y)) in self.valid_landed_coordinates
-            for block in self._get_moving_blocks()
+            for block in self._get_moving_blocks().values()
             for square in block.squares
         )
 
