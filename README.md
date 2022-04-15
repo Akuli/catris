@@ -65,7 +65,10 @@ Here `192.168.1.3` is my computer's IP address.
 It is **NOT** `127.0.0.1`, as that IP address literally says "this computer",
 and it won't connect other computers to the server.
 
-Once you know the server's IP address, players can connect to the server:
+
+## Connecting to the server
+
+Once you know the server computer's IP address, players can connect to the server:
 
 <details>
 <summary>Windows</summary>
