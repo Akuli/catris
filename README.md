@@ -61,7 +61,7 @@ For example, on my Linux computer, `ip a` outputs:
 ```
 
 Here `192.168.1.3` is my computer's IP address.
-It is **NOT** `127.0.0.1`, as that IP address literally says "this computer",
+It is **NOT** `127.0.0.1`, as that IP address means "this computer",
 and it won't connect other computers to the server.
 
 
