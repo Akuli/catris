@@ -57,6 +57,27 @@ There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
 
 
+## PuTTY
+
+If you use Windows, you can play the game with telnet on the Windows command prompt,
+but it isn't ideal:
+- Blue blocks are dark blue and hard to see against the black background.
+- Each square looks a bit more wide than tall.
+- Drill blocks don't have a gray background like they're supposed to have.
+
+To fix these problems, you can [install PuTTY](https://www.putty.org/).
+Use these PuTTY settings to connect to catris:
+- Session:
+    - Host Name: localhost (or the IP address of a server)
+    - Port: 12345
+    - Connection type: Raw
+- Terminal:
+    - Local echo: Force off
+    - Local line editing: Force off
+
+Click "Open" after filling in the settings.
+
+
 ## Troubleshooting
 
 - On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
