@@ -37,6 +37,13 @@ class Lobby:
         self.games: dict[type[Game], Game] = {}
         self.clients: list[Client] = []
 
+    # ChooseGameViews display a list of all players and how many are playing each game.
+    # Call this method when any of that info changes.
+    def _update_choose_game_views(self) -> None:
+        for client in self.clients:
+            if isinstance(client.view, ChooseGameView):
+                client.render()
+
     @property
     def is_full(self) -> bool:
         return len(self.clients) == MAX_CLIENTS_PER_LOBBY
@@ -51,7 +58,7 @@ class Lobby:
         client.color = min(_CLIENT_COLORS - {c.color for c in self.clients})
         self.clients.append(client)
         client.lobby = self
-        self._on_clients_changed()
+        self._update_choose_game_views()
 
     def remove_client(self, client: Client) -> None:
         assert client.lobby is self
@@ -63,25 +70,13 @@ class Lobby:
         ):
             client.view.player.moving_block_or_wait_counter = None
             client.view.game.need_render_event.set()
-        self._on_clients_changed()
-
-    def _on_clients_changed(self) -> None:
-        for client in self.clients:
-            if isinstance(client.view, ChooseGameView):
-                # The client is displaying a list of all clients in lobby
-                client.render()
+        self._update_choose_game_views()
 
     def _player_has_a_connected_client(self, player: Player) -> bool:
         return any(
             isinstance(client.view, PlayingView) and client.view.player == player
             for client in self.clients
         )
-
-    async def _render_task(self, game: Game) -> None:
-        while True:
-            await game.need_render_event.wait()
-            game.need_render_event.clear()
-            self.render_game(game)
 
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
@@ -100,11 +95,13 @@ class Lobby:
             client.view = ChooseGameView(client, game_class)
         else:
             client.view = PlayingView(client, game, player)
+        self._update_choose_game_views()
 
-        # ChooseGameViews display how many players are currently playing each game
-        for other in self.clients:
-            if isinstance(other.view, ChooseGameView):
-                other.render()
+    async def _render_task(self, game: Game) -> None:
+        while True:
+            await game.need_render_event.wait()
+            game.need_render_event.clear()
+            self.render_game(game)
 
     def render_game(self, game: Game) -> None:
         assert game.is_valid()
@@ -120,8 +117,4 @@ class Lobby:
             for client in self.clients:
                 if isinstance(client.view, PlayingView) and client.view.game == game:
                     client.render()
-
-        # ChooseGameViews display how many players are currently playing each game
-        for client in self.clients:
-            if isinstance(client.view, ChooseGameView):
-                client.render()
+        self._update_choose_game_views()
