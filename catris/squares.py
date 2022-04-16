@@ -164,7 +164,6 @@ def create_moving_squares(score: int) -> set[Square]:
     drill_probability_as_percents = score / 2000
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
-        print("Adding special bomb block")
         center_square: Square = BombSquare()
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
     elif random.uniform(0, 100) < drill_probability_as_percents:

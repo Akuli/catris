@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 import sys
 import time
 from typing import TYPE_CHECKING
@@ -26,6 +27,9 @@ else:
         ctx = contextvars.copy_context()
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(None, func_call)
+
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -68,14 +72,14 @@ def _add_high_score_sync(
                         )
                     )
     except FileNotFoundError:
-        print("Creating catris_high_scores.txt")
+        _logger.info("Creating catris_high_scores.txt")
         with open("catris_high_scores.txt", "x", encoding="utf-8") as file:
             file.write("catris high scores file v1\n")
-    except (ValueError, OSError) as e:
-        print("Reading catris_high_scores.txt failed:", e)
+    except (ValueError, OSError):
+        _logger.exception("Reading catris_high_scores.txt failed")
         return [hs]  # do not write to file
     else:
-        print("Adding score to catris_high_scores.txt")
+        _logger.info(f"Adding score to catris_high_scores.txt: {hs}")
 
     try:
         with open("catris_high_scores.txt", "a", encoding="utf-8") as file:
@@ -90,8 +94,8 @@ def _add_high_score_sync(
                 file=file,
                 sep="\t",
             )
-    except OSError as e:
-        print("Writing to catris_high_scores.txt failed:", e)
+    except OSError:
+        _logger.exception("Writing to catris_high_scores.txt failed")
 
     high_scores.append(hs)
     high_scores.sort(key=(lambda hs: hs.score), reverse=True)
@@ -115,7 +119,7 @@ async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
         if isinstance(client.view, PlayingView) and client.view.game == game
     ]
     if not playing_clients:
-        print("Not adding high score because everyone disconnected")
+        _logger.info("Not adding high score because everyone disconnected")
         return
 
     for client in playing_clients:

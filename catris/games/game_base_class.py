@@ -205,7 +205,6 @@ class Game:
         if not self.player_can_join(name):
             return None
 
-        print(f"{name!r} joins a game with {len(self.players)} existing players")
         game_over = self.game_is_over()
 
         for player in self.players:
@@ -264,8 +263,6 @@ class Game:
             for bomb in bombs:
                 bomb.timer -= 1
                 if bomb.timer == 0:
-                    print("Bomb explodes! BOOOOOOMM!!!11!")
-
                     radius = 3.5
                     exploding_points |= {
                         (x, y)

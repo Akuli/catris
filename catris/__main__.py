@@ -1,10 +1,13 @@
 import argparse
 import asyncio
+import logging
 
 from catris.server_and_client import Server
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--lobbies",
@@ -18,7 +21,7 @@ async def main() -> None:
         catris_server.handle_connection, port=12345
     )
     async with asyncio_server:
-        print("Listening on port 12345...")
+        logging.info("Listening on port 12345...")
         await asyncio_server.serve_forever()
 
 
