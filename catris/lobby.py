@@ -45,6 +45,7 @@ class Lobby:
         assert not self.is_full
         assert client not in self.clients
         assert client.name is not None
+        assert client.lobby is None
         assert client.color is None
         client.color = min(_CLIENT_COLORS - {c.color for c in self.clients})
         self.clients.append(client)
