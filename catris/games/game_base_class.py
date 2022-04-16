@@ -199,7 +199,9 @@ class Game:
         pass
 
     # Name can exist already, if player quits and comes back
-    def get_existing_player_or_add_new_player(self, name: str, color: int) -> Player | None:
+    def get_existing_player_or_add_new_player(
+        self, name: str, color: int
+    ) -> Player | None:
         if not self.player_can_join(name):
             return None
 

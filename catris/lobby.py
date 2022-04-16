@@ -85,7 +85,7 @@ class Lobby:
     def start_game(self, client: Client, game_class: type[Game]) -> None:
         assert client in self.clients
 
-        game =  self.games.get(game_class )
+        game = self.games.get(game_class)
         if game is None:
             game = game_class()
             game.player_has_a_connected_client = self._player_has_a_connected_client

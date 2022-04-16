@@ -6,7 +6,11 @@ from catris.server_and_client import Server
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lobbies", action='store_true', help="allow users to create and join lobbies instead of having everyone play together")
+    parser.add_argument(
+        "--lobbies",
+        action="store_true",
+        help="allow users to create and join lobbies instead of having everyone play together",
+    )
     args = parser.parse_args()
 
     catris_server = Server(args.lobbies)

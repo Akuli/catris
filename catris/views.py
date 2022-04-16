@@ -125,7 +125,10 @@ class AskNameView(TextEntryView):
             self.error = "This name is in use. Try a different name."
             return
 
-        if self._client.server.only_lobby is not None and self._client.server.only_lobby.is_full:
+        if (
+            self._client.server.only_lobby is not None
+            and self._client.server.only_lobby.is_full
+        ):
             self.error = "The server is full. Please try again later."
             return
 
@@ -291,10 +294,7 @@ class ChooseGameView(MenuView):
 
         self._fill_menu()
         assert self._client.lobby is not None
-        result = [
-            b"",
-            b"",
-        ]
+        result = [b"", b""]
         if self._client.server.only_lobby is None:
             # Multiple lobbies mode
             result.append(f"   Lobby ID: {self._client.lobby.lobby_id}".encode("ascii"))
