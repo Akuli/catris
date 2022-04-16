@@ -34,7 +34,11 @@ class Game:
         self.tasks.append(asyncio.create_task(self._bomb_task()))
         self.tasks.append(asyncio.create_task(self._drilling_task()))
         self.need_render_event = asyncio.Event()
-        self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
+        self.paused = False
+
+        # This is assigned elsewhere after instantiating the game.
+        # TODO: refactor?
+        self.player_has_a_connected_client: Callable[[Player], bool]
 
         # Hold this when wiping full lines or exploding a bomb or similar.
         # Prevents moving blocks down and causing weird bugs.
@@ -216,8 +220,8 @@ class Game:
                 player.color = color
                 break
         else:
-            # Add new player
             player = self.add_player(name, color)
+            self.paused = False
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             self.new_block(player)
@@ -252,6 +256,8 @@ class Game:
     async def _bomb_task(self) -> None:
         while True:
             await asyncio.sleep(1)
+            if self.paused:
+                continue
 
             bombs: list[BombSquare] = [
                 square
@@ -291,6 +297,9 @@ class Game:
     async def _drilling_task(self) -> None:
         while True:
             await asyncio.sleep(0.1)
+            if self.paused:
+                continue
+
             squares = set()
             for block in self._get_moving_blocks().values():
                 squares |= block.squares
@@ -406,4 +415,5 @@ class Game:
                 await asyncio.sleep(0.025)
             else:
                 await asyncio.sleep(0.5 / (1 + self.score / 1000))
-            await self._move_blocks_down_once(fast)
+            if not self.paused:
+                await self._move_blocks_down_once(fast)
