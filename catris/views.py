@@ -108,10 +108,10 @@ class AskNameView(TextEntryView):
     def on_enter_pressed(self) -> None:
         name = self.get_text().strip()
         if not name:
-            self._error = "Please write a name before pressing Enter."
+            self.error = "Please write a name before pressing Enter."
             return
         if any(c.isspace() and c != " " for c in name):
-            self._error = (
+            self.error = (
                 "The name can contain spaces, but not other whitespace characters."
             )
             return
@@ -123,7 +123,7 @@ class AskNameView(TextEntryView):
             for client in self._client.server.all_clients
             if client.name is not None
         ):
-            self._error = "This name is in use. Try a different name."
+            self.error = "This name is in use. Try a different name."
             return
 
         print(f"name asking done: {name!r}")
