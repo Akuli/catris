@@ -1,10 +1,19 @@
+import argparse
 import asyncio
 
 from catris.server_and_client import Server
 
 
 async def main() -> None:
-    catris_server = Server()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--lobbies",
+        action="store_true",
+        help="allow users to create and join lobbies instead of having everyone play together",
+    )
+    args = parser.parse_args()
+
+    catris_server = Server(args.lobbies)
     asyncio_server = await asyncio.start_server(
         catris_server.handle_connection, port=12345
     )

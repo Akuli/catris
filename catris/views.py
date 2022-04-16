@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
+import time
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, ClassVar
 
 from catris.ansi import (
     BACKSPACE,
@@ -9,7 +11,6 @@ from catris.ansi import (
     COLOR,
     CSI,
     DOWN_ARROW_KEY,
-    HIDE_CURSOR,
     LEFT_ARROW_KEY,
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
@@ -31,41 +32,53 @@ ASCII_ART = r"""
                         https://github.com/Akuli/catris
 """
 
-# Longest allowed name will get truncated in a few places, that's fine
-NAME_MAX_LENGTH = 15
+
+class View:
+    # Can return lines or a tuple: (lines, cursor_pos)
+    @abstractmethod
+    def get_lines_to_render(self) -> list[bytes] | tuple[list[bytes], tuple[int, int]]:
+        pass
+
+    # Return True to quit the game
+    @abstractmethod
+    def handle_key_press(self, received: bytes) -> bool | None:
+        pass
 
 
-class AskNameView:
-    def __init__(self, client: Client):
-        assert client.name is None
+class TextEntryView(View):
+    PROMPT: ClassVar[str]
+
+    def __init__(self, client: Client) -> None:
         self._client = client
-        self._name_so_far = b""
-        self._error: str | None = None
+        self._text = b""
         self._backslash_r_received = False
+        self.error: str | None = None
 
-    def _get_name(self) -> str:
-        return "".join(
-            c
-            for c in self._name_so_far.decode("utf-8", errors="replace")
-            if c.isprintable()
-        )
-
-    def get_lines_to_render_and_cursor_pos(self) -> tuple[list[bytes], tuple[int, int]]:
+    def get_lines_to_render(self) -> tuple[list[bytes], tuple[int, int]]:
         result = ASCII_ART.encode("ascii").splitlines()
         while len(result) < 10:
             result.append(b"")
 
-        name_line = " " * 20 + f"Name: {self._get_name()}"
-        result.append(name_line.encode("utf-8"))
+        prompt_line = " " * 20 + self.PROMPT + self.get_text()
+        result.append(prompt_line.encode("utf-8"))
 
-        if self._error is not None:
+        if self.error is not None:
             result.append(b"")
             result.append(b"")
             result.append(
-                (COLOR % 31) + b"  " + self._error.encode("utf-8") + (COLOR % 0)
+                (COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0)
             )
 
-        return (result, (11, len(name_line) + 1))
+        return (result, (11, len(prompt_line) + 1))
+
+    def get_text(self) -> str:
+        return "".join(
+            c for c in self._text.decode("utf-8", errors="replace") if c.isprintable()
+        )
+
+    @abstractmethod
+    def on_enter_pressed(self) -> None:
+        pass
 
     def handle_key_press(self, received: bytes) -> None:
         # Enter presses can get sent in different ways...
@@ -73,29 +86,32 @@ class AskNameView:
         # Linux/MacOS cooked mode (not supported): b"YourName\n"
         # Windows: b"\r\n" (handled as if it was \r and \n separately)
         if received == b"\r":
-            self._on_enter_pressed()
+            self.on_enter_pressed()
             self._backslash_r_received = True
         elif received == b"\n":
             if not self._backslash_r_received:
-                self._error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
+                self.error = "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
         elif received in BACKSPACE:
             # Don't just delete last byte, so that non-ascii can be erased
             # with a single backspace press
-            self._name_so_far = self._get_name()[:-1].encode("utf-8")
+            self._text = self.get_text()[:-1].encode("utf-8")
         elif received.startswith(CSI):
             # arrow keys or similar
             pass
-        else:
-            if len(self._name_so_far) < NAME_MAX_LENGTH:
-                self._name_so_far += received
+        elif len(self._text) < 15:  # enough for names and lobby IDs
+            self._text += received
 
-    def _on_enter_pressed(self) -> None:
-        name = self._get_name().strip()
+
+class AskNameView(TextEntryView):
+    PROMPT = "Name: "
+
+    def on_enter_pressed(self) -> None:
+        name = self.get_text().strip()
         if not name:
-            self._error = "Please write a name before pressing Enter."
+            self.error = "Please write a name before pressing Enter."
             return
         if any(c.isspace() and c != " " for c in name):
-            self._error = (
+            self.error = (
                 "The name can contain spaces, but not other whitespace characters."
             )
             return
@@ -104,25 +120,36 @@ class AskNameView:
         # But it's fine if you leave and then join back with the same name.
         if name.lower() in (
             client.name.lower()
-            for client in self._client.server.clients
+            for client in self._client.server.all_clients
             if client.name is not None
         ):
-            self._error = "This name is in use. Try a different name."
+            self.error = "This name is in use. Try a different name."
+            return
+
+        if (
+            self._client.server.only_lobby is not None
+            and self._client.server.only_lobby.is_full
+        ):
+            self.error = "The server is full. Please try again later."
             return
 
         print(f"name asking done: {name!r}")
-        self._client._send_bytes(HIDE_CURSOR)
         self._client.name = name
-        self._client.view = ChooseGameView(self._client)
+        if self._client.server.only_lobby is None:
+            # multiple lobbies mode
+            self._client.view = ChooseIfNewLobbyView(self._client)
+        else:
+            self._client.server.only_lobby.add_client(self._client)
+            self._client.view = ChooseGameView(self._client)
 
 
-class MenuView:
+class MenuView(View):
     def __init__(self) -> None:
         self.menu_items: list[str] = []
         self.selected_index = 0
 
     def get_lines_to_render(self) -> list[bytes]:
-        item_width = 30
+        item_width = 35
         result = [b"", b""]
         for index, item in enumerate(self.menu_items):
             display_text = item.center(item_width).encode("utf-8")
@@ -133,7 +160,6 @@ class MenuView:
             result.append(b" " * ((80 - item_width) // 2) + display_text)
         return result
 
-    # Return True to quit the game
     @abstractmethod
     def on_enter_pressed(self) -> bool | None:
         pass
@@ -162,6 +188,78 @@ class MenuView:
         return False  # do not quit yet
 
 
+class ChooseIfNewLobbyView(MenuView):
+    def __init__(self, client: Client):
+        super().__init__()
+        self._client = client
+
+        self.menu_items.append("New lobby")
+        self.menu_items.append("Join an existing lobby")
+        self.menu_items.append("Quit")
+
+    def get_lines_to_render(self) -> list[bytes]:
+        # TODO: display some server stats? number of connected users, etc
+        return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+
+    def on_enter_pressed(self) -> bool:
+        text = self.menu_items[self.selected_index]
+        if text == "Quit":
+            return True
+        elif text == "New lobby":
+            # TODO: max number of lobbies?
+            from catris.lobby import Lobby, generate_lobby_id
+
+            lobby_id = generate_lobby_id(self._client.server.lobbies.keys())
+            print("Creating new lobby with ID", lobby_id)
+            lobby = Lobby(lobby_id)
+            self._client.server.lobbies[lobby_id] = lobby
+            lobby.add_client(self._client)
+            self._client.view = ChooseGameView(self._client)
+        elif text == "Join an existing lobby":
+            self._client.view = AskLobbyIDView(self._client)
+        else:
+            raise NotImplementedError(text)
+        return False
+
+
+class AskLobbyIDView(TextEntryView):
+    PROMPT = "Lobby ID (6 characters): "
+
+    def __init__(self, client: Client) -> None:
+        super().__init__(client)
+        self._last_attempt_time = 0.0
+
+    def on_enter_pressed(self) -> None:
+        from catris.lobby import MAX_CLIENTS_PER_LOBBY
+
+        # Prevent brute-forcing the IDs
+        # TODO: max number of simultaneous connections for each client IP address
+        if time.monotonic() < self._last_attempt_time + 1:
+            return
+
+        lobby_id = self.get_text().strip().upper()
+        print(self._client.name, "attempts to join lobby:", lobby_id)
+
+        if not re.fullmatch(r"[A-Z0-9]{6}", lobby_id):
+            self.error = "The text you entered doesn't look like a lobby ID."
+            return
+
+        self._last_attempt_time = time.monotonic()
+
+        lobby = self._client.server.lobbies.get(lobby_id)
+        if lobby is None:
+            print(self._client.name, "tried to join non-existent lobby:", lobby_id)
+            self.error = f"There is no lobby with ID '{lobby_id}'."
+            return
+        if lobby.is_full:
+            print(self._client.name, "tried to join a full lobby:", lobby_id)
+            self.error = f"Lobby '{lobby_id}' is full. It already has {MAX_CLIENTS_PER_LOBBY} players."
+            return
+
+        lobby.add_client(self._client)
+        self._client.view = ChooseGameView(self._client)
+
+
 class ChooseGameView(MenuView):
     def __init__(
         self, client: Client, previous_game_class: type[Game] = GAME_CLASSES[0]
@@ -173,36 +271,53 @@ class ChooseGameView(MenuView):
 
     def _should_show_cannot_join_error(self) -> bool:
         assert self._client.name is not None
-        return self.selected_index < len(GAME_CLASSES) and any(
-            isinstance(g, GAME_CLASSES[self.selected_index])
-            and not g.player_can_join(self._client.name)
-            for g in self._client.server.games
-        )
+        assert self._client.lobby is not None
+
+        if self.selected_index >= len(GAME_CLASSES):
+            return False
+        game = self._client.lobby.games.get(GAME_CLASSES[self.selected_index])
+        return game is not None and not game.player_can_join(self._client.name)
 
     def _fill_menu(self) -> None:
+        assert self._client.lobby is not None
         self.menu_items.clear()
         for game_class in GAME_CLASSES:
-            ongoing_games = [
-                g for g in self._client.server.games if isinstance(g, game_class)
-            ]
-            if ongoing_games:
-                [game] = ongoing_games
-                player_count = len(game.players)
-            else:
-                player_count = 0
-
-            text = game_class.NAME
-            if player_count == 1:
-                text += " (1 player)"
-            else:
-                text += f" ({player_count} players)"
-            self.menu_items.append(text)
+            game = self._client.lobby.games.get(game_class, None)
+            n = 0 if game is None else len(game.players)
+            self.menu_items.append(
+                f"{game_class.NAME} ({n}/{game_class.MAX_PLAYERS} players)"
+            )
 
         self.menu_items.append("Quit")
 
     def get_lines_to_render(self) -> list[bytes]:
+        from catris.lobby import MAX_CLIENTS_PER_LOBBY
+
         self._fill_menu()
-        result = ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+        assert self._client.lobby is not None
+        result = [b"", b""]
+        if self._client.server.only_lobby is None:
+            # Multiple lobbies mode
+            result.append(f"   Lobby ID: {self._client.lobby.lobby_id}".encode("ascii"))
+            result.append(b"")
+            result.append(b"   Players in lobby:")
+        else:
+            result.append(b"   Players:")
+
+        for number, client in enumerate(self._client.lobby.clients, start=1):
+            assert client.name is not None
+            assert client.color is not None
+            text = (
+                f"      {number}. ".encode("ascii")
+                + (COLOR % client.color)
+                + client.name.encode("utf-8")
+                + (COLOR % 0)
+            )
+            if client == self._client:
+                text += b" (you)"
+            result.append(text)
+        result.extend([b""] * (MAX_CLIENTS_PER_LOBBY - len(self._client.lobby.clients)))
+        result.extend(super().get_lines_to_render())
         if self._should_show_cannot_join_error():
             result.append(b"")
             result.append(b"")
@@ -222,7 +337,7 @@ class ChooseGameView(MenuView):
         return False
 
 
-class CheckTerminalSizeView:
+class CheckTerminalSizeView(View):
     def __init__(self, client: Client, game_class: type[Game]):
         self._client = client
         self._game_class = game_class
@@ -252,7 +367,8 @@ class CheckTerminalSizeView:
             # view isn't actually as tall as this view. This can happen if a
             # game was full and you're thrown back to main menu.
             self._client._send_bytes(CLEAR_SCREEN)
-            self._client.server.start_game(self._client, self._game_class)
+            assert self._client.lobby is not None
+            self._client.lobby.start_game(self._client, self._game_class)
 
 
 class GameOverView(MenuView):
@@ -308,8 +424,8 @@ class GameOverView(MenuView):
 
         text = self.menu_items[self.selected_index]
         if text == "New Game":
-            assert self._client.name is not None
-            self._client.server.start_game(self._client, type(self.game))
+            assert self._client.lobby is not None
+            self._client.lobby.start_game(self._client, type(self.game))
         elif text == "Choose a different game":
             self._client.view = ChooseGameView(self._client, type(self.game))
         elif text == "Quit":
@@ -332,7 +448,7 @@ def get_block_preview(squares: set[Square]) -> list[bytes]:
     return [b"".join(row) for row in result]
 
 
-class PlayingView:
+class PlayingView(View):
     def __init__(self, client: Client, game: Game, player: Player):
         self._client = client
         self._server = client.server
@@ -342,7 +458,13 @@ class PlayingView:
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
-        lines[5] += f"  Score: {self.game.score}".encode("ascii")
+        assert self._client.lobby is not None
+        if self._client.lobby.lobby_id is not None:
+            # multiple lobbies mode
+            lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
+        lines[5] += (
+            (COLOR % 36) + f"  Score: {self.game.score}".encode("ascii") + (COLOR % 0)
+        )
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
 
@@ -384,8 +506,3 @@ class PlayingView:
             else:
                 # Can't flip, blocks are on top of each other. Flip again to undo.
                 self.game.players[0].flip_view()
-
-
-View = Union[
-    AskNameView, ChooseGameView, CheckTerminalSizeView, PlayingView, GameOverView
-]
