@@ -195,7 +195,9 @@ class Client:
                 lobby.remove_client(self)
                 # Now self.lobby is now None, but lobby isn't
                 if not lobby.clients and lobby.lobby_id is not None:
-                    self.log(f"Removing lobby because last user quits: {lobby.lobby_id}")
+                    self.log(
+                        f"Removing lobby because last user quits: {lobby.lobby_id}"
+                    )
                     del self.server.lobbies[lobby.lobby_id]
 
             # \r moves cursor to start of line
