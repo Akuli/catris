@@ -445,6 +445,8 @@ class PlayingView(View):
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
+        assert self._client.lobby is not None
+        lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
         lines[5] += f"  Score: {self.game.score}".encode("ascii")
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
