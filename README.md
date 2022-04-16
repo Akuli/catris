@@ -1,8 +1,11 @@
 # catris
 
-This is a Tetris clone for multiple players that connect to a server with netcat.
+This is a Tetris clone for multiple players that connect to a server with netcat or PuTTY.
 
 ![Screenshot](screenshot.png)
+
+
+## Running the server
 
 Install Python and download all files in the `catris` folder.
 If you already have Git, you can use it:
@@ -22,27 +25,85 @@ Then run the server (if you're on Windows, use `py` instead of `python3`):
 python3 -m catris
 ```
 
-To connect to the server, open a new terminal and run:
+
+## Finding the server's IP address
+
+All players must be in the same network with the computer where the server is running.
+For example, the computers could be all connected to the same WiFi network,
+or connected to the same router with Ethernet cables.
+The server computer itself can also be used for playing the game,
+just like any other computer in the network.
+
+Next you need to know the server's IP address within the local network.
+When connecting to the server, players need to specify this IP address.
+It is **not** same as the network's public IP,
+which is what you find by googling "what is my ip" or similar.
+
+If the server is running Windows, you can run `ipconfig` on a command prompt.
+On Linux, you can use `ip a`, and I think `ifconfig` works on MacOS
+(if you have a mac, please tell me if it works and whether other commands mentioned here work too).
+Either way, you will get messy output with the IP address buried somewhere in the middle of it.
+For example, on my Linux computer, `ip a` outputs:
 
 ```
-stty raw && nc localhost 12345
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 10:60:4b:82:57:01 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.3/24 brd 192.168.1.255 scope global dynamic noprefixroute eth0
+       valid_lft 67299sec preferred_lft 67299sec
+    inet6 fe80::ab58:f098:59e0:621f/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
 ```
 
-Or if you're on Windows, google how to install telnet on whatever windows version you have
-(e.g. googling "windows 7 install telnet" worked for me),
-and use it instead of `nc`:
+Here `192.168.1.3` is my computer's IP address.
+It is **NOT** `127.0.0.1`, as that IP address means "this computer",
+and it won't connect other computers to the server.
+
+
+## Connecting to the server
+
+Once you know the server computer's IP address, players can connect to the server:
+
+<details>
+<summary>Windows</summary>
+
+[Install PuTTY](https://www.putty.org/).
+Once installed, you can open it from the start menu.
+Fill in these settings:
+- Session:
+    - Host Name: Put the IP address of the server here.
+    - Port: `12345`
+    - Connection type: Raw
+- Terminal:
+    - Local echo: Force off
+    - Local line editing: Force off
+
+Then click the "Open" button to play.
+
+</details>
+
+<details>
+<summary>MacOS or Linux</summary>
+
+Open a terminal and run:
 
 ```
-telnet localhost 12345
+stty raw; nc PUT_THE_IP_ADDRESS_HERE 12345; stty cooked
 ```
-
-The port is literally `12345`.
-If the server is running on a different computer,
-replace `localhost` with the server's IP or hostname.
 
 If you forget `stty raw`, you will get an error message reminding you to run it first.
 It is needed because otherwise you would have to press enter every time
 you want to send something to the server.
+
+If you forget `stty cooked`, the terminal will be in a weird state when you quit the game,
+and you may need to open a new terminal.
+
+</details>
 
 
 ## How to play
@@ -57,31 +118,15 @@ There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
 
 
-## PuTTY
-
-If you use Windows, you can play the game with telnet on the Windows command prompt,
-but it isn't ideal:
-- Blue blocks are dark blue and hard to see against the black background.
-- Each square looks a bit more wide than tall.
-- Drill blocks don't have a gray background like they're supposed to have.
-
-To fix these problems, you can [install PuTTY](https://www.putty.org/).
-Use these PuTTY settings to connect to catris:
-- Session:
-    - Host Name: localhost (or the IP address of a server)
-    - Port: 12345
-    - Connection type: Raw
-- Terminal:
-    - Local echo: Force off
-    - Local line editing: Force off
-
-Click "Open" after filling in the settings.
-
-
 ## Troubleshooting
 
-- On some systems, the `stty` and `nc` commands must be ran at once using e.g. `&&` as shown above,
+- On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
     instead of entering them separately.
-- If you use a firewall, you may need to tell it to allow listening on
-    the port that catris uses.
-    For example, for UFW this would be `sudo ufw allow in 12345 comment 'catris'`.
+- Some networks (e.g. the network of the university I go to)
+    don't allow computers to connect directly to each other.
+    To work around this, just use a different network,
+    e.g. your phone's WiFi hotspot.
+- If the server computer has a firewall, you may need to tell it to allow listening on port 12345.
+    For example, on Windows you can click a button that appears when you run the server for the first time,
+    and if you use UFW (quite common on Linux),
+    you need to run `sudo ufw allow in 12345 comment 'catris'`.
