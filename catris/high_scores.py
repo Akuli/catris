@@ -47,6 +47,7 @@ class HighScore:
         return f"{seconds}sec"
 
 
+# FIXME: in multiple lobbies mode, this is a race condition
 def _add_high_score_sync(file_name: str, hs: HighScore) -> list[HighScore]:
     high_scores = []
     try:
