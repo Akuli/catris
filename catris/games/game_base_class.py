@@ -327,7 +327,6 @@ class Game:
     async def _drilling_task(self) -> None:
         while True:
             await self.pause_aware_sleep(0.1)
-
             squares = set()
             for block in self._get_moving_blocks().values():
                 squares |= block.squares
