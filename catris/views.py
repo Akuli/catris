@@ -10,7 +10,6 @@ from catris.ansi import (
     COLOR,
     CSI,
     DOWN_ARROW_KEY,
-    HIDE_CURSOR,
     LEFT_ARROW_KEY,
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
@@ -447,7 +446,9 @@ class PlayingView(View):
         lines = self.game.get_lines_to_render(self.player)
         assert self._client.lobby is not None
         lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
-        lines[5] += f"  Score: {self.game.score}".encode("ascii")
+        lines[5] += (
+            (COLOR % 36) + f"  Score: {self.game.score}".encode("ascii") + (COLOR % 0)
+        )
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
 
