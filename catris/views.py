@@ -59,8 +59,8 @@ class TextEntryView(View):
         while len(result) < 10:
             result.append(b"")
 
-        name_line = " " * 20 + self.PROMPT + self.get_text()
-        result.append(name_line.encode("utf-8"))
+        prompt_line = " " * 20 + self.PROMPT + self.get_text()
+        result.append(prompt_line.encode("utf-8"))
 
         if self.error is not None:
             result.append(b"")
@@ -69,7 +69,7 @@ class TextEntryView(View):
                 (COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0)
             )
 
-        return (result, (11, len(name_line) + 1))
+        return (result, (11, len(prompt_line) + 1))
 
     def get_text(self) -> str:
         return "".join(
