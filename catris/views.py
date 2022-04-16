@@ -225,7 +225,7 @@ class AskLobbyIDView(TextEntryView):
         if time.monotonic() < self._last_attempt_time + 1:
             return
 
-        lobby_id = self.get_text().strip()
+        lobby_id = self.get_text().strip().upper()
         print(self._client.name, "attempts to join lobby:", lobby_id)
 
         if not re.fullmatch(r"[A-Z0-9]{6}", lobby_id):
