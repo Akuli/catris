@@ -467,7 +467,7 @@ class PlayingView(View):
         )
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
-        if self.game.paused:
+        if self.game.is_paused:
             lines[7] += b"  Paused"
 
         lines[8] += b"  Next:"
@@ -489,11 +489,13 @@ class PlayingView(View):
             return
 
         if received in (b"P", b"p") and len(self.game.players) == 1:
-            self.game.paused = not self.game.paused
-            self.game.need_render_event.set()
+            if self.game.is_paused:
+                self.game.unpause()
+            else:
+                self.game.pause()
             return
 
-        if self.game.paused:
+        if self.game.is_paused:
             return
 
         if received in (b"A", b"a", LEFT_ARROW_KEY):
