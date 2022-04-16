@@ -38,7 +38,7 @@ class Lobby:
 
     @property
     def is_full(self) -> bool:
-        return len(self.clients) >= MAX_CLIENTS_PER_LOBBY
+        return len(self.clients) == MAX_CLIENTS_PER_LOBBY
 
     def add_client(self, client: Client) -> None:
         print(client.name, "joins lobby:", self.lobby_id)
