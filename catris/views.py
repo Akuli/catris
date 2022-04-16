@@ -125,9 +125,18 @@ class AskNameView(TextEntryView):
             self.error = "This name is in use. Try a different name."
             return
 
+        if self._client.server.only_lobby is not None and self._client.server.only_lobby.is_full:
+            self.error = "The server is full. Please try again later."
+            return
+
         print(f"name asking done: {name!r}")
         self._client.name = name
-        self._client.view = ChooseIfNewLobbyView(self._client)
+        if self._client.server.only_lobby is None:
+            # multiple lobbies mode
+            self._client.view = ChooseIfNewLobbyView(self._client)
+        else:
+            self._client.server.only_lobby.add_client(self._client)
+            self._client.view = ChooseGameView(self._client)
 
 
 class MenuView(View):
@@ -285,10 +294,14 @@ class ChooseGameView(MenuView):
         result = [
             b"",
             b"",
-            f"   Lobby ID: {self._client.lobby.lobby_id}".encode("ascii"),
-            b"",
-            b"   Players in lobby:",
         ]
+        if self._client.server.only_lobby is None:
+            # Multiple lobbies mode
+            result.append(f"   Lobby ID: {self._client.lobby.lobby_id}".encode("ascii"))
+            result.append(b"")
+            result.append(b"   Players in lobby:")
+        else:
+            result.append(b"   Players:")
 
         for number, client in enumerate(self._client.lobby.clients, start=1):
             assert client.name is not None
@@ -445,7 +458,9 @@ class PlayingView(View):
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
         assert self._client.lobby is not None
-        lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
+        if self._client.lobby.lobby_id is not None:
+            # multiple lobbies mode
+            lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
         lines[5] += (
             (COLOR % 36) + f"  Score: {self.game.score}".encode("ascii") + (COLOR % 0)
         )

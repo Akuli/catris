@@ -22,9 +22,14 @@ from catris.views import CheckTerminalSizeView, View, TextEntryView, AskNameView
 
 
 class Server:
-    def __init__(self) -> None:
+    def __init__(self, use_lobbies: bool) -> None:
         self.all_clients: set[Client] = set()
         self.lobbies: dict[str, Lobby] = {}  # keys are lobby IDs
+        if use_lobbies:
+            self.only_lobby = None
+        else:
+            # Create a single lobby that will be used for everything
+            self.only_lobby = Lobby(None)
 
     async def handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -179,12 +184,11 @@ class Client:
             if self.lobby is not None:
                 lobby = self.lobby
                 lobby.remove_client(self)
-                # self.lobby is now None, but lobby isn't
-                if not lobby.clients:
+                # Now self.lobby is now None, but lobby isn't
+                if not lobby.clients and lobby.lobby_id is not None:
                     print(
                         "Removing lobby, because last user quits:", lobby.lobby_id
                     )
-                    # TODO: make sure game tasks stop when everyone leaves
                     del self.server.lobbies[lobby.lobby_id]
 
             # \r moves cursor to start of line

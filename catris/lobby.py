@@ -30,7 +30,8 @@ MAX_CLIENTS_PER_LOBBY = len(_CLIENT_COLORS)
 
 class Lobby:
 
-    def __init__(self, lobby_id: str) -> None:
+    # None is used when there's only one lobby that everyone joins by default
+    def __init__(self, lobby_id: str | None) -> None:
         self.lobby_id = lobby_id
         self.games: dict[type[Game], Game] = {}
         self.clients: list[Client] = []
@@ -51,6 +52,7 @@ class Lobby:
         self._on_clients_changed()
 
     def remove_client(self, client: Client) -> None:
+        assert client.lobby is self
         self.clients.remove(client)
         client.lobby = None
 
