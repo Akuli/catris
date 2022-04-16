@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import itertools
+import logging
 import time
 
 from catris.ansi import (
@@ -38,10 +40,14 @@ class Server:
         await client.handle()
 
 
+_id_counter = itertools.count(1)
+
+
 class Client:
     def __init__(
         self, server: Server, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        self._client_id = next(_id_counter)
         self.server = server
         self._reader = reader
         self.writer = writer
@@ -53,6 +59,9 @@ class Client:
         self.color: int | None = None
         self.view: View = AskNameView(self)
         self.rotate_counter_clockwise = False
+
+    def log(self, msg: str, *, level: int = logging.INFO) -> None:
+        logging.log(level, f"(client {self._client_id}) {msg}")
 
     def render(self) -> None:
         if isinstance(self.view, CheckTerminalSizeView):
@@ -111,7 +120,7 @@ class Client:
         # Prevent filling the server's memory if client sends but never receives.
         # I don't use .drain() because one client's slowness shouldn't slow others.
         if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
-            print("More than 64K of data in send buffer, disconnecting:", self.name)
+            self.log("More than 64K of data in send buffer, disconnecting")
             self.writer.transport.close()
 
     async def _receive_bytes(self) -> bytes | None:
@@ -123,7 +132,7 @@ class Client:
         try:
             result = await self._reader.read(100)
         except OSError as e:
-            print("Receive error:", self.name, e)
+            self.log(f"Receive error: {e}")
             return None
 
         # Prevent 100% cpu usage if someone sends a lot of data
@@ -132,7 +141,7 @@ class Client:
         while self._recv_stats and self._recv_stats[0][0] < now - 1:
             self._recv_stats.popleft()
         if sum(length for timestamp, length in self._recv_stats) > 2000:
-            print("Received more than 2KB/sec, disconnecting:", self.name)
+            self.log("Received more than 2KB/sec, disconnecting")
             return None
 
         # Checking ESC key here is a bad idea.
@@ -149,7 +158,7 @@ class Client:
         return result
 
     async def handle(self) -> None:
-        print("New connection")
+        self.log("New connection")
 
         try:
             self.server.all_clients.add(self)
@@ -179,14 +188,14 @@ class Client:
                         return
 
         finally:
-            print("Closing connection:", self.name)
+            self.log("Closing connection")
             self.server.all_clients.discard(self)
             if self.lobby is not None:
                 lobby = self.lobby
                 lobby.remove_client(self)
                 # Now self.lobby is now None, but lobby isn't
                 if not lobby.clients and lobby.lobby_id is not None:
-                    print("Removing lobby, because last user quits:", lobby.lobby_id)
+                    self.log(f"Removing lobby because last user quits: {lobby.lobby_id}")
                     del self.server.lobbies[lobby.lobby_id]
 
             # \r moves cursor to start of line

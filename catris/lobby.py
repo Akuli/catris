@@ -49,7 +49,7 @@ class Lobby:
         return len(self.clients) == MAX_CLIENTS_PER_LOBBY
 
     def add_client(self, client: Client) -> None:
-        print(client.name, "joins lobby:", self.lobby_id)
+        client.log(f"Joining lobby: {self.lobby_id}")
         assert not self.is_full
         assert client not in self.clients
         assert client.name is not None
@@ -61,6 +61,7 @@ class Lobby:
         self._update_choose_game_views()
 
     def remove_client(self, client: Client) -> None:
+        client.log(f"Leaving lobby: {self.lobby_id}")
         assert client.lobby is self
         self.clients.remove(client)
         client.lobby = None
@@ -90,6 +91,7 @@ class Lobby:
 
         assert client.name is not None
         assert client.color is not None
+        client.log(f"Joining a game with {len(game.players)} existing players")
         player = game.get_existing_player_or_add_new_player(client.name, client.color)
         if player is None:
             client.view = ChooseGameView(client, game_class)

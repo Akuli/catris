@@ -133,7 +133,7 @@ class AskNameView(TextEntryView):
             self.error = "The server is full. Please try again later."
             return
 
-        print(f"name asking done: {name!r}")
+        self._client.log(f"Name asking done: {name!r}")
         self._client.name = name
         if self._client.server.only_lobby is None:
             # multiple lobbies mode
@@ -210,7 +210,7 @@ class ChooseIfNewLobbyView(MenuView):
             from catris.lobby import Lobby, generate_lobby_id
 
             lobby_id = generate_lobby_id(self._client.server.lobbies.keys())
-            print("Creating new lobby with ID", lobby_id)
+            self._client.log(f"Creating new lobby: {lobby_id}")
             lobby = Lobby(lobby_id)
             self._client.server.lobbies[lobby_id] = lobby
             lobby.add_client(self._client)
@@ -238,7 +238,6 @@ class AskLobbyIDView(TextEntryView):
             return
 
         lobby_id = self.get_text().strip().upper()
-        print(self._client.name, "attempts to join lobby:", lobby_id)
 
         if not re.fullmatch(r"[A-Z0-9]{6}", lobby_id):
             self.error = "The text you entered doesn't look like a lobby ID."
@@ -248,14 +247,15 @@ class AskLobbyIDView(TextEntryView):
 
         lobby = self._client.server.lobbies.get(lobby_id)
         if lobby is None:
-            print(self._client.name, "tried to join non-existent lobby:", lobby_id)
+            self._client.log(f"tried to join a non-existent lobby: {lobby_id}")
             self.error = f"There is no lobby with ID '{lobby_id}'."
             return
         if lobby.is_full:
-            print(self._client.name, "tried to join a full lobby:", lobby_id)
+            self._client.log(f"tried to join a full lobby: {lobby_id}")
             self.error = f"Lobby '{lobby_id}' is full. It already has {MAX_CLIENTS_PER_LOBBY} players."
             return
 
+        self._client.log(f"Joining lobby: {lobby_id}")
         lobby.add_client(self._client)
         self._client.view = ChooseGameView(self._client)
 

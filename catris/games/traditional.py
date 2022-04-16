@@ -86,7 +86,6 @@ class TraditionalGame(Game):
         for y in range(self.HEIGHT):
             row = {square for square in self.landed_squares if square.y == y}
             if len(row) == self._get_width() and self._get_width() != 0:
-                print("Clearing full row:", y)
                 full_rows[y] = row
 
         yield {square for squares in full_rows.values() for square in squares}
