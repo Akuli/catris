@@ -14,81 +14,17 @@ from catris.ansi import (
     CSI,
     ESC,
     MOVE_CURSOR,
+    HIDE_CURSOR,
     SHOW_CURSOR,
 )
-from catris.games import GAME_CLASSES, Game
-from catris.high_scores import save_and_display_high_scores
-from catris.player import MovingBlock, Player
-from catris.views import (
-    AskNameView,
-    CheckTerminalSizeView,
-    ChooseGameView,
-    PlayingView,
-    View,
-)
+from catris.lobby import Lobby
+from catris.views import CheckTerminalSizeView, View, TextEntryView, AskNameView
 
 
 class Server:
     def __init__(self) -> None:
-        self.clients: set[Client] = set()
-        self.games: set[Game] = set()
-
-    def start_game(self, client: Client, game_class: type[Game]) -> None:
-        assert client in self.clients
-
-        existing_games = [game for game in self.games if isinstance(game, game_class)]
-        if existing_games:
-            [game] = existing_games
-        else:
-            game = game_class()
-            game.player_has_a_connected_client = self._player_has_a_connected_client
-            game.tasks.append(asyncio.create_task(self._render_task(game)))
-            self.games.add(game)
-
-        assert client.name is not None
-        player = game.get_existing_player_or_add_new_player(client.name)
-        if player is None:
-            client.view = ChooseGameView(client, game_class)
-        else:
-            client.view = PlayingView(client, game, player)
-
-        # ChooseGameViews display how many players are currently playing each game
-        for client in self.clients:
-            if isinstance(client.view, ChooseGameView):
-                client.render()
-
-    def _player_has_a_connected_client(self, player: Player) -> bool:
-        return any(
-            isinstance(client.view, PlayingView) and client.view.player == player
-            for client in self.clients
-        )
-
-    async def _render_task(self, game: Game) -> None:
-        while True:
-            await game.need_render_event.wait()
-            game.need_render_event.clear()
-            self.render_game(game)
-
-    def render_game(self, game: Game) -> None:
-        assert game in self.games
-        assert game.is_valid()
-
-        game.tasks = [t for t in game.tasks if not t.done()]
-
-        if game.game_is_over():
-            self.games.remove(game)
-            for task in game.tasks:
-                task.cancel()
-            asyncio.create_task(save_and_display_high_scores(game, self.clients))
-        else:
-            for client in self.clients:
-                if isinstance(client.view, PlayingView) and client.view.game == game:
-                    client.render()
-
-        # ChooseGameViews display how many players are currently playing each game
-        for client in self.clients:
-            if isinstance(client.view, ChooseGameView):
-                client.render()
+        self.all_clients: set[Client] = set()
+        self.lobbies: dict[str, Lobby] = {}  # keys are lobby IDs
 
     async def handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -108,6 +44,8 @@ class Client:
 
         self.last_displayed_lines: list[bytes] = []
         self.name: str | None = None
+        self.lobby: Lobby | None = None
+        self.color: int | None = None
         self.view: View = AskNameView(self)
         self.rotate_counter_clockwise = False
 
@@ -122,12 +60,12 @@ class Client:
             )
             return
 
-        if isinstance(self.view, AskNameView):
-            lines, cursor_pos = self.view.get_lines_to_render_and_cursor_pos()
+        lines = self.view.get_lines_to_render()
+        if isinstance(lines, tuple):
+            lines, cursor_pos = lines
         else:
             # Bottom of view. If user types something, it's unlikely to be
             # noticed here before it gets wiped by the next refresh.
-            lines = self.view.get_lines_to_render()
             cursor_pos = (len(lines) + 1, 1)
 
         while len(lines) < len(self.last_displayed_lines):
@@ -138,6 +76,11 @@ class Client:
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow
         to_send = b""
+
+        if isinstance(self.view, TextEntryView):
+            to_send += SHOW_CURSOR
+        else:
+            to_send += HIDE_CURSOR
 
         # Hide user's key press at cursor location. Needs to be done at
         # whatever cursor location is currently, before we move it.
@@ -204,14 +147,7 @@ class Client:
         print("New connection")
 
         try:
-            if len(self.server.clients) >= sum(
-                klass.MAX_PLAYERS for klass in GAME_CLASSES
-            ):
-                print("Sending server full message")
-                self._send_bytes(b"The server is full. Please try again later.\r\n")
-                return
-
-            self.server.clients.add(self)
+            self.server.all_clients.add(self)
             self._send_bytes(CLEAR_SCREEN)
             received = b""
 
@@ -239,12 +175,17 @@ class Client:
 
         finally:
             print("Closing connection:", self.name)
-            self.server.clients.discard(self)
-            if isinstance(self.view, PlayingView) and isinstance(
-                self.view.player.moving_block_or_wait_counter, MovingBlock
-            ):
-                self.view.player.moving_block_or_wait_counter = None
-                self.view.game.need_render_event.set()
+            self.server.all_clients.discard(self)
+            if self.lobby is not None:
+                lobby = self.lobby
+                lobby.remove_client(self)
+                # self.lobby is now None, but lobby isn't
+                if not lobby.clients:
+                    print(
+                        "Removing lobby, because last user quits:", lobby.lobby_id
+                    )
+                    # TODO: make sure game tasks stop when everyone leaves
+                    del self.server.lobbies[lobby.lobby_id]
 
             # \r moves cursor to start of line
             self._send_bytes(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)

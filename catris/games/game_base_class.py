@@ -15,8 +15,6 @@ from catris.squares import (
     create_moving_squares,
 )
 
-PLAYER_COLORS = {31, 32, 33, 34}
-
 
 class Game:
     NAME: ClassVar[str]
@@ -201,7 +199,7 @@ class Game:
         pass
 
     # Name can exist already, if player quits and comes back
-    def get_existing_player_or_add_new_player(self, name: str) -> Player | None:
+    def get_existing_player_or_add_new_player(self, name: str, color: int) -> Player | None:
         if not self.player_can_join(name):
             return None
 
@@ -214,10 +212,10 @@ class Game:
                 # "aKULI" as name when you intended to type "Akuli".
                 # If that happens, you can leave the game and join back.
                 player.name = name
+                player.color = color
                 break
         else:
             # Add new player
-            color = min(PLAYER_COLORS - {p.color for p in self.players})
             player = self.add_player(name, color)
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):

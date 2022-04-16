@@ -75,7 +75,7 @@ def _add_high_score_sync(file_name: str, hs: HighScore) -> list[HighScore]:
     return high_scores
 
 
-async def save_and_display_high_scores(game: Game, clients: set[Client]) -> None:
+async def save_and_display_high_scores(game: Game, clients: list[Client]) -> None:
     duration_ns = time.monotonic_ns() - game.start_time
     new_high_score = HighScore(
         score=game.score,
