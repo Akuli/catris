@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import sys
 import time
@@ -8,10 +9,12 @@ from typing import TYPE_CHECKING
 from catris.games import Game
 from catris.views import GameOverView, PlayingView
 
+if TYPE_CHECKING:
+    from catris.lobby import Lobby
+
 if sys.version_info >= (3, 9):
     from asyncio import to_thread
 else:
-    import asyncio
     from typing import Any
 
     # copied from source code with slight modifications
@@ -23,10 +26,6 @@ else:
         ctx = contextvars.copy_context()
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(None, func_call)
-
-
-if TYPE_CHECKING:
-    from catris.server_and_client import Client
 
 
 @dataclasses.dataclass
@@ -47,36 +46,62 @@ class HighScore:
         return f"{seconds}sec"
 
 
-# FIXME: in multiple lobbies mode, this is a race condition
-def _add_high_score_sync(file_name: str, hs: HighScore) -> list[HighScore]:
+def _add_high_score_sync(
+    game_class: type[Game], hs: HighScore, hs_lobby_id: str | None
+) -> list[HighScore]:
     high_scores = []
     try:
-        with open(file_name, "r", encoding="utf-8") as file:
+        with open("catris_high_scores.txt", "r", encoding="utf-8") as file:
+            first_line = file.readline()
+            if first_line != "catris high scores file v1\n":
+                raise ValueError(f"unrecognized first line: {repr(first_line)}")
+
             for line in file:
-                score, duration, *players = line.strip("\n").split("\t")
-                high_scores.append(
-                    HighScore(
-                        score=int(score), duration_sec=float(duration), players=players
+                parts = line.strip("\n").split("\t")
+                game_class_id, lobby_id, score, duration, *players = parts
+                if game_class_id == game_class.ID:
+                    high_scores.append(
+                        HighScore(
+                            score=int(score),
+                            duration_sec=float(duration),
+                            players=players,
+                        )
                     )
-                )
     except FileNotFoundError:
-        print("Creating", file_name)
+        print("Creating catris_high_scores.txt")
+        with open("catris_high_scores.txt", "x", encoding="utf-8") as file:
+            file.write("catris high scores file v1\n")
     except (ValueError, OSError) as e:
-        print(f"Reading {file_name} failed:", e)
+        print("Reading catris_high_scores.txt failed:", e)
+        return [hs]  # do not write to file
     else:
-        print("Found high scores file:", file_name)
+        print("Adding score to catris_high_scores.txt")
 
     try:
-        with open(file_name, "a", encoding="utf-8") as file:
-            print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
+        with open("catris_high_scores.txt", "a", encoding="utf-8") as file:
+            # Currently lobby_id is not used for anything.
+            # But I don't want to change the format if I ever need it for something...
+            print(
+                game_class.ID,
+                hs_lobby_id or "-",
+                hs.score,
+                hs.duration_sec,
+                *hs.players,
+                file=file,
+                sep="\t",
+            )
     except OSError as e:
-        print(f"Writing to {file_name} failed:", e)
+        print("Writing to catris_high_scores.txt failed:", e)
 
     high_scores.append(hs)
+    high_scores.sort(key=(lambda hs: hs.score), reverse=True)
     return high_scores
 
 
-async def save_and_display_high_scores(game: Game, clients: list[Client]) -> None:
+_high_scores_lock = asyncio.Lock()
+
+
+async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
     duration_ns = time.monotonic_ns() - game.start_time
     new_high_score = HighScore(
         score=game.score,
@@ -85,7 +110,9 @@ async def save_and_display_high_scores(game: Game, clients: list[Client]) -> Non
     )
 
     playing_clients = [
-        c for c in clients if isinstance(c.view, PlayingView) and c.view.game == game
+        client
+        for client in lobby.clients
+        if isinstance(client.view, PlayingView) and client.view.game == game
     ]
     if not playing_clients:
         print("Not adding high score because everyone disconnected")
@@ -95,13 +122,13 @@ async def save_and_display_high_scores(game: Game, clients: list[Client]) -> Non
         client.view = GameOverView(client, game, new_high_score)
         client.render()
 
-    high_scores = await to_thread(
-        _add_high_score_sync, game.HIGH_SCORES_FILE, new_high_score
-    )
-    high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-    best5 = high_scores[:5]
+    async with _high_scores_lock:
+        high_scores = await to_thread(
+            _add_high_score_sync, type(game), new_high_score, lobby.lobby_id
+        )
 
-    for client in clients:
+    best5 = high_scores[:5]
+    for client in lobby.clients:
         if isinstance(client.view, GameOverView) and client.view.game == game:
             client.view.set_high_scores(best5)
             client.render()

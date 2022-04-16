@@ -12,7 +12,7 @@ from .traditional import calculate_score
 
 class BottleGame(Game):
     NAME = "Bottle game"
-    HIGH_SCORES_FILE = "bottle_high_scores.txt"
+    ID = "bottle"
     TERMINAL_HEIGHT_NEEDED = 24
 
     # Please make sure the game fits in 80 columns

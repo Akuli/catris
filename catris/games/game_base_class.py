@@ -18,7 +18,7 @@ from catris.squares import (
 
 class Game:
     NAME: ClassVar[str]
-    HIGH_SCORES_FILE: ClassVar[str]
+    ID: ClassVar[str]
     TERMINAL_HEIGHT_NEEDED: ClassVar[int]
     MAX_PLAYERS: ClassVar[int]
 
