@@ -488,7 +488,7 @@ class PlayingView(View):
             self._client.render()
             return
 
-        if received in (b"P", b"p") and len(self.game.players) == 1:
+        if received in (b"P", b"p"):
             if self.game.is_paused:
                 self.game.unpause()
             else:

@@ -253,7 +253,6 @@ class Game:
                 break
         else:
             player = self.add_player(name, color)
-            self.unpause()
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             self.new_block(player)
