@@ -98,9 +98,9 @@ class Lobby:
             client.view = PlayingView(client, game, player)
 
         # ChooseGameViews display how many players are currently playing each game
-        for client in self.clients:
-            if isinstance(client.view, ChooseGameView):
-                client.render()
+        for other in self.clients:
+            if isinstance(other.view, ChooseGameView):
+                other.render()
 
     def render_game(self, game: Game) -> None:
         assert game.is_valid()

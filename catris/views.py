@@ -279,6 +279,9 @@ class ChooseGameView(MenuView):
         self.menu_items.append("Quit")
 
     def get_lines_to_render(self) -> list[bytes]:
+        from catris.lobby import MAX_CLIENTS_PER_LOBBY
+
+        self._fill_menu()
         assert self._client.lobby is not None
         result = [
             b"",
@@ -287,7 +290,6 @@ class ChooseGameView(MenuView):
             b"",
             b"   Players in lobby:",
         ]
-        from catris.lobby import MAX_CLIENTS_PER_LOBBY
 
         for number, client in enumerate(self._client.lobby.clients, start=1):
             assert client.name is not None
