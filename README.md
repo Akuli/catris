@@ -112,7 +112,7 @@ Keys:
 - WASD or arrow keys: move and rotate
 - Ctrl+C, Ctrl+D or Ctrl+Q: quit
 - r: change rotating direction
-- p: pause/unpause (only available in games with 1 player)
+- p: pause/unpause (affects all players)
 - f: flip the game upside down (only available in ring mode with 1 player)
 
 There's only one score; you play together, not against other players.
