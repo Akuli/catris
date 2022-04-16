@@ -91,7 +91,7 @@ class Lobby:
 
         assert client.name is not None
         assert client.color is not None
-        client.log(f"Joining a game with {len(game.players)} existing players")
+        client.log(f"Joining a game with {len(game.players)} existing players: {game}")
         player = game.get_existing_player_or_add_new_player(client.name, client.color)
         if player is None:
             client.view = ChooseGameView(client, game_class)
