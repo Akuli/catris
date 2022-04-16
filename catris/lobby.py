@@ -112,7 +112,7 @@ class Lobby:
             del self.games[type(game)]
             for task in game.tasks:
                 task.cancel()
-            asyncio.create_task(save_and_display_high_scores(game, self.clients))
+            asyncio.create_task(save_and_display_high_scores(self, game))
         else:
             for client in self.clients:
                 if isinstance(client.view, PlayingView) and client.view.game == game:

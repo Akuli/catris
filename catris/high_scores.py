@@ -26,7 +26,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from catris.server_and_client import Client
+    from catris.lobby import Lobby
 
 
 @dataclasses.dataclass
@@ -47,16 +47,19 @@ class HighScore:
         return f"{seconds}sec"
 
 
-def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScore]:
+def _add_high_score_sync(
+    game_class: type[Game], hs: HighScore, hs_lobby_id: str | None
+) -> list[HighScore]:
     high_scores = []
     try:
-        with open("catris_high_scores.tsv", "r", encoding="utf-8") as file:
+        with open("catris_high_scores.txt", "r", encoding="utf-8") as file:
             first_line = file.readline()
             if first_line != "catris high scores file v1\n":
                 raise ValueError(f"unrecognized first line: {repr(first_line)}")
 
             for line in file:
-                game_class_id, score, duration, *players = line.strip("\n").split("\t")
+                parts = line.strip("\n").split("\t")
+                game_class_id, lobby_id, score, duration, *players = parts
                 if game_class_id == game_class.ID:
                     high_scores.append(
                         HighScore(
@@ -66,19 +69,22 @@ def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScor
                         )
                     )
     except FileNotFoundError:
-        print("Creating catris_high_scores.tsv")
-        with open("catris_high_scores.tsv", "x", encoding="utf-8") as file:
+        print("Creating catris_high_scores.txt")
+        with open("catris_high_scores.txt", "x", encoding="utf-8") as file:
             file.write("catris high scores file v1\n")
     except (ValueError, OSError) as e:
-        print("Reading catris_high_scores.tsv failed:", e)
+        print("Reading catris_high_scores.txt failed:", e)
         return [hs]  # do not write to file
     else:
-        print("Adding score to catris_high_scores.tsv")
+        print("Adding score to catris_high_scores.txt")
 
     try:
-        with open("catris_high_scores.tsv", "a", encoding="utf-8") as file:
+        with open("catris_high_scores.txt", "a", encoding="utf-8") as file:
+            # Currently lobby_id is not used for anything.
+            # But I don't want to change the format if I ever need it for something...
             print(
                 game_class.ID,
+                hs_lobby_id or "-",
                 hs.score,
                 hs.duration_sec,
                 *hs.players,
@@ -86,7 +92,7 @@ def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScor
                 sep="\t",
             )
     except OSError as e:
-        print("Writing to catris_high_scores.tsv failed:", e)
+        print("Writing to catris_high_scores.txt failed:", e)
 
     high_scores.append(hs)
     high_scores.sort(key=(lambda hs: hs.score), reverse=True)
@@ -96,7 +102,7 @@ def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScor
 _high_scores_lock = asyncio.Lock()
 
 
-async def save_and_display_high_scores(game: Game, clients: list[Client]) -> None:
+async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
     duration_ns = time.monotonic_ns() - game.start_time
     new_high_score = HighScore(
         score=game.score,
@@ -105,7 +111,9 @@ async def save_and_display_high_scores(game: Game, clients: list[Client]) -> Non
     )
 
     playing_clients = [
-        c for c in clients if isinstance(c.view, PlayingView) and c.view.game == game
+        client
+        for client in lobby.clients
+        if isinstance(client.view, PlayingView) and client.view.game == game
     ]
     if not playing_clients:
         print("Not adding high score because everyone disconnected")
@@ -116,10 +124,12 @@ async def save_and_display_high_scores(game: Game, clients: list[Client]) -> Non
         client.render()
 
     async with _high_scores_lock:
-        high_scores = await to_thread(_add_high_score_sync, type(game), new_high_score)
+        high_scores = await to_thread(
+            _add_high_score_sync, type(game), new_high_score, lobby.lobby_id
+        )
 
     best5 = high_scores[:5]
-    for client in clients:
+    for client in lobby.clients:
         if isinstance(client.view, GameOverView) and client.view.game == game:
             client.view.set_high_scores(best5)
             client.render()

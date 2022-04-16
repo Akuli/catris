@@ -128,4 +128,4 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-/catris_high_scores.tsv
+/catris_high_scores.txt
