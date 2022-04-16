@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING
 from catris.games import Game
 from catris.views import GameOverView, PlayingView
 
+if TYPE_CHECKING:
+    from catris.lobby import Lobby
+
 if sys.version_info >= (3, 9):
     from asyncio import to_thread
 else:
@@ -23,10 +26,6 @@ else:
         ctx = contextvars.copy_context()
         func_call = functools.partial(ctx.run, func, *args, **kwargs)
         return await loop.run_in_executor(None, func_call)
-
-
-if TYPE_CHECKING:
-    from catris.lobby import Lobby
 
 
 @dataclasses.dataclass
