@@ -52,7 +52,7 @@ def _add_high_score_sync(
     high_scores = []
     try:
         with open("catris_high_scores.txt", "r", encoding="utf-8") as file:
-            first_line = file.readline()
+            first_line = file.readline(100)
             if first_line != "catris high scores file v1\n":
                 raise ValueError(f"unrecognized first line: {repr(first_line)}")
 
