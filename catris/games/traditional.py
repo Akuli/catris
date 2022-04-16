@@ -42,7 +42,7 @@ def calculate_score(game: Game, full_row_count: int) -> int:
 
 class TraditionalGame(Game):
     NAME = "Traditional game"
-    HIGH_SCORES_FILE = "high_scores.txt"
+    ID = "traditional"
     TERMINAL_HEIGHT_NEEDED = 24
 
     # Width varies as people join/leave. If you adjust these, please make sure

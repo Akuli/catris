@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import sys
 import time
@@ -47,33 +48,53 @@ class HighScore:
         return f"{seconds}sec"
 
 
-# FIXME: in multiple lobbies mode, this is a race condition
-def _add_high_score_sync(file_name: str, hs: HighScore) -> list[HighScore]:
+def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScore]:
     high_scores = []
     try:
-        with open(file_name, "r", encoding="utf-8") as file:
+        with open("catris_high_scores.tsv", "r", encoding="utf-8") as file:
+            first_line = file.readline()
+            if first_line != "VERSION\t1\n":
+                raise ValueError(f"unrecognized first line: {repr(first_line)}")
+
             for line in file:
-                score, duration, *players = line.strip("\n").split("\t")
-                high_scores.append(
-                    HighScore(
-                        score=int(score), duration_sec=float(duration), players=players
+                game_class_id, score, duration, *players = line.strip("\n").split("\t")
+                if game_class_id == game_class.ID:
+                    high_scores.append(
+                        HighScore(
+                            score=int(score),
+                            duration_sec=float(duration),
+                            players=players,
+                        )
                     )
-                )
     except FileNotFoundError:
-        print("Creating", file_name)
+        print("Creating catris_high_scores.tsv")
+        with open("catris_high_scores.tsv", "x", encoding="utf-8") as file:
+            file.write("VERSION\t1\n")
     except (ValueError, OSError) as e:
-        print(f"Reading {file_name} failed:", e)
+        print("Reading catris_high_scores.tsv failed:", e)
+        return [hs]  # do not write to file
     else:
-        print("Found high scores file:", file_name)
+        print("Adding score to catris_high_scores.tsv")
 
     try:
-        with open(file_name, "a", encoding="utf-8") as file:
-            print(hs.score, hs.duration_sec, *hs.players, file=file, sep="\t")
+        with open("catris_high_scores.tsv", "a", encoding="utf-8") as file:
+            print(
+                game_class.ID,
+                hs.score,
+                hs.duration_sec,
+                *hs.players,
+                file=file,
+                sep="\t",
+            )
     except OSError as e:
-        print(f"Writing to {file_name} failed:", e)
+        print("Writing to catris_high_scores.tsv failed:", e)
 
     high_scores.append(hs)
+    high_scores.sort(key=(lambda hs: hs.score), reverse=True)
     return high_scores
+
+
+_high_scores_lock = asyncio.Lock()
 
 
 async def save_and_display_high_scores(game: Game, clients: list[Client]) -> None:
@@ -95,12 +116,10 @@ async def save_and_display_high_scores(game: Game, clients: list[Client]) -> Non
         client.view = GameOverView(client, game, new_high_score)
         client.render()
 
-    high_scores = await to_thread(
-        _add_high_score_sync, game.HIGH_SCORES_FILE, new_high_score
-    )
-    high_scores.sort(key=(lambda hs: hs.score), reverse=True)
-    best5 = high_scores[:5]
+    async with _high_scores_lock:
+        high_scores = await to_thread(_add_high_score_sync, type(game), new_high_score)
 
+    best5 = high_scores[:5]
     for client in clients:
         if isinstance(client.view, GameOverView) and client.view.game == game:
             client.view.set_high_scores(best5)

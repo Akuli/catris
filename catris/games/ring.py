@@ -12,7 +12,7 @@ from .game_base_class import Game
 
 class RingGame(Game):
     NAME = "Ring game"
-    HIGH_SCORES_FILE = "ring_high_scores.txt"
+    ID = "ring"
 
     # Game size is actually 2*GAME_RADIUS + 1 in each direction.
     GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
