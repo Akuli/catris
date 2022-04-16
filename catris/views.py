@@ -467,18 +467,37 @@ class PlayingView(View):
         )
         if self._client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
+        if self.game.is_paused:
+            lines[7] += b"  Paused"
 
-        lines[7] += b"  Next:"
+        lines[8] += b"  Next:"
         for index, row in enumerate(
-            get_block_preview(self.player.next_moving_squares), start=9
+            get_block_preview(self.player.next_moving_squares), start=10
         ):
             lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
-            lines[16] += f"  Please wait: {n}".encode("ascii")
+            lines[17] += f"  Please wait: {n}".encode("ascii")
         return lines
 
     def handle_key_press(self, received: bytes) -> None:
+        if received in (b"R", b"r"):
+            self._client.rotate_counter_clockwise = (
+                not self._client.rotate_counter_clockwise
+            )
+            self._client.render()
+            return
+
+        if received in (b"P", b"p") and len(self.game.players) == 1:
+            if self.game.is_paused:
+                self.game.unpause()
+            else:
+                self.game.pause()
+            return
+
+        if self.game.is_paused:
+            return
+
         if received in (b"A", b"a", LEFT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
             self.player.set_fast_down(False)
@@ -490,11 +509,6 @@ class PlayingView(View):
             self.player.set_fast_down(False)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
             self.player.set_fast_down(True)
-        elif received in (b"R", b"r"):
-            self._client.rotate_counter_clockwise = (
-                not self._client.rotate_counter_clockwise
-            )
-            self._client.render()
         elif (
             received in (b"F", b"f")
             and isinstance(self.game, RingGame)

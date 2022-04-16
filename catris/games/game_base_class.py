@@ -34,12 +34,48 @@ class Game:
         self.tasks.append(asyncio.create_task(self._bomb_task()))
         self.tasks.append(asyncio.create_task(self._drilling_task()))
         self.need_render_event = asyncio.Event()
-        self.player_has_a_connected_client: Callable[[Player], bool]  # set in Server
+
+        self._pause_event = asyncio.Event()
+        self._unpause_event = asyncio.Event()
+        self._unpause_event.set()
+
+        # This is assigned elsewhere after instantiating the game.
+        # TODO: refactor?
+        self.player_has_a_connected_client: Callable[[Player], bool]
 
         # Hold this when wiping full lines or exploding a bomb or similar.
         # Prevents moving blocks down and causing weird bugs.
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
+
+    def pause(self) -> None:
+        self._pause_event.set()
+        self._unpause_event.clear()
+        self.need_render_event.set()
+
+    def unpause(self) -> None:
+        self._pause_event.clear()
+        self._unpause_event.set()
+        self.need_render_event.set()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._pause_event.is_set()
+
+    async def pause_aware_sleep(self, sleep_time: float) -> None:
+        while True:
+            # Waiting while game is paused does not decrement sleep time
+            await self._unpause_event.wait()
+
+            start = time.monotonic()
+            try:
+                await asyncio.wait_for(self._pause_event.wait(), timeout=sleep_time)
+            except asyncio.TimeoutError:
+                # sleep completed without pausing
+                return
+            # Game was paused. Let's see how long we slept before that happened.
+            unpaused_sleep_time = time.monotonic() - start
+            sleep_time -= unpaused_sleep_time
 
     def _get_moving_blocks(self) -> dict[Player, MovingBlock]:
         return {
@@ -216,8 +252,8 @@ class Game:
                 player.color = color
                 break
         else:
-            # Add new player
             player = self.add_player(name, color)
+            self.unpause()
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             self.new_block(player)
@@ -251,7 +287,7 @@ class Game:
 
     async def _bomb_task(self) -> None:
         while True:
-            await asyncio.sleep(1)
+            await self.pause_aware_sleep(1)
 
             bombs: list[BombSquare] = [
                 square
@@ -290,7 +326,7 @@ class Game:
 
     async def _drilling_task(self) -> None:
         while True:
-            await asyncio.sleep(0.1)
+            await self.pause_aware_sleep(0.1)
             squares = set()
             for block in self._get_moving_blocks().values():
                 squares |= block.squares
@@ -306,7 +342,7 @@ class Game:
         assert isinstance(player.moving_block_or_wait_counter, int)
 
         while player.moving_block_or_wait_counter > 0:
-            await asyncio.sleep(1)
+            await self.pause_aware_sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
             player.moving_block_or_wait_counter -= 1
             self.need_render_event.set()
@@ -335,7 +371,7 @@ class Game:
             for point in points:
                 self.flashing_squares[point] = display_color
             self.need_render_event.set()
-            await asyncio.sleep(0.1)
+            await self.pause_aware_sleep(0.1)
 
         for point in points:
             try:
@@ -403,7 +439,7 @@ class Game:
     async def _move_blocks_down_task(self, fast: bool) -> None:
         while True:
             if fast:
-                await asyncio.sleep(0.025)
+                await self.pause_aware_sleep(0.025)
             else:
-                await asyncio.sleep(0.5 / (1 + self.score / 1000))
+                await self.pause_aware_sleep(0.5 / (1 + self.score / 1000))
             await self._move_blocks_down_once(fast)
