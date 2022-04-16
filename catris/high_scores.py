@@ -12,7 +12,6 @@ from catris.views import GameOverView, PlayingView
 if sys.version_info >= (3, 9):
     from asyncio import to_thread
 else:
-    import asyncio
     from typing import Any
 
     # copied from source code with slight modifications
@@ -53,7 +52,7 @@ def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScor
     try:
         with open("catris_high_scores.tsv", "r", encoding="utf-8") as file:
             first_line = file.readline()
-            if first_line != "VERSION\t1\n":
+            if first_line != "catris high scores file v1\n":
                 raise ValueError(f"unrecognized first line: {repr(first_line)}")
 
             for line in file:
@@ -69,7 +68,7 @@ def _add_high_score_sync(game_class: type[Game], hs: HighScore) -> list[HighScor
     except FileNotFoundError:
         print("Creating catris_high_scores.tsv")
         with open("catris_high_scores.tsv", "x", encoding="utf-8") as file:
-            file.write("VERSION\t1\n")
+            file.write("catris high scores file v1\n")
     except (ValueError, OSError) as e:
         print("Reading catris_high_scores.tsv failed:", e)
         return [hs]  # do not write to file
