@@ -13,12 +13,12 @@ from catris.ansi import (
     CONTROL_Q,
     CSI,
     ESC,
-    MOVE_CURSOR,
     HIDE_CURSOR,
+    MOVE_CURSOR,
     SHOW_CURSOR,
 )
 from catris.lobby import Lobby
-from catris.views import CheckTerminalSizeView, View, TextEntryView, AskNameView
+from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
 
 
 class Server:

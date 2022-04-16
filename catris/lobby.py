@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import random
 import string
-from typing import Container, TYPE_CHECKING
+from typing import TYPE_CHECKING, Container
 
 from catris.games import Game
 from catris.high_scores import save_and_display_high_scores
-from catris.player import Player, MovingBlock
+from catris.player import MovingBlock, Player
 from catris.views import ChooseGameView, PlayingView
 
 if TYPE_CHECKING:

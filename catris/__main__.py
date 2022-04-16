@@ -1,5 +1,5 @@
-import asyncio
 import argparse
+import asyncio
 
 from catris.server_and_client import Server
 

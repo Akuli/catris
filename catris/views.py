@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import re
+import time
 from abc import abstractmethod
-import re, time
 from typing import TYPE_CHECKING, ClassVar
 
 from catris.ansi import (
