@@ -284,44 +284,54 @@ class Game:
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         pass
 
+    async def _explode_bombs(self, bombs: list[BombSquare]) -> list[BombSquare]:
+        exploding_points = {
+            (x, y)
+            for x, y in self.valid_landed_coordinates
+            for bomb in bombs
+            if (x - bomb.x) ** 2 + (y - bomb.y) ** 2 < 3.5**2
+        }
+        explode_next = [
+            square for square in self._get_all_squares()
+            if isinstance(square, BombSquare) and (square.x, square.y) in exploding_points
+            and square not in bombs
+        ]
+
+        if exploding_points:
+            await self.flash(exploding_points, 41)
+            for square in self.landed_squares.copy():
+                if (square.x, square.y) in exploding_points:
+                    self.landed_squares.remove(square)
+            for player in self.players:
+                block = player.moving_block_or_wait_counter
+                if isinstance(block, MovingBlock):
+                    for square in block.squares.copy():
+                        if (square.x, square.y) in exploding_points:
+                            block.squares.remove(square)
+                    if not block.squares:
+                        self.new_block(player)
+
+        return explode_next
+
+
     async def _bomb_task(self) -> None:
         while True:
             await self.pause_aware_sleep(1)
 
-            bombs: list[BombSquare] = [
-                square
-                for square in self._get_all_squares()
-                if isinstance(square, BombSquare)
-            ]
+            for square in self._get_all_squares():
+                if isinstance(square, BombSquare):
+                    square.timer -= 1
 
-            exploding_points = set()
-            for bomb in bombs:
-                bomb.timer -= 1
-                if bomb.timer == 0:
-                    radius = 3.5
-                    exploding_points |= {
-                        (x, y)
-                        for x, y in self.valid_landed_coordinates
-                        if (x - bomb.x) ** 2 + (y - bomb.y) ** 2 < radius**2
-                    }
+            async with self.flashing_lock:
+                exploding_bombs = [
+                    square
+                    for square in self._get_all_squares()
+                    if isinstance(square, BombSquare) and square.timer == 0
+                ]
+                while exploding_bombs:
+                    exploding_bombs = await self._explode_bombs(exploding_bombs)
 
-            if exploding_points:
-                async with self.flashing_lock:
-                    await self.flash(exploding_points, 41)
-                    for square in self.landed_squares.copy():
-                        if (square.x, square.y) in exploding_points:
-                            self.landed_squares.remove(square)
-                    for player in self.players:
-                        block = player.moving_block_or_wait_counter
-                        if isinstance(block, MovingBlock):
-                            for square in block.squares.copy():
-                                if (square.x, square.y) in exploding_points:
-                                    block.squares.remove(square)
-                            if not block.squares:
-                                self.new_block(player)
-
-            if bombs:
-                self.need_render_event.set()
+            self.need_render_event.set()
 
     async def _drilling_task(self) -> None:
         while True:
