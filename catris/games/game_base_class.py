@@ -292,8 +292,10 @@ class Game:
             if (x - bomb.x) ** 2 + (y - bomb.y) ** 2 < 3.5**2
         }
         explode_next = [
-            square for square in self._get_all_squares()
-            if isinstance(square, BombSquare) and (square.x, square.y) in exploding_points
+            square
+            for square in self._get_all_squares()
+            if isinstance(square, BombSquare)
+            and (square.x, square.y) in exploding_points
             and square not in bombs
         ]
 
@@ -312,7 +314,6 @@ class Game:
                         self.new_block(player)
 
         return explode_next
-
 
     async def _bomb_task(self) -> None:
         while True:
