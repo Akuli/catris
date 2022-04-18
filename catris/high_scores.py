@@ -4,7 +4,6 @@ import asyncio
 import dataclasses
 import logging
 import sys
-import time
 from typing import TYPE_CHECKING
 
 from catris.games import Game
