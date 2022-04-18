@@ -66,6 +66,7 @@ class Game:
         self.need_render_event.set()
 
     def get_duration_ns(self) -> int:
+        assert not self.is_paused
         return time.monotonic_ns() - self._start_time - self._time_spent_in_pause
 
     async def pause_aware_sleep(self, sleep_time: float) -> None:
