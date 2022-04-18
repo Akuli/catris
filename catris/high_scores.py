@@ -105,12 +105,6 @@ _high_scores_lock = asyncio.Lock()
 
 
 async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
-    new_high_score = HighScore(
-        score=game.score,
-        duration_sec=game.get_duration_ns() / (1000 * 1000 * 1000),
-        players=[p.name for p in game.players],
-    )
-
     playing_clients = [
         client
         for client in lobby.clients
@@ -119,6 +113,12 @@ async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
     if not playing_clients:
         _logger.info("Not adding high score because everyone disconnected")
         return
+
+    new_high_score = HighScore(
+        score=game.score,
+        duration_sec=game.get_duration_ns() / (1000 * 1000 * 1000),
+        players=[p.name for p in game.players],
+    )
 
     for client in playing_clients:
         client.view = GameOverView(client, game, new_high_score)
