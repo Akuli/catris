@@ -372,7 +372,6 @@ class CheckTerminalSizeView(View):
 
 
 class GameOverView(View):
-
     def __init__(self, client: Client, game: Game, new_high_score: HighScore):
         self._client = client
         self.game = game
