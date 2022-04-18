@@ -489,10 +489,7 @@ class PlayingView(View):
             return
 
         if received in (b"P", b"p"):
-            if self.game.is_paused:
-                self.game.unpause()
-            else:
-                self.game.pause()
+            self.game.toggle_pause()
             return
 
         if self.game.is_paused:

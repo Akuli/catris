@@ -23,7 +23,6 @@ class Game:
     MAX_PLAYERS: ClassVar[int]
 
     def __init__(self) -> None:
-        self.start_time = time.monotonic_ns()
         self.players: list[Player] = []
         self.score = 0
         self.valid_landed_coordinates: set[tuple[int, int]] = set()
@@ -38,6 +37,9 @@ class Game:
         self._pause_event = asyncio.Event()
         self._unpause_event = asyncio.Event()
         self._unpause_event.set()
+        self._start_time = time.monotonic_ns()
+        self._time_spent_in_pause = 0
+        self._last_pause_start = 0
 
         # This is assigned elsewhere after instantiating the game.
         # TODO: refactor?
@@ -48,19 +50,23 @@ class Game:
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
 
-    def pause(self) -> None:
-        self._pause_event.set()
-        self._unpause_event.clear()
-        self.need_render_event.set()
-
-    def unpause(self) -> None:
-        self._pause_event.clear()
-        self._unpause_event.set()
-        self.need_render_event.set()
-
     @property
     def is_paused(self) -> bool:
         return self._pause_event.is_set()
+
+    def toggle_pause(self) -> None:
+        if self.is_paused:
+            self._pause_event.clear()
+            self._unpause_event.set()
+            self._time_spent_in_pause += time.monotonic_ns() - self._last_pause_start
+        else:
+            self._pause_event.set()
+            self._unpause_event.clear()
+            self._last_pause_start = time.monotonic_ns()
+        self.need_render_event.set()
+
+    def get_duration_ns(self) -> int:
+        return time.monotonic_ns() - self._start_time - self._time_spent_in_pause
 
     async def pause_aware_sleep(self, sleep_time: float) -> None:
         while True:
