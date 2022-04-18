@@ -52,7 +52,7 @@ class TextEntryView(View):
         self._client = client
         self._text = b""
         self._backslash_r_received = False
-        self.error: str | None = None
+        self.error: str = ""
 
     def get_lines_to_render(self) -> tuple[list[bytes], tuple[int, int]]:
         result = ASCII_ART.encode("ascii").splitlines()
@@ -62,12 +62,11 @@ class TextEntryView(View):
         prompt_line = " " * 20 + self.PROMPT + self.get_text()
         result.append(prompt_line.encode("utf-8"))
 
-        if self.error is not None:
-            result.append(b"")
-            result.append(b"")
-            result.append(
-                (COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0)
-            )
+        result.append(b"")
+        result.append(b"")
+        result.append(
+            (COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0)
+        )
 
         return (result, (11, len(prompt_line) + 1))
 
@@ -141,6 +140,15 @@ class AskNameView(TextEntryView):
         else:
             self._client.server.only_lobby.add_client(self._client)
             self._client.view = ChooseGameView(self._client)
+
+    def get_lines_to_render(self) -> tuple[list[bytes], tuple[int, int]]:
+        lines, cursor_pos = super().get_lines_to_render()
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"  If you play well, your name will be visible to everyone in the high scores.")
+
+        return (lines, cursor_pos)
 
 
 class MenuView(View):
