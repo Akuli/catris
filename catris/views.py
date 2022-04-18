@@ -64,9 +64,7 @@ class TextEntryView(View):
 
         result.append(b"")
         result.append(b"")
-        result.append(
-            (COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0)
-        )
+        result.append((COLOR % 31) + b"  " + self.error.encode("utf-8") + (COLOR % 0))
 
         return (result, (11, len(prompt_line) + 1))
 
@@ -146,7 +144,9 @@ class AskNameView(TextEntryView):
         lines.append(b"")
         lines.append(b"")
         lines.append(b"")
-        lines.append(b"  If you play well, your name will be visible to everyone in the high scores.")
+        lines.append(
+            b"  If you play well, your name will be visible to everyone in the high scores."
+        )
 
         return (lines, cursor_pos)
 
