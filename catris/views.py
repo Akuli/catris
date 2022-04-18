@@ -314,7 +314,7 @@ class ChooseGameView(MenuView):
                 + (COLOR % 0)
             )
             if client == self._client:
-                text += b" (you)"
+                text += (COLOR % 90) + b" (you)" + (COLOR % 0)
             result.append(text)
         result.extend([b""] * (MAX_CLIENTS_PER_LOBBY - len(self._client.lobby.clients)))
         result.extend(super().get_lines_to_render())
