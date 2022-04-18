@@ -371,10 +371,9 @@ class CheckTerminalSizeView(View):
             self._client.lobby.start_game(self._client, self._game_class)
 
 
-class GameOverView(MenuView):
+class GameOverView(View):
+
     def __init__(self, client: Client, game: Game, new_high_score: HighScore):
-        super().__init__()
-        self.menu_items.extend(["New Game", "Choose a different game", "Quit"])
         self._client = client
         self.game = game
         self.new_high_score = new_high_score
@@ -383,19 +382,21 @@ class GameOverView(MenuView):
     def set_high_scores(self, high_scores: list[HighScore]) -> None:
         self._high_scores = high_scores
 
+    def handle_key_press(self, received: bytes) -> None:
+        if received == b"\r":
+            self._client.view = ChooseGameView(self._client, type(self.game))
+
     def get_lines_to_render(self) -> list[bytes]:
         if self._high_scores is None:
             return [b"", b"", b"Loading...".center(80).rstrip()]
 
-        lines = [b"", b"", b""]
+        lines = [b"", b""]
         lines.append(b"Game Over :(".center(80).rstrip())
         lines.append(
             f"Your score was {self.new_high_score.score}.".encode("ascii")
             .center(80)
             .rstrip()
         )
-
-        lines.extend(super().get_lines_to_render())
 
         lines.append(b"")
         lines.append(b"")
@@ -416,24 +417,11 @@ class GameOverView(MenuView):
                 lines.append((COLOR % 0) + line)
 
         lines.append(COLOR % 0)  # Needed if last score was highlighted
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"")
+        lines.append(b"Press Enter to continue...".center(80).rstrip())
         return lines
-
-    def on_enter_pressed(self) -> bool:
-        if self._high_scores is None:
-            return False
-
-        text = self.menu_items[self.selected_index]
-        if text == "New Game":
-            assert self._client.lobby is not None
-            self._client.lobby.start_game(self._client, type(self.game))
-        elif text == "Choose a different game":
-            self._client.view = ChooseGameView(self._client, type(self.game))
-        elif text == "Quit":
-            return True
-        else:
-            raise NotImplementedError(text)
-
-        return False
 
 
 def get_block_preview(squares: set[Square]) -> list[bytes]:
