@@ -158,7 +158,7 @@ class Client:
         return result
 
     async def handle(self) -> None:
-        self.log("New connection")
+        self.log(f"New connection from {self.writer.get_extra_info('peername')[0]}")
 
         try:
             self.server.all_clients.add(self)
