@@ -10,7 +10,7 @@
 Description=catris
 
 [Service]
-ExecStart=/usr/bin/python3 -m catris
+ExecStart=/usr/bin/python3 -m catris --lobbies
 WorkingDirectory=/home/catris
 
 User=catris
