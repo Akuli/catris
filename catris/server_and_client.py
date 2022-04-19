@@ -58,7 +58,17 @@ class Client:
         self.lobby: Lobby | None = None
         self.color: int | None = None
         self.view: View = AskNameView(self)
+
         self.rotate_counter_clockwise = False
+        self.lobby_id_hidden = False
+
+    def get_lobby_id_for_display(self) -> bytes:
+        assert self.lobby is not None
+        if self.lobby.lobby_id is None:
+            return b""
+        if self.lobby_id_hidden:
+            return b"Lobby ID: ******"
+        return f"Lobby ID: {self.lobby.lobby_id}".encode("ascii")
 
     def log(self, msg: str, *, level: int = logging.INFO) -> None:
         logging.log(level, f"(client {self._client_id}) {msg}")

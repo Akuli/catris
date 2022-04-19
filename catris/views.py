@@ -298,7 +298,17 @@ class ChooseGameView(MenuView):
         result = [b"", b""]
         if self._client.server.only_lobby is None:
             # Multiple lobbies mode
-            result.append(f"   Lobby ID: {self._client.lobby.lobby_id}".encode("ascii"))
+            if self._client.lobby_id_hidden:
+                h_message = b" (press h to show)"
+            else:
+                h_message = b" (press h to hide)"
+            result.append(
+                b"   "
+                + self._client.get_lobby_id_for_display()
+                + (COLOR % 90)
+                + h_message
+                + (COLOR % 0)
+            )
             result.append(b"")
             result.append(b"   Players in lobby:")
         else:
@@ -325,6 +335,12 @@ class ChooseGameView(MenuView):
                 (COLOR % 31) + b"This game is full.".center(80).rstrip() + (COLOR % 0)
             )
         return result
+
+    def handle_key_press(self, received: bytes) -> bool:
+        if received in (b"H", b"h"):
+            self._client.lobby_id_hidden = not self._client.lobby_id_hidden
+            return False
+        return super().handle_key_press(received)
 
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
@@ -446,9 +462,7 @@ class PlayingView(View):
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
         assert self._client.lobby is not None
-        if self._client.lobby.lobby_id is not None:
-            # multiple lobbies mode
-            lines[4] += f"  Lobby ID: {self._client.lobby.lobby_id}".encode("ascii")
+        lines[4] += b"  " + self._client.get_lobby_id_for_display()
         lines[5] += (
             (COLOR % 36) + f"  Score: {self.game.score}".encode("ascii") + (COLOR % 0)
         )
