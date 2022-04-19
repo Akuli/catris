@@ -11,8 +11,9 @@ Description=catris
 
 [Service]
 ExecStart=/usr/bin/python3 -m catris --lobbies
-WorkingDirectory=/home/catris
 
+# adduser --system catris
+WorkingDirectory=/home/catris
 User=catris
 Group=nogroup
 
