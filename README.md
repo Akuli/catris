@@ -4,79 +4,26 @@ This is a Tetris clone for multiple players that connect to a server with netcat
 
 ![Screenshot](screenshot.png)
 
-
-## Running the server
-
-Install Python and download all files in the `catris` folder.
-If you already have Git, you can use it:
+To play on Mac or Linux, run on terminal:
 
 ```
-git clone https://github.com/Akuli/catris
-cd catris
+stty raw; nc 172.104.132.97 12345; stty cooked
 ```
 
-Or you can [download a zip file by clicking here](https://github.com/Akuli/catris/archive/refs/heads/main.zip),
-extract it and `cd` into it.
-Either way, you should see a folder named `catris` if you run `dir` or `ls`.
-
-Then run the server (if you're on Windows, use `py` instead of `python3`):
-
-```
-python3 -m catris
-```
-
-
-## Finding the server's IP address
-
-All players must be in the same network with the computer where the server is running.
-For example, the computers could be all connected to the same WiFi network,
-or connected to the same router with Ethernet cables.
-The server computer itself can also be used for playing the game,
-just like any other computer in the network.
-
-Next you need to know the server's IP address within the local network.
-When connecting to the server, players need to specify this IP address.
-It is **not** same as the network's public IP,
-which is what you find by googling "what is my ip" or similar.
-
-If the server is running Windows, you can run `ipconfig` on a command prompt.
-On Linux, you can use `ip a`, and I think `ifconfig` works on MacOS
-(if you have a mac, please tell me if it works and whether other commands mentioned here work too).
-Either way, you will get messy output with the IP address buried somewhere in the middle of it.
-For example, on my Linux computer, `ip a` outputs:
-
-```
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-    inet 127.0.0.1/8 scope host lo
-       valid_lft forever preferred_lft forever
-    inet6 ::1/128 scope host 
-       valid_lft forever preferred_lft forever
-2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
-    link/ether 10:60:4b:82:57:01 brd ff:ff:ff:ff:ff:ff
-    inet 192.168.1.3/24 brd 192.168.1.255 scope global dynamic noprefixroute eth0
-       valid_lft 67299sec preferred_lft 67299sec
-    inet6 fe80::ab58:f098:59e0:621f/64 scope link noprefixroute 
-       valid_lft forever preferred_lft forever
-```
-
-Here `192.168.1.3` is my computer's IP address.
-It is **NOT** `127.0.0.1`, as that IP address means "this computer",
-and it won't connect other computers to the server.
-
-
-## Connecting to the server
-
-Once you know the server computer's IP address, players can connect to the server:
+The `stty raw` in front is needed to send key presses to the server
+as you press the keys, not when you press Enter.
+If you forget it, you will get an error message that tells you to use it.
+On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
+instead of entering them separately.
 
 <details>
-<summary>Windows</summary>
+<summary>Windows instructions</summary>
 
 [Install PuTTY](https://www.putty.org/).
 Once installed, you can open it from the start menu.
 Fill in these settings:
 - Session:
-    - Host Name: Put the IP address of the server here.
+    - Host Name: `172.104.132.97`
     - Port: `12345`
     - Connection type: Raw
 - Terminal:
@@ -87,26 +34,12 @@ Then click the "Open" button to play.
 
 </details>
 
-<details>
-<summary>MacOS or Linux</summary>
-
-Open a terminal and run:
-
-```
-stty raw; nc PUT_THE_IP_ADDRESS_HERE 12345; stty cooked
-```
-
-If you forget `stty raw`, you will get an error message reminding you to run it first.
-It is needed because otherwise you would have to press enter every time
-you want to send something to the server.
-
-If you forget `stty cooked`, the terminal will be in a weird state when you quit the game,
-and you may need to open a new terminal.
-
-</details>
-
 
 ## How to play
+
+Before a game starts, you need to make a lobby.
+If you want, you can share the lobby ID with your friends
+so that they can join the lobby and play with you.
 
 Keys:
 - WASD or arrow keys: move and rotate
@@ -119,15 +52,32 @@ There's only one score; you play together, not against other players.
 Try to collaborate and make the best use of everyone's blocks.
 
 
-## Troubleshooting
+## Development
 
-- On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
-    instead of entering them separately.
-- Some networks (e.g. the network of the university I go to)
-    don't allow computers to connect directly to each other.
-    To work around this, just use a different network,
-    e.g. your phone's WiFi hotspot.
-- If the server computer has a firewall, you may need to tell it to allow listening on port 12345.
-    For example, on Windows you can click a button that appears when you run the server for the first time,
-    and if you use UFW (quite common on Linux),
-    you need to run `sudo ufw allow in 12345 comment 'catris'`.
+If you're on Windows, use `py` instead of `python3` and `env\Scripts\activate` instead of `source env/bin/activate` below.
+
+Running catris:
+
+```
+git clone https://github.com/Akuli/catris
+cd catris
+python3 -m catris
+```
+
+That's it. Catris has no dependencies execpt Python itself,
+so you don't even need a virtualenv to run it.
+But I recommend using a virtualenv for installing and running development tools:
+
+```
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements-dev.txt
+black catris        # Formats the code
+isort catris        # Formats and sorts imports
+mypy catris         # Type checker, detects common mistakes
+pyflakes catris     # Linter, detects some less common mistakes
+```
+
+All these tools also run on GitHub Actions,
+so you probably don't need to run them yourself
+if you only want to make a couple small changes.
