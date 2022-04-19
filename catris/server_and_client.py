@@ -63,7 +63,8 @@ class Client:
         self.lobby_id_hidden = False
 
     def get_lobby_id_for_display(self) -> bytes:
-        if self.lobby is None:
+        assert self.lobby is not None
+        if self.lobby.lobby_id is None:
             return b""
         if self.lobby_id_hidden:
             return b"Lobby ID: ******"
