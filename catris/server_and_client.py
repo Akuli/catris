@@ -162,6 +162,7 @@ class Client:
 
         try:
             self.server.all_clients.add(self)
+            self.log(f"There are now {len(self.server.all_clients)} connected clients")
             self._send_bytes(CLEAR_SCREEN)
             received = b""
 
@@ -190,6 +191,7 @@ class Client:
         finally:
             self.log("Closing connection")
             self.server.all_clients.discard(self)
+            self.log(f"There are now {len(self.server.all_clients)} connected clients")
             if self.lobby is not None:
                 lobby = self.lobby
                 lobby.remove_client(self)
