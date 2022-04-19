@@ -52,7 +52,7 @@ class TextEntryView(View):
         self._client = client
         self._text = b""
         self._backslash_r_received = False
-        self.error: str = ""
+        self.error = ""
 
     def get_lines_to_render(self) -> tuple[list[bytes], tuple[int, int]]:
         result = ASCII_ART.encode("ascii").splitlines()
