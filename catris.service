@@ -3,6 +3,7 @@
 #    systemctl enable catris
 #    systemctl start catris
 #    systemctl status catris
+#    journalctl -fu catris
 #
 # Logs should go to /var/log/syslog
 
