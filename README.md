@@ -64,9 +64,14 @@ cd catris
 python3 -m catris
 ```
 
-That's it. Catris has no dependencies execpt Python itself,
+That's it.
+Catris has no dependencies execpt Python itself,
 so you don't even need a virtualenv to run it.
-But I recommend using a virtualenv for installing and running development tools:
+You can now connect to catris running on your computer
+just like you would connect to my catris server,
+but using `localhost` instead of `172.104.132.97` in the above instructions.
+
+I recommend using a virtualenv for installing and running development tools:
 
 ```
 python3 -m venv env
