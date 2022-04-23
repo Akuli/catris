@@ -134,13 +134,22 @@ class Client:
             self.writer.transport.close()
 
     async def _receive_bytes(self) -> bytes | None:
-        await asyncio.sleep(0)  # Makes game playable while fuzzer is running
+        # Makes game playable while under very heavy cpu load.
+        # Should no longer be necessary, but just in case...
+        await asyncio.sleep(0)
 
         if self.writer.transport.is_closing():
             return None
 
         try:
-            result = await self._reader.read(100)
+            result = await asyncio.wait_for(self._reader.read(100), timeout=3 * 60)
+        except asyncio.TimeoutError:
+            self.log("Nothing received in 3min, disconnecting")
+            self._send_bytes(
+                SHOW_CURSOR
+                + b"Closing connection because it has been idle for 3 minutes.\r\n"
+            )
+            return None
         except OSError as e:
             self.log(f"Receive error: {e}")
             return None
