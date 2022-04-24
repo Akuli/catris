@@ -164,11 +164,14 @@ class AskNameView(TextEntryView):
 class HappyBirthdayView(View):
     def __init__(self, client: Client) -> None:
         self._client = client
-        self._balloons = []
+        self._balloons: list[tuple[int, int]] = []
         asyncio.create_task(self._animate_task())
 
     async def _animate_task(self) -> None:
-        while self._client.view == self and self._client in self._client.server.all_clients:
+        while (
+            self._client.view == self
+            and self._client in self._client.server.all_clients
+        ):
             self._balloons = [(x, y - 1) for (x, y) in self._balloons if y >= -10]
             if random.random() < 0.2:
                 self._balloons.append((random.randint(0, 70), 15))
