@@ -42,8 +42,8 @@ class Server:
 
         ip = writer.get_extra_info("peername")[0]
         self._connection_ips.append((time.monotonic(), ip))
-        five_min_ago = time.monotonic() - 5*60
-        while self._connection_ips and self._connection_ips[0][0] < five_min_ago:
+        one_min_ago = time.monotonic() - 60
+        while self._connection_ips and self._connection_ips[0][0] < one_min_ago:
             self._connection_ips.popleft()
 
         count = [old_ip for connection_time, old_ip in self._connection_ips].count(ip)
