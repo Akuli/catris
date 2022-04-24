@@ -274,10 +274,9 @@ class Game:
         )
 
     # Where will the block move if user presses down arrow key?
-    # Returns modified copies of the moving squares.
     def _predict_landing_places(
         self, player: Player, block: MovingBlock
-    ) -> set[Square]:
+    ) -> set[tuple[int, int]]:
         # Temporarily changing squares feels a bit hacky, but it's simple and it works
         old_squares = block.squares
         block.squares = {copy.copy(square) for square in block.squares}
@@ -291,7 +290,7 @@ class Game:
                     square.y -= player.up_y
                     self.fix_moving_square(player, square)
                 if not self.is_valid():
-                    return previous_squares
+                    return {(s.x, s.y) for s in previous_squares}
 
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
@@ -304,8 +303,8 @@ class Game:
 
         result = {}
         for player, block in self._get_moving_blocks().items():
-            for square in self._predict_landing_places(player, block):
-                result[square.x, square.y] = b"::"
+            for point in self._predict_landing_places(player, block):
+                result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(landed=False)
