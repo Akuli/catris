@@ -302,17 +302,14 @@ class Game:
         assert self.is_valid()
 
         result = {}
-
         for player, block in self._get_moving_blocks().items():
             for square in self._predict_landing_places(player, block):
                 result[square.x, square.y] = b"::"
-
-        for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(landed=True)
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(landed=False)
-
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(landed=True)
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
