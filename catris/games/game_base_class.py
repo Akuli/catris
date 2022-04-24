@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import time
 from abc import abstractmethod
 from typing import Any, Callable, ClassVar, Iterator
@@ -272,21 +273,52 @@ class Game:
             p.name.lower() for p in self.players
         )
 
+    # Where will the block move if user presses down arrow key?
+    # Returns modified copies of the moving squares.
+    def _predict_landing_places(
+        self, player: Player, block: MovingBlock
+    ) -> set[Square]:
+        # Temporarily changing squares feels a bit hacky, but it's simple and it works
+        old_squares = block.squares
+        block.squares = {copy.copy(square) for square in block.squares}
+        assert self.is_valid()
+
+        try:
+            for offset in range(1, 100):
+                previous_squares = {copy.copy(square) for square in block.squares}
+                for square in block.squares:
+                    square.x -= player.up_x
+                    square.y -= player.up_y
+                    self.fix_moving_square(player, square)
+                if not self.is_valid():
+                    return previous_squares
+
+            # Block won't land if you press down arrow. Happens a lot in ring mode.
+            return set()
+
+        finally:
+            block.squares = old_squares
+
     def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
-        for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(landed=True)
+        for player, block in self._get_moving_blocks().items():
+            for square in self._predict_landing_places(player, block):
+                result[square.x, square.y] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(landed=False)
-
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(landed=True)
         for point, color in self.flashing_squares.items():
-            if point in self.valid_landed_coordinates:
-                result[point] = (COLOR % color) + b"  " + (COLOR % 0)
+            result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
-        return result
+        return {
+            point: text
+            for point, text in result.items()
+            if point in self.valid_landed_coordinates
+        }
 
     @abstractmethod
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
