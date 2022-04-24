@@ -277,7 +277,7 @@ class Game:
         for offset in range(100):
             # Feels a bit hacky, but it's simple and it works
             old_squares = block.squares
-            block.squares = [copy.copy(square) for square in block.squares]
+            block.squares = {copy.copy(square) for square in block.squares}
             for square in block.squares:
                 square.x -= player.up_x * offset
                 square.y -= player.up_y * offset
@@ -300,7 +300,10 @@ class Game:
         for player, block in self._get_moving_blocks().items():
             offset = self._predict_how_far_block_lands(player, block)
             for square in block.squares:
-                prediction = (square.x - offset*player.up_x, square.y - offset*player.up_y)
+                prediction = (
+                    square.x - offset * player.up_x,
+                    square.y - offset * player.up_y,
+                )
                 if prediction in self.valid_landed_coordinates:
                     result[prediction] = b"::"
 
