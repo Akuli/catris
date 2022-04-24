@@ -139,7 +139,7 @@ class AskNameView(TextEntryView):
             # multiple lobbies mode
             if (
                 name.lower() in {"köpi", "kopi", "basisti", "pasisti"}
-                and str(datetime.date.today()) == "2022-04-24"
+                and str(datetime.date.today()) == "2022-04-25"
             ):
                 # Köpi's birthday surprise
                 self._client.view = HappyBirthdayView(self._client)
