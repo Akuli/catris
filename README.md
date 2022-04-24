@@ -11,7 +11,8 @@ Create an issue if this is a problem for you.
 <details>
 <summary>Windows instructions</summary>
 
-[Install PuTTY](https://www.putty.org/).
+[Install PuTTY](https://www.putty.org/)
+(on most computers, the "64-bit x86" MSI installer is what you need).
 Once installed, you can open it from the start menu.
 Fill in these settings:
 - Session:
