@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import time
 from abc import abstractmethod
 from typing import Any, Callable, ClassVar, Iterator
@@ -271,10 +272,38 @@ class Game:
             p.name.lower() for p in self.players
         )
 
+    # How many steps will the block move if user presses down arrow key?
+    def _predict_how_far_block_lands(self, player: Player, block: MovingBlock) -> int:
+        for offset in range(100):
+            # Feels a bit hacky, but it's simple and it works
+            old_squares = block.squares
+            block.squares = [copy.copy(square) for square in block.squares]
+            for square in block.squares:
+                square.x -= player.up_x * offset
+                square.y -= player.up_y * offset
+                self.fix_moving_square(player, square)
+            offset_works = self.is_valid()
+            block.squares = old_squares
+
+            if not offset_works:
+                # Return the last offset that worked
+                return offset - 1
+
+        # Block won't land if you press down arrow. Happens in ring mode.
+        return 0
+
     def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
+
+        for player, block in self._get_moving_blocks().items():
+            offset = self._predict_how_far_block_lands(player, block)
+            for square in block.squares:
+                prediction = (square.x - offset*player.up_x, square.y - offset*player.up_y)
+                if prediction in self.valid_landed_coordinates:
+                    result[prediction] = b"::"
+
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(landed=True)
         for block in self._get_moving_blocks().values():
