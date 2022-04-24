@@ -274,7 +274,9 @@ class Game:
 
     # Where will the block move if user presses down arrow key?
     # Returns modified copies of the moving squares.
-    def _predict_how_far_block_lands(self, player: Player, block: MovingBlock) -> set[Square]:
+    def _predict_landing_places(
+        self, player: Player, block: MovingBlock
+    ) -> set[Square]:
         # Temporarily changing squares feels a bit hacky, but it's simple and it works
         old_squares = block.squares
         block.squares = {copy.copy(square) for square in block.squares}
@@ -302,10 +304,8 @@ class Game:
         result = {}
 
         for player, block in self._get_moving_blocks().items():
-            predicted_squares = self._predict_how_far_block_lands(player, block)
-            for square in predicted_squares:
-                if (square.x, square.y) in self.valid_landed_coordinates:
-                    result[square.x, square.y] = b"::"
+            for square in self._predict_landing_places(player, block):
+                result[square.x, square.y] = b"::"
 
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(landed=True)
@@ -314,10 +314,13 @@ class Game:
                 result[square.x, square.y] = square.get_text(landed=False)
 
         for point, color in self.flashing_squares.items():
-            if point in self.valid_landed_coordinates:
-                result[point] = (COLOR % color) + b"  " + (COLOR % 0)
+            result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
-        return result
+        return {
+            point: text
+            for point, text in result.items()
+            if point in self.valid_landed_coordinates
+        }
 
     @abstractmethod
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
