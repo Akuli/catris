@@ -4,17 +4,9 @@ This is a Tetris clone for multiple players that connect to a server with netcat
 
 ![Screenshot](screenshot.png)
 
-To play on Mac or Linux, run on terminal:
-
-```
-stty raw; nc 172.104.132.97 12345; stty cooked
-```
-
-The `stty raw` in front is needed to send key presses to the server
-as you press the keys, not when you press Enter.
-If you forget it, you will get an error message that tells you to use it.
-On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
-instead of entering them separately.
+You can play on my server.
+It's in Europe though, so the game may be very laggy if you're not in Europe.
+Create an issue if this is a problem for you.
 
 <details>
 <summary>Windows instructions</summary>
@@ -31,6 +23,23 @@ Fill in these settings:
     - Local line editing: Force off
 
 Then click the "Open" button to play.
+
+</details>
+
+<details>
+<summary>MacOS/Linux instructions</summary>
+
+To play on Mac or Linux, run on terminal:
+
+```
+stty raw; nc 172.104.132.97 12345; stty cooked
+```
+
+The `stty raw` in front is needed to send key presses to the server
+as you press the keys, not when you press Enter.
+If you forget it, you will get an error message that tells you to use it.
+On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
+instead of entering them separately.
 
 </details>
 
