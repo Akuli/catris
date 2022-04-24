@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import re
 import time
 from abc import abstractmethod
@@ -135,14 +134,7 @@ class AskNameView(TextEntryView):
         self._client.name = name
         if self._client.server.only_lobby is None:
             # multiple lobbies mode
-            if (
-                name.lower() in {"köpi", "kopi", "basisti", "pasisti"}
-                and str(datetime.date.today()) == "2022-04-24"
-            ):
-                # Köpi's birthday surprise
-                self._client.view = HappyBirthdayView(self._client)
-            else:
-                self._client.view = ChooseIfNewLobbyView(self._client)
+            self._client.view = ChooseIfNewLobbyView(self._client)
         else:
             self._client.server.only_lobby.add_client(self._client)
             self._client.view = ChooseGameView(self._client)
@@ -157,39 +149,6 @@ class AskNameView(TextEntryView):
         )
 
         return (lines, cursor_pos)
-
-
-class HappyBirthdayView(View):
-    def __init__(self, client: Client) -> None:
-        self._client = client
-
-    def get_lines_to_render(self) -> list[bytes]:
-        result = r"""
-
-               ,--.                                          ,--.
-              /    \                                        /    \
-              \    /                                        \    /
-               `--'        ***************************       `--'
-                 \         * Happy Birthday to Köpi! *         \
-                 /         ***************************         /
-                /                                              \
-                \
-
-
-
-
-
-                           Press Enter to continue...
-""".encode(
-            "utf-8"
-        ).splitlines()
-        for i in range(10):
-            result[i] = (COLOR % 32) + result[i] + (COLOR % 0)
-        return result
-
-    def handle_key_press(self, received: bytes) -> None:
-        if received == b"\r":
-            self._client.view = ChooseIfNewLobbyView(self._client)
 
 
 class MenuView(View):
