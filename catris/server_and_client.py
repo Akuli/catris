@@ -49,7 +49,7 @@ class Server:
         count = [old_ip for connection_time, old_ip in self._connection_ips].count(ip)
         if count >= 5:
             client.log(
-                f"This is the {count}th connection from IP address {ip} within the last 5 minutes"
+                f"This is the {count}th connection from IP address {ip} within the last minute"
             )
 
         await client.handle()
