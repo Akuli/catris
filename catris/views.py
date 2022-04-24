@@ -204,7 +204,7 @@ class HappyBirthdayView(View):
 """
         for left_x, top_y in self._balloons:
             for y, row in enumerate(balloon.splitlines(), start=top_y):
-                if y in range(15):
+                if y in range(len(result)):
                     chars = list(result[y].ljust(80))
                     x = left_x + len(row) - len(row.lstrip())
                     chars[x : x + len(row.lstrip())] = row.lstrip()
