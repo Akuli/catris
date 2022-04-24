@@ -116,7 +116,7 @@ async def save_and_display_high_scores(lobby: Lobby, game: Game) -> None:
 
     new_high_score = HighScore(
         score=game.score,
-        duration_sec=game.get_duration_ns() / (1000 * 1000 * 1000),
+        duration_sec=game.get_duration_sec(),
         players=[p.name for p in game.players],
     )
 

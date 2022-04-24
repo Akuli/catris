@@ -65,9 +65,10 @@ class Game:
             self._last_pause_start = time.monotonic_ns()
         self.need_render_event.set()
 
-    def get_duration_ns(self) -> int:
+    def get_duration_sec(self) -> float:
         assert not self.is_paused
-        return time.monotonic_ns() - self._start_time - self._time_spent_in_pause
+        duration_ns = time.monotonic_ns() - self._start_time - self._time_spent_in_pause
+        return duration_ns / (1000 * 1000 * 1000)
 
     async def pause_aware_sleep(self, sleep_time: float) -> None:
         while True:
@@ -458,5 +459,5 @@ class Game:
             if fast:
                 await self.pause_aware_sleep(0.025)
             else:
-                await self.pause_aware_sleep(0.5 / (1 + self.score / 1000))
+                await self.pause_aware_sleep(0.5 / (1 + self.get_duration_sec() / 600))
             await self._move_blocks_down_once(fast)
