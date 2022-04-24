@@ -272,25 +272,29 @@ class Game:
             p.name.lower() for p in self.players
         )
 
-    # How many steps will the block move if user presses down arrow key?
-    def _predict_how_far_block_lands(self, player: Player, block: MovingBlock) -> int:
-        for offset in range(100):
-            # Feels a bit hacky, but it's simple and it works
-            old_squares = block.squares
-            block.squares = {copy.copy(square) for square in block.squares}
-            for square in block.squares:
-                square.x -= player.up_x * offset
-                square.y -= player.up_y * offset
-                self.fix_moving_square(player, square)
-            offset_works = self.is_valid()
+    # Where will the block move if user presses down arrow key?
+    # Returns modified copies of the moving squares.
+    def _predict_how_far_block_lands(self, player: Player, block: MovingBlock) -> set[Square]:
+        # Temporarily changing squares feels a bit hacky, but it's simple and it works
+        old_squares = block.squares
+        block.squares = {copy.copy(square) for square in block.squares}
+        assert self.is_valid()
+
+        try:
+            for offset in range(1, 100):
+                previous_squares = {copy.copy(square) for square in block.squares}
+                for square in block.squares:
+                    square.x -= player.up_x
+                    square.y -= player.up_y
+                    self.fix_moving_square(player, square)
+                if not self.is_valid():
+                    return previous_squares
+
+            # Block won't land if you press down arrow. Happens a lot in ring mode.
+            return set()
+
+        finally:
             block.squares = old_squares
-
-            if not offset_works:
-                # Return the last offset that worked
-                return offset - 1
-
-        # Block won't land if you press down arrow. Happens in ring mode.
-        return 0
 
     def get_square_texts(self) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
@@ -298,14 +302,10 @@ class Game:
         result = {}
 
         for player, block in self._get_moving_blocks().items():
-            offset = self._predict_how_far_block_lands(player, block)
-            for square in block.squares:
-                prediction = (
-                    square.x - offset * player.up_x,
-                    square.y - offset * player.up_y,
-                )
-                if prediction in self.valid_landed_coordinates:
-                    result[prediction] = b"::"
+            predicted_squares = self._predict_how_far_block_lands(player, block)
+            for square in predicted_squares:
+                if (square.x, square.y) in self.valid_landed_coordinates:
+                    result[square.x, square.y] = b"::"
 
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(landed=True)
