@@ -154,9 +154,16 @@ class AskNameView(TextEntryView):
         lines.append(b"")
         lines.append(b"")
         lines.append(b"")
-        lines.append(
-            b"  If you play well, your name will be visible to everyone in the high scores."
-        )
+
+        texts = [
+            b"If you play well, your name will be",
+            b"visible to everyone in the high scores.",
+            b"",
+            b"Your IP will be logged on the server only if you",
+            b"connect 5 or more times within the same minute.",
+        ]
+        for text in texts:
+            lines.append(text.center(80).rstrip())
 
         return (lines, cursor_pos)
 

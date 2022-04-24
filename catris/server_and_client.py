@@ -25,6 +25,8 @@ from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
 
 class Server:
     def __init__(self, use_lobbies: bool) -> None:
+        self._connection_ips: collections.deque[tuple[float, str]] = collections.deque()
+
         self.all_clients: set[Client] = set()
         self.lobbies: dict[str, Lobby] = {}  # keys are lobby IDs
         if use_lobbies:
@@ -37,6 +39,19 @@ class Server:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         client = Client(self, reader, writer)
+
+        ip = writer.get_extra_info("peername")[0]
+        self._connection_ips.append((time.monotonic(), ip))
+        one_min_ago = time.monotonic() - 60
+        while self._connection_ips and self._connection_ips[0][0] < one_min_ago:
+            self._connection_ips.popleft()
+
+        count = [old_ip for connection_time, old_ip in self._connection_ips].count(ip)
+        if count >= 5:
+            client.log(
+                f"This is the {count}th connection from IP address {ip} within the last minute"
+            )
+
         await client.handle()
 
 
@@ -177,7 +192,7 @@ class Client:
         return result
 
     async def handle(self) -> None:
-        self.log(f"New connection from {self.writer.get_extra_info('peername')[0]}")
+        self.log("New connection")
 
         try:
             self.server.all_clients.add(self)
