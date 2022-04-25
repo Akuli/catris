@@ -13,6 +13,7 @@ CLEAR_TO_END_OF_LINE = CSI + b"0K"
 CONTROL_C = b"\x03"
 CONTROL_D = b"\x04"
 CONTROL_Q = b"\x11"
+CONTROL_R = b"\x12"
 BACKSPACE = (b"\x08", b"\x7f")  # \x08 on windows
 UP_ARROW_KEY = CSI + b"A"
 DOWN_ARROW_KEY = CSI + b"B"
