@@ -11,17 +11,19 @@ Create an issue if this is a problem for you.
 <details>
 <summary>Windows instructions</summary>
 
-[Install PuTTY](https://www.putty.org/)
-(on most computers, the "64-bit x86" MSI installer is what you need).
-Once installed, you can open it from the start menu.
-Fill in these settings:
-- Session:
-    - Host Name: `172.104.132.97`
-    - Port: `12345`
-    - Connection type: Raw
-- Terminal:
-    - Local echo: Force off
-    - Local line editing: Force off
+Download PuTTY from [here](https://www.putty.org/),
+or search "putty download" or similar and click the first result.
+On the download page, choose the 64-bit x86 putty.exe under "Alternative binary files".
+
+![Putty's download page](putty-download.png)
+
+Open putty.exe from your downloads, and fill in these settings:
+- Session: Host Name `172.104.132.97`, Port `12345`, Connection Type "Raw"
+- Terminal: Local echo "Force off", Local line editing "Force off"
+
+![Settings of Session tab](putty1.png)
+
+![Settings of Terminal tab](putty2.png)
 
 Then click the "Open" button to play.
 
