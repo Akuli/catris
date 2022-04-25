@@ -449,8 +449,8 @@ class CheckTerminalSizeView(View):
         height = self._game_class.TERMINAL_HEIGHT_NEEDED
 
         text_lines = [
-            b"Please adjust your terminal size so that you can",
-            b"see the entire rectangle. Press Enter when done.",
+            b"Please resize this window so that you can see",
+            b"the entire rectangle. Press Enter when done.",
         ]
 
         lines = [b"|" + b" " * (width - 2) + b"|"] * height
