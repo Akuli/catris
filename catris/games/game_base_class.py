@@ -402,6 +402,8 @@ class Game:
                 squares |= block.squares
             for player in self.players:
                 squares |= player.next_moving_squares
+                if player.held_squares is not None:
+                    squares |= player.held_squares
 
             for square in squares:
                 if isinstance(square, DrillSquare):
