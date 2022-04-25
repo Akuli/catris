@@ -144,7 +144,9 @@ class Game:
             square.x += player.moving_block_start_x
             square.y += player.moving_block_start_y
 
-        player.moving_block_or_wait_counter = MovingBlock(squares, came_from_hold=from_hold)
+        player.moving_block_or_wait_counter = MovingBlock(
+            squares, came_from_hold=from_hold
+        )
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
