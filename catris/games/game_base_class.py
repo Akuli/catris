@@ -389,7 +389,7 @@ class Game:
                 exploding_bombs = [
                     square
                     for square in self._get_all_squares()
-                    if isinstance(square, BombSquare) and square.timer == 0
+                    if isinstance(square, BombSquare) and square.timer <= 0
                 ]
                 while exploding_bombs:
                     exploding_bombs = await self._explode_bombs(exploding_bombs)
