@@ -119,11 +119,16 @@ class Game:
             for p in self.players
         )
 
-    def new_block(self, player: Player) -> None:
+    def new_block(self, player: Player, *, from_hold: bool = False) -> None:
         assert player in self.players
         assert self.is_valid()
-        squares = player.next_moving_squares
-        player.next_moving_squares = create_moving_squares(self.score)
+
+        if from_hold:
+            assert player.held_squares is not None
+            squares = player.held_squares
+        else:
+            squares = player.next_moving_squares
+            player.next_moving_squares = create_moving_squares(self.score)
 
         # Convert to world coordinates. Rotations are needed to give the user
         # exactly what the next block display promises and to avoid subtle bugs.
@@ -144,6 +149,19 @@ class Game:
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
             assert self.is_valid()
+
+    def hold_block(self, player: Player) -> None:
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return
+
+        to_hold = player.moving_block_or_wait_counter.squares
+        self.new_block(player, from_hold=(player.held_squares is not None))
+        for square in to_hold:
+            square.x = square.original_x
+            square.y = square.original_y
+            square.offset_x = square.original_offset_x
+            square.offset_y = square.original_offset_y
+        player.held_squares = to_hold
 
     # For clearing squares when a player's wait time ends
     @abstractmethod

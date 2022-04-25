@@ -55,6 +55,7 @@ Keys:
 - Ctrl+C, Ctrl+D or Ctrl+Q: quit
 - Ctrl+R: redraw the whole screen (may be needed after resizing the window)
 - WASD or arrow keys: move and rotate
+- h: hold (aka "save") block for later, switch to previously held block if any
 - r: change rotating direction
 - p: pause/unpause (affects all players)
 - f: flip the game upside down (only available in ring mode with 1 player)
