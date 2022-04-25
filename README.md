@@ -64,9 +64,9 @@ Try to collaborate and make the best use of everyone's blocks.
 
 With multiple players, if your playing area
 fills up all the way to the top of the game,
-you will have to wait 10 seconds.
+you will have to wait 30 seconds.
 Then your playing area will be erased and you can continue playing.
-The game ends if all players are simultaneously on their 10 seconds waiting time.
+The game ends if all players are simultaneously on their 30 seconds waiting time.
 This means that you can intentionally fill your area with blocks
 to get your waiting time before other players.
 

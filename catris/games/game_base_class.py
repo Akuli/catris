@@ -409,7 +409,7 @@ class Game:
     def start_please_wait_countdown(self, player: Player) -> None:
         # Get rid of moving block immediately to prevent invalid state after
         # adding a moving block that overlaps someone else's moving block.
-        player.moving_block_or_wait_counter = 10
+        player.moving_block_or_wait_counter = 30
         self.need_render_event.set()
         self.tasks.append(asyncio.create_task(self._please_wait_countdown(player)))
 
