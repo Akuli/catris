@@ -67,7 +67,7 @@ you will have to wait 10 seconds.
 Then your playing area will be erased and you can continue playing.
 The game ends if all players are simultaneously on their 10 seconds waiting time.
 This means that you can intentionally fill your area with blocks
-to get to the 10 seconds waiting time before other players.
+to get your waiting time before other players.
 
 
 ## Development
