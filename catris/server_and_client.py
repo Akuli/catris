@@ -69,12 +69,12 @@ class Client:
         self.writer = writer
         self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
-        self._last_displayed_lines: list[bytes] = []
         self.name: str | None = None
         self.lobby: Lobby | None = None
         self.color: int | None = None
         self.view: View = AskNameView(self)
         self._last_rendered_view: View | None = None
+        self._last_displayed_lines: list[bytes] = []
 
         self.rotate_counter_clockwise = False
         self.lobby_id_hidden = False
