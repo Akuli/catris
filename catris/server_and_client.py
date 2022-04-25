@@ -13,6 +13,7 @@ from catris.ansi import (
     CONTROL_C,
     CONTROL_D,
     CONTROL_Q,
+    CONTROL_R,
     CSI,
     ESC,
     HIDE_CURSOR,
@@ -68,11 +69,12 @@ class Client:
         self.writer = writer
         self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
-        self.last_displayed_lines: list[bytes] = []
+        self._last_displayed_lines: list[bytes] = []
         self.name: str | None = None
         self.lobby: Lobby | None = None
         self.color: int | None = None
         self.view: View = AskNameView(self)
+        self._last_rendered_view: View | None = None
 
         self.rotate_counter_clockwise = False
         self.lobby_id_hidden = False
@@ -88,10 +90,10 @@ class Client:
     def log(self, msg: str, *, level: int = logging.INFO) -> None:
         logging.log(level, f"(client {self._client_id}) {msg}")
 
-    def render(self) -> None:
+    def render(self, *, force_redraw: bool = False) -> None:
         if isinstance(self.view, CheckTerminalSizeView):
             # Very different from other views
-            self.last_displayed_lines.clear()
+            self._last_displayed_lines.clear()
             self._send_bytes(
                 CLEAR_SCREEN
                 + (MOVE_CURSOR % (1, 1))
@@ -107,14 +109,18 @@ class Client:
             # noticed here before it gets wiped by the next refresh.
             cursor_pos = (len(lines) + 1, 1)
 
-        while len(lines) < len(self.last_displayed_lines):
-            lines.append(b"")
-        while len(lines) > len(self.last_displayed_lines):
-            self.last_displayed_lines.append(b"")
-
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow
         to_send = b""
+
+        if self._last_rendered_view != self.view or force_redraw:
+            self._last_displayed_lines.clear()
+            to_send += CLEAR_SCREEN
+
+        while len(lines) < len(self._last_displayed_lines):
+            lines.append(b"")
+        while len(lines) > len(self._last_displayed_lines):
+            self._last_displayed_lines.append(b"")
 
         if isinstance(self.view, TextEntryView):
             to_send += SHOW_CURSOR
@@ -127,14 +133,15 @@ class Client:
         to_send += CLEAR_TO_END_OF_LINE
 
         for y, (old_line, new_line) in enumerate(
-            zip(self.last_displayed_lines, lines), start=1
+            zip(self._last_displayed_lines, lines), start=1
         ):
             # Re-rendering cursor line helps with AskNameView
             if old_line != new_line or y == cursor_pos[0]:
                 to_send += MOVE_CURSOR % (y, 1)
                 to_send += new_line
                 to_send += CLEAR_TO_END_OF_LINE
-        self.last_displayed_lines = lines.copy()
+        self._last_displayed_lines = lines.copy()
+        self._last_rendered_view = self.view
 
         to_send += MOVE_CURSOR % cursor_pos
         self._send_bytes(to_send)
@@ -197,11 +204,12 @@ class Client:
         try:
             self.server.all_clients.add(self)
             self.log(f"There are now {len(self.server.all_clients)} connected clients")
-            self._send_bytes(CLEAR_SCREEN)
             received = b""
+            force_redraw_on_next_render = False
 
             while True:
-                self.render()
+                self.render(force_redraw=force_redraw_on_next_render)
+                force_redraw_on_next_render = False
 
                 new_chunk = await self._receive_bytes()
                 if new_chunk is None:
@@ -212,14 +220,17 @@ class Client:
                 # them are CSI, aka ESC [. If we have received a part of an
                 # arrow key press, don't process it yet, wait for the rest to
                 # arrive instead.
+                key_presses = []
                 while received not in (b"", ESC, CSI):
-                    if received.startswith(CSI):
-                        handle_result = self.view.handle_key_press(received[:3])
-                        received = received[3:]
-                    else:
-                        handle_result = self.view.handle_key_press(received[:1])
-                        received = received[1:]
-                    if handle_result:
+                    n = 3 if received.startswith(CSI) else 1
+                    key_presses.append(received[:n])
+                    received = received[n:]
+
+                for key_press in key_presses:
+                    if key_press == CONTROL_R:
+                        self.log("Ctrl+R pressed, forcing redraw on next render")
+                        force_redraw_on_next_render = True
+                    elif self.view.handle_key_press(key_press):
                         return
 
         finally:
