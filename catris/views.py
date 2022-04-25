@@ -385,9 +385,9 @@ class ChooseGameView(MenuView):
         if self._client.server.only_lobby is None:
             # Multiple lobbies mode
             if self._client.lobby_id_hidden:
-                h_message = b" (press h to show)"
+                h_message = b" (press i to show)"
             else:
-                h_message = b" (press h to hide)"
+                h_message = b" (press i to hide)"
             result.append(
                 b"   "
                 + self._client.get_lobby_id_for_display()
@@ -423,7 +423,7 @@ class ChooseGameView(MenuView):
         return result
 
     def handle_key_press(self, received: bytes) -> bool:
-        if received in (b"H", b"h"):
+        if received in (b"I", b"i"):
             self._client.lobby_id_hidden = not self._client.lobby_id_hidden
             return False
         return super().handle_key_press(received)
@@ -557,14 +557,22 @@ class PlayingView(View):
         if self.game.is_paused:
             lines[7] += b"  Paused"
 
-        lines[8] += b"  Next:"
-        for index, row in enumerate(
-            get_block_preview(self.player.next_moving_squares), start=10
-        ):
-            lines[index] += b"   " + row
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
-            lines[17] += f"  Please wait: {n}".encode("ascii")
+            lines[12] += f"  Please wait: {n}".encode("ascii")
+        else:
+            lines[8] += b"  Next:"
+            for index, row in enumerate(
+                get_block_preview(self.player.next_moving_squares), start=10
+            ):
+                lines[index] += b"   " + row
+            if self.player.held_squares is not None:
+                lines[16] += b"  Holding:"
+                for index, row in enumerate(
+                    get_block_preview(self.player.held_squares), start=18
+                ):
+                    lines[index] += b"   " + row
+
         return lines
 
     def handle_key_press(self, received: bytes) -> None:
@@ -593,6 +601,9 @@ class PlayingView(View):
             self.player.set_fast_down(False)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
             self.player.set_fast_down(True)
+        elif received in (b"H", b"h"):
+            self.game.hold_block(self.player)
+            self.player.set_fast_down(False)
         elif (
             received in (b"F", b"f")
             and isinstance(self.game, RingGame)

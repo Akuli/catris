@@ -14,6 +14,12 @@ class Square:
         # The offset is a vector from current position (x, y) to center of rotation
         self.offset_x = 0
         self.offset_y = 0
+        # These don't change as the square moves down and lands.
+        # Used in the hold feature, where an already moving block has to be respawned
+        self.original_x = 0
+        self.original_y = 0
+        self.original_offset_x = 0
+        self.original_offset_y = 0
         self.wrap_around_end = False  # for ring mode
 
     def rotate(self, counter_clockwise: bool) -> None:
@@ -180,8 +186,12 @@ def create_moving_squares(score: int) -> set[Square]:
         square = copy.copy(center_square)
         square.x = x
         square.y = y
+        square.original_x = x
+        square.original_y = y
         square.offset_x = -x
         square.offset_y = -y
+        square.original_offset_x = -x
+        square.original_offset_y = -y
         if isinstance(square, DrillSquare):
             square.picture_x = 1 + x
             square.picture_y = DRILL_HEIGHT - 1 + y

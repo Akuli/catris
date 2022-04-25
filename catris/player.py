@@ -9,6 +9,7 @@ from catris.squares import Square, create_moving_squares
 class MovingBlock:
     squares: set[Square]
     fast_down: bool = False
+    came_from_hold: bool = False
 
 
 @dataclasses.dataclass(eq=False)
@@ -23,6 +24,7 @@ class Player:
     moving_block_start_x: int
     moving_block_start_y: int
     moving_block_or_wait_counter: MovingBlock | int | None = None
+    held_squares: set[Square] | None = None
 
     def __post_init__(self) -> None:
         # score=0 is wrong when a new player joins an existing game.
