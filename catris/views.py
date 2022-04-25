@@ -566,7 +566,10 @@ class PlayingView(View):
                 get_block_preview(self.player.next_moving_squares), start=10
             ):
                 lines[index] += b"   " + row
-            if self.player.held_squares is not None:
+            if self.player.held_squares is None:
+                lines[16] += b"  Nothing in hold"
+                lines[17] += b"     (press h)"
+            else:
                 lines[16] += b"  Holding:"
                 for index, row in enumerate(
                     get_block_preview(self.player.held_squares), start=18
