@@ -15,13 +15,12 @@ Create an issue if this is a problem for you.
 (on most computers, the "64-bit x86" MSI installer is what you need).
 Once installed, you can open it from the start menu.
 Fill in these settings:
-- Session:
-    - Host Name: `172.104.132.97`
-    - Port: `12345`
-    - Connection type: Raw
-- Terminal:
-    - Local echo: Force off
-    - Local line editing: Force off
+- Session: Host Name `172.104.132.97`, Port `12345`, Connection Type "Raw"
+- Terminal: Local echo "Force off", Local line editing "Force off"
+
+![Settings of Session tab](putty1.png)
+
+![Settings of Terminal tab](putty2.png)
 
 Then click the "Open" button to play.
 
