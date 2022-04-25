@@ -9,6 +9,7 @@ from catris.squares import Square, create_moving_squares
 class MovingBlock:
     squares: set[Square]
     fast_down: bool = False
+    came_from_hold: bool = False
 
 
 @dataclasses.dataclass(eq=False)

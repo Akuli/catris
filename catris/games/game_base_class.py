@@ -144,14 +144,17 @@ class Game:
             square.x += player.moving_block_start_x
             square.y += player.moving_block_start_y
 
-        player.moving_block_or_wait_counter = MovingBlock(squares)
+        player.moving_block_or_wait_counter = MovingBlock(squares, came_from_hold=from_hold)
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
             assert self.is_valid()
 
     def hold_block(self, player: Player) -> None:
-        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+        if (
+            not isinstance(player.moving_block_or_wait_counter, MovingBlock)
+            or player.moving_block_or_wait_counter.came_from_hold
+        ):
             return
 
         to_hold = player.moving_block_or_wait_counter.squares
