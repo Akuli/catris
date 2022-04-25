@@ -12,7 +12,7 @@ Create an issue if this is a problem for you.
 <summary>Windows instructions</summary>
 
 Download PuTTY from [here](https://www.putty.org/),
-or search "putty download" or similar, and click the first result.
+or search "putty download" or similar and click the first result.
 On the download page, choose the 64-bit x86 putty.exe under "Alternative binary files".
 
 ![Putty's download page](putty-download.png)
