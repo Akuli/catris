@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import datetime
-import random
 import re
 import time
 from abc import abstractmethod
@@ -137,14 +134,7 @@ class AskNameView(TextEntryView):
         self._client.name = name
         if self._client.server.only_lobby is None:
             # multiple lobbies mode
-            if (
-                name.lower() in {"köpi", "kopi", "basisti", "pasisti"}
-                and str(datetime.date.today()) == "2022-04-25"
-            ):
-                # Köpi's birthday surprise
-                self._client.view = HappyBirthdayView(self._client)
-            else:
-                self._client.view = ChooseIfNewLobbyView(self._client)
+            self._client.view = ChooseIfNewLobbyView(self._client)
         else:
             self._client.server.only_lobby.add_client(self._client)
             self._client.view = ChooseGameView(self._client)
@@ -166,67 +156,6 @@ class AskNameView(TextEntryView):
             lines.append(text.center(80).rstrip())
 
         return (lines, cursor_pos)
-
-
-class HappyBirthdayView(View):
-    def __init__(self, client: Client) -> None:
-        self._client = client
-        self._balloons: list[tuple[int, int]] = []
-        asyncio.create_task(self._animate_task())
-
-    async def _animate_task(self) -> None:
-        while (
-            self._client.view == self
-            and self._client in self._client.server.all_clients
-        ):
-            self._balloons = [(x, y - 1) for (x, y) in self._balloons if y >= -10]
-            if random.random() < 0.2:
-                self._balloons.append((random.randint(0, 70), 15))
-            self._client.render()
-            await asyncio.sleep(0.1)
-
-    def get_lines_to_render(self) -> list[bytes]:
-        result = r"""
-
-
-
-
-                           ***************************
-                           * Happy Birthday to Köpi! *
-                           ***************************
-
-
-
-
-
-
-
-""".splitlines()
-        balloon = r"""
- ,--.
-/    \
-\    /
- `--'
-   \
-   /
-  /
-  \
-"""
-        for left_x, top_y in self._balloons:
-            for y, row in enumerate(balloon.splitlines(), start=top_y):
-                if y in range(len(result)):
-                    chars = list(result[y].ljust(80))
-                    x = left_x + len(row) - len(row.lstrip())
-                    chars[x : x + len(row.lstrip())] = row.lstrip()
-                    result[y] = "".join(chars).rstrip()
-
-        return [(COLOR % 32) + row.encode("utf-8") + (COLOR % 0) for row in result] + [
-            b"Press Enter to continue...".center(80).rstrip()
-        ]
-
-    def handle_key_press(self, received: bytes) -> None:
-        if received == b"\r":
-            self._client.view = ChooseIfNewLobbyView(self._client)
 
 
 class MenuView(View):
