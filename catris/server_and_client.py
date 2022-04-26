@@ -181,10 +181,10 @@ class Client:
         self._recv_stats.append((now, len(result)))
         while self._recv_stats and self._recv_stats[0][0] < now - 1:
             self._recv_stats.popleft()
-        # 100 bytes seems appropriate, by smashing keys as much as possible i can
-        # get to about 60 bytes/sec
-        if sum(length for timestamp, length in self._recv_stats) > 100:
-            self.log("Received more than 100 bytes/sec, disconnecting")
+        # By smashing keys as much as possible I can get to about 60 bytes/sec.
+        # I think bad connection might send several seconds of key presses at once.
+        if sum(length for timestamp, length in self._recv_stats) > 256:
+            self.log("Received more than 256 bytes/sec, disconnecting")
             return None
 
         # Checking ESC key here is a bad idea.
