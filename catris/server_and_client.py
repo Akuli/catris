@@ -185,6 +185,9 @@ class Client:
                 + b"Closing connection because it has been idle for 3 minutes.\r\n"
             )
             return None
+        except asyncio.CancelledError:
+            # cancelled in _send_bytes()
+            return None
         except OSError as e:
             self.log(f"Receive error: {e}")
             return None
