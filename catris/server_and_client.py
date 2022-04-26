@@ -67,6 +67,7 @@ class Client:
         self.server = server
         self._reader = reader
         self.writer = writer
+        self._current_receive_task: asyncio.Task[bytes] | None = None
         self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
         self.name: str | None = None
@@ -157,6 +158,9 @@ class Client:
         if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
             self.log("More than 64K of data in send buffer, disconnecting")
             self.writer.transport.close()
+            # Closing isn't enough to stop receiving immediately
+            if self._current_receive_task is not None:
+                self._current_receive_task.cancel()
 
     async def _receive_bytes(self) -> bytes | None:
         # Makes game playable while under very heavy cpu load.
@@ -166,8 +170,10 @@ class Client:
         if self.writer.transport.is_closing():
             return None
 
+        assert self._current_receive_task is None
+        self._current_receive_task = asyncio.create_task(self._reader.read(100))
         try:
-            result = await asyncio.wait_for(self._reader.read(100), timeout=3 * 60)
+            result = await asyncio.wait_for(self._current_receive_task, timeout=3 * 60)
         except asyncio.TimeoutError:
             self.log("Nothing received in 3min, disconnecting")
             self._send_bytes(
@@ -178,6 +184,8 @@ class Client:
         except OSError as e:
             self.log(f"Receive error: {e}")
             return None
+        finally:
+            self._current_receive_task = None
 
         # Prevent 100% cpu usage if someone sends a lot of data
         now = time.monotonic()
