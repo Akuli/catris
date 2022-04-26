@@ -341,7 +341,6 @@ class AskLobbyIDView(TextEntryView):
             self.error = f"Lobby '{lobby_id}' is full. It already has {MAX_CLIENTS_PER_LOBBY} players."
             return
 
-        self._client.log(f"Joining lobby: {lobby_id}")
         lobby.add_client(self._client)
         self._client.view = ChooseGameView(self._client)
 
