@@ -66,7 +66,7 @@ class Client:
         self._client_id = next(_id_counter)
         self.server = server
         self._reader = reader
-        self.writer = writer
+        self._writer = writer
         self._current_receive_task: asyncio.Task[bytes] | None = None
         self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
@@ -148,10 +148,10 @@ class Client:
         self._send_bytes(to_send)
 
     def _send_bytes(self, b: bytes) -> None:
-        if self.writer.transport.is_closing():
+        if self._writer.transport.is_closing():
             return
 
-        self.writer.write(b)
+        self._writer.write(b)
 
         # Prevent filling the server's memory if client sends but never receives.
         # Usually send buffer is empty (0 bytes) because operating system has buffering too.
@@ -159,9 +159,9 @@ class Client:
         #
         # On 80x24 terminal with no colors, we send max 80*24 = 1920 bytes at a time.
         # There's some extra space for colors and bigger terminals.
-        if self.writer.transport.get_write_buffer_size() > 4 * 1024:  # type: ignore
+        if self._writer.transport.get_write_buffer_size() > 4 * 1024:  # type: ignore
             self.log("More than 4K of data in send buffer, disconnecting")
-            self.writer.transport.close()
+            self._writer.transport.close()
             # Closing isn't enough to stop receiving immediately
             if self._current_receive_task is not None:
                 self._current_receive_task.cancel()
@@ -171,7 +171,7 @@ class Client:
         # Should no longer be necessary, but just in case...
         await asyncio.sleep(0)
 
-        if self.writer.transport.is_closing():
+        if self._writer.transport.is_closing():
             return None
 
         assert self._current_receive_task is None
@@ -271,7 +271,7 @@ class Client:
             self._send_bytes(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
 
             try:
-                await asyncio.wait_for(self.writer.drain(), timeout=3)
+                await asyncio.wait_for(self._writer.drain(), timeout=3)
             except (OSError, asyncio.TimeoutError):
                 pass
-            self.writer.transport.close()
+            self._writer.transport.close()
