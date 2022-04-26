@@ -154,9 +154,13 @@ class Client:
         self.writer.write(b)
 
         # Prevent filling the server's memory if client sends but never receives.
-        # I don't use .drain() because one client's slowness shouldn't slow others.
-        if self.writer.transport.get_write_buffer_size() > 64 * 1024:  # type: ignore
-            self.log("More than 64K of data in send buffer, disconnecting")
+        # Usually send buffer is empty (0 bytes) because operating system has buffering too.
+        # But it feels weird to rely on operating system's (undocumented?) buffer size.
+        #
+        # On 80x24 terminal with no colors, we send max 80*24 = 1920 bytes at a time.
+        # There's some extra space for colors and bigger terminals.
+        if self.writer.transport.get_write_buffer_size() > 4 * 1024:  # type: ignore
+            self.log("More than 4K of data in send buffer, disconnecting")
             self.writer.transport.close()
             # Closing isn't enough to stop receiving immediately
             if self._current_receive_task is not None:
