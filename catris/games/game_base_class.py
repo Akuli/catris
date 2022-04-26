@@ -473,6 +473,7 @@ class Game:
                     player, dx=0, dy=1, in_player_coords=True, can_drill=True
                 )
                 if moved:
+                    self.need_render_event.set()
                     something_moved = True
                     todo.remove(player)
             if not something_moved:
@@ -496,9 +497,9 @@ class Game:
         async with self.flashing_lock:
             full_lines_iter = self.find_and_then_wipe_full_lines()
             full_squares = next(full_lines_iter)
-            self.need_render_event.set()
 
             if full_squares:
+                self.need_render_event.set()
                 await self.flash({(s.x, s.y) for s in full_squares}, 47)
                 try:
                     # run past yield, which deletes points
@@ -507,8 +508,7 @@ class Game:
                     # This means function ended without a second yield.
                     # It's expected, and in fact happens every time.
                     pass
-
-            self.need_render_event.set()
+                self.need_render_event.set()
 
     async def _move_blocks_down_task(self, fast: bool) -> None:
         while True:
