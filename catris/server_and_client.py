@@ -147,6 +147,9 @@ class Client:
         self._send_bytes(to_send)
 
     def _send_bytes(self, b: bytes) -> None:
+        if self.writer.transport.is_closing():
+            return
+
         self.writer.write(b)
 
         # Prevent filling the server's memory if client sends but never receives.
