@@ -150,7 +150,8 @@ class Game:
         if not self.is_valid():
             # New block overlaps with someone else's moving block
             self.start_please_wait_countdown(player)
-            assert self.is_valid()
+        assert self.is_valid()
+        self.need_render_event.set()
 
     def hold_block(self, player: Player) -> None:
         if (
@@ -288,7 +289,6 @@ class Game:
 
         if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
             self.new_block(player)
-            self.need_render_event.set()
         return player
 
     def player_can_join(self, name: str) -> bool:
