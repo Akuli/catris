@@ -67,11 +67,7 @@ class Game:
         self.need_render_event.set()
 
     def get_duration_sec(self) -> float:
-        if self.is_paused:
-            end_time = self._last_pause_start
-        else:
-            end_time = time.monotonic_ns()
-
+        end_time = self._last_pause_start if self.is_paused else time.monotonic_ns()
         duration_ns = end_time - self._start_time - self._time_spent_in_pause
         return duration_ns / (1000 * 1000 * 1000)
 
