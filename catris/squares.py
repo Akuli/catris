@@ -165,9 +165,22 @@ class DrillSquare(Square):
         pass
 
 
+def add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
+    while True:
+        x, y = random.choice(relative_coords)
+        offset_x, offset_y = random.choice([(-1, 0), (1, 0), (0, -1), (0, 1)])
+        x += offset_x
+        y += offset_y
+        if (x, y) not in relative_coords:
+            relative_coords.append((x, y))
+            return
+
+
 def create_moving_squares(score: int) -> set[Square]:
     bomb_probability_as_percents = score / 800 + 1
     drill_probability_as_percents = score / 2000
+    # Extra squares appear only with score>1000
+    extra_square_probability_as_percents = (score - 1000) / 1500
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         center_square: Square = BombSquare()
@@ -178,7 +191,9 @@ def create_moving_squares(score: int) -> set[Square]:
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         center_square = NormalSquare(shape_letter)
-        relative_coords = BLOCK_SHAPES[shape_letter]
+        relative_coords = BLOCK_SHAPES[shape_letter].copy()
+        if random.uniform(0, 100) < extra_square_probability_as_percents:
+            add_extra_square(relative_coords)
 
     result = set()
 
