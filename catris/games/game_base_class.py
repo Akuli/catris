@@ -8,13 +8,7 @@ from typing import Any, Callable, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
-from catris.squares import (
-    BombSquare,
-    DrillSquare,
-    NormalSquare,
-    Square,
-    create_moving_squares,
-)
+from catris.squares import BombSquare, DrillSquare, Square, create_moving_squares
 
 
 class Game:
@@ -229,9 +223,9 @@ class Game:
                 if can_drill and isinstance(square, DrillSquare):
                     for other_square in self.landed_squares.copy():
                         if (
-                            isinstance(other_square, NormalSquare)
-                            and other_square.x == square.x
+                            other_square.x == square.x
                             and other_square.y == square.y
+                            and not isinstance(other_square, DrillSquare)
                         ):
                             self.landed_squares.remove(other_square)
                             drilled.add(other_square)
