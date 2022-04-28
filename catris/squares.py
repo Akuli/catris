@@ -173,7 +173,7 @@ def _shapes_match_but_maybe_not_locations(
 
 
 # Not based on shape letter, because blocks can contain extra squares for the lolz
-def _choose_rotate_mode(not_rotated: set[tuple[int, int]]) -> None:
+def _choose_rotate_mode(not_rotated: set[tuple[int, int]]) -> _RotateMode:
     rotated_once = {(y, -x) for x, y in not_rotated}
     if _shapes_match_but_maybe_not_locations(not_rotated, rotated_once):
         return _RotateMode.NO_ROTATING
