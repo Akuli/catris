@@ -8,12 +8,7 @@ from typing import Any, Callable, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
-from catris.squares import (
-    BombSquare,
-    DrillSquare,
-    Square,
-    create_moving_squares,
-)
+from catris.squares import BombSquare, DrillSquare, Square, create_moving_squares
 
 
 class Game:
