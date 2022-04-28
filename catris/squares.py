@@ -58,13 +58,13 @@ class Square:
 
 
 BLOCK_SHAPES = {
-    "L": [(-1, 0), (0, 0), (1, 0), (1, -1)],
-    "I": [(-2, 0), (-1, 0), (0, 0), (1, 0)],
-    "J": [(-1, -1), (-1, 0), (0, 0), (1, 0)],
-    "O": [(-1, 0), (0, 0), (0, -1), (-1, -1)],
-    "T": [(-1, 0), (0, 0), (1, 0), (0, -1)],
-    "Z": [(-1, -1), (0, -1), (0, 0), (1, 0)],
-    "S": [(1, -1), (0, -1), (0, 0), (-1, 0)],
+    "L": {(-1, 0), (0, 0), (1, 0), (1, -1)},
+    "I": {(-2, 0), (-1, 0), (0, 0), (1, 0)},
+    "J": {(-1, -1), (-1, 0), (0, 0), (1, 0)},
+    "O": {(-1, 0), (0, 0), (0, -1), (-1, -1)},
+    "T": {(-1, 0), (0, 0), (1, 0), (0, -1)},
+    "Z": {(-1, -1), (0, -1), (0, 0), (1, 0)},
+    "S": {(1, -1), (0, -1), (0, 0), (-1, 0)},
 }
 BLOCK_COLORS = {
     # Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
@@ -183,25 +183,23 @@ def _choose_rotate_mode(not_rotated: set[tuple[int, int]]) -> _RotateMode:
     return _RotateMode.FULL_ROTATING
 
 
-def _add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
+def _add_extra_square(relative_coords: set[tuple[int, int]]) -> None:
     while True:
-        x, y = random.choice(relative_coords)
+        x, y = random.choice(list(relative_coords))
         offset_x, offset_y = random.choice([(-1, 0), (1, 0), (0, -1), (0, 1)])
         x += offset_x
         y += offset_y
         if (x, y) not in relative_coords:
-            relative_coords.append((x, y))
+            relative_coords.add((x, y))
             return
 
 
 # Once extra square has been added, blocks can rotate wildly.
 # This function adjusts the center of rotation to be in the center of mass.
-def _fix_rotation_center(
-    relative_coords: list[tuple[int, int]]
-) -> list[tuple[int, int]]:
+def _fix_rotation_center(relative_coords: set[tuple[int, int]]) -> set[tuple[int, int]]:
     com_x = round(sum(x for x, y in relative_coords) / len(relative_coords))
     com_y = round(sum(y for x, y in relative_coords) / len(relative_coords))
-    return [(x - com_x, y - com_y) for x, y in relative_coords]
+    return {(x - com_x, y - com_y) for x, y in relative_coords}
 
 
 def create_moving_squares(score: int) -> set[Square]:
@@ -212,11 +210,11 @@ def create_moving_squares(score: int) -> set[Square]:
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         center_square: Square = BombSquare()
-        relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
+        relative_coords = {(-1, 0), (0, 0), (0, -1), (-1, -1)}
         rotate_mode = _RotateMode.NO_ROTATING
     elif random.uniform(0, 100) < drill_probability_as_percents:
         center_square = DrillSquare()
-        relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
+        relative_coords = {(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)}
         rotate_mode = _RotateMode.NO_ROTATING
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
@@ -225,7 +223,7 @@ def create_moving_squares(score: int) -> set[Square]:
         if random.uniform(0, 100) < extra_square_probability_as_percents:
             _add_extra_square(relative_coords)
             relative_coords = _fix_rotation_center(relative_coords)
-        rotate_mode = _choose_rotate_mode(set(relative_coords))
+        rotate_mode = _choose_rotate_mode(relative_coords)
 
     result = set()
 
