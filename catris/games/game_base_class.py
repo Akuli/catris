@@ -11,7 +11,6 @@ from catris.player import MovingBlock, Player
 from catris.squares import (
     BombSquare,
     DrillSquare,
-    NormalSquare,
     Square,
     create_moving_squares,
 )
