@@ -164,7 +164,9 @@ class DrillSquare(Square):
         return result
 
 
-def _shapes_match_but_maybe_not_locations(a: set[tuple[int, int]], b: set[tuple[int, int]]):
+def _shapes_match_but_maybe_not_locations(
+    a: set[tuple[int, int]], b: set[tuple[int, int]]
+):
     offset_x = min(x for x, y in b) - min(x for x, y in a)
     offset_y = min(y for x, y in b) - min(y for x, y in a)
     return {(x + offset_x, y + offset_y) for x, y in a} == b
@@ -194,7 +196,9 @@ def _add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
 
 # Once extra square has been added, blocks can rotate wildly.
 # This function adjusts the center of rotation to be in the center of mass.
-def _fix_rotation_center(relative_coords: list[tuple[int, int]]) -> list[tuple[int, int]]:
+def _fix_rotation_center(
+    relative_coords: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
     com_x = round(sum(x for x, y in relative_coords) / len(relative_coords))
     com_y = round(sum(y for x, y in relative_coords) / len(relative_coords))
     return [(x - com_x, y - com_y) for x, y in relative_coords]
