@@ -166,7 +166,7 @@ class DrillSquare(Square):
 
 def _shapes_match_but_maybe_not_locations(
     a: set[tuple[int, int]], b: set[tuple[int, int]]
-):
+) -> bool:
     offset_x = min(x for x, y in b) - min(x for x, y in a)
     offset_y = min(y for x, y in b) - min(y for x, y in a)
     return {(x + offset_x, y + offset_y) for x, y in a} == b
