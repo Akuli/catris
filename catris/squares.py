@@ -203,10 +203,8 @@ def _fix_rotation_center(relative_coords: list[tuple[int, int]]) -> list[tuple[i
 def create_moving_squares(score: int) -> set[Square]:
     bomb_probability_as_percents = score / 800 + 1
     drill_probability_as_percents = score / 2000
-    # Extra squares appear only with score>1000
-    extra_square_probability_as_percents = (score - 1000) / 1500
-
-    extra_square_probability_as_percents = 50
+    # Extra squares appear only with score>500
+    extra_square_probability_as_percents = (score - 500) / 200
 
     rotate_mode = _RotateMode.NO_ROTATING
     if random.uniform(0, 100) < bomb_probability_as_percents:
