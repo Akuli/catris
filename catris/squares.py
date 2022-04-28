@@ -3,8 +3,15 @@ from __future__ import annotations
 import copy
 import random
 from abc import abstractmethod
+from enum import Enum
 
 from catris.ansi import COLOR
+
+
+class _RotateMode(Enum):
+    NO_ROTATING = 1
+    ROTATE_90DEG_AND_BACK = 2
+    FULL_ROTATING = 3
 
 
 class Square:
@@ -21,8 +28,10 @@ class Square:
         self.original_offset_x = 0
         self.original_offset_y = 0
         self.wrap_around_end = False  # for ring mode
+        self.rotate_mode = _RotateMode.NO_ROTATING
+        self._next_rotate_goes_backwards = False
 
-    def rotate(self, counter_clockwise: bool) -> None:
+    def _raw_rotate(self, counter_clockwise: bool) -> None:
         self.x += self.offset_x
         self.y += self.offset_y
         if counter_clockwise:
@@ -31,6 +40,17 @@ class Square:
             self.offset_x, self.offset_y = -self.offset_y, self.offset_x
         self.x -= self.offset_x
         self.y -= self.offset_y
+
+    def rotate(self, counter_clockwise: bool) -> None:
+        if self.rotate_mode == _RotateMode.NO_ROTATING:
+            pass
+        elif self.rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
+            self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
+            self._raw_rotate(counter_clockwise=self._next_rotate_goes_backwards)
+        elif self.rotate_mode == _RotateMode.FULL_ROTATING:
+            self._raw_rotate(counter_clockwise)
+        else:
+            raise NotImplementedError(self.rotate_mode)
 
     @abstractmethod
     def get_text(self, landed: bool) -> bytes:
@@ -62,22 +82,9 @@ class NormalSquare(Square):
     def __init__(self, shape_letter: str) -> None:
         super().__init__()
         self.shape_letter = shape_letter
-        self.next_rotate_goes_backwards = False
 
     def get_text(self, landed: bool) -> bytes:
         return (COLOR % BLOCK_COLORS[self.shape_letter]) + b"  " + (COLOR % 0)
-
-    def rotate(self, counter_clockwise: bool) -> None:
-        if self.shape_letter == "O":
-            return
-        elif self.shape_letter in "ISZ":
-            if self.next_rotate_goes_backwards:
-                super().rotate(counter_clockwise=False)
-            else:
-                super().rotate(counter_clockwise=True)
-            self.next_rotate_goes_backwards = not self.next_rotate_goes_backwards
-        else:
-            super().rotate(counter_clockwise)
 
 
 class BombSquare(Square):
@@ -90,10 +97,6 @@ class BombSquare(Square):
         color = 31 if self.timer <= 3 else 33
         text = str(self.timer).center(2).encode("ascii")
         return (COLOR % color) + text + (COLOR % 0)
-
-    # Do not rotate
-    def rotate(self, counter_clockwise: bool) -> None:
-        pass
 
 
 class BottleSeparatorSquare(Square):
@@ -160,12 +163,8 @@ class DrillSquare(Square):
             return (COLOR % 100) + result + (COLOR % 0)
         return result
 
-    # Do not rotate
-    def rotate(self, counter_clockwise: bool) -> None:
-        pass
 
-
-def add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
+def _add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
     while True:
         x, y = random.choice(relative_coords)
         offset_x, offset_y = random.choice([(-1, 0), (1, 0), (0, -1), (0, 1)])
@@ -176,6 +175,23 @@ def add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
             return
 
 
+def _shapes_match_but_maybe_not_locations(a: set[tuple[int, int]], b: set[tuple[int, int]]):
+    offset_x = min(x for x, y in b) - min(x for x, y in a)
+    offset_y = min(y for x, y in b) - min(y for x, y in a)
+    return {(x + offset_x, y + offset_y) for x, y in a} == b
+
+
+# Not based on shape letter, because blocks can contain extra squares for the lolz
+def _choose_rotate_mode(not_rotated: set[tuple[int, int]]) -> None:
+    rotated_once = {(y, -x) for x, y in not_rotated}
+    if _shapes_match_but_maybe_not_locations(not_rotated, rotated_once):
+        return _RotateMode.NO_ROTATING
+    rotated_twice = {(-x, -y) for x, y in not_rotated}
+    if _shapes_match_but_maybe_not_locations(not_rotated, rotated_twice):
+        return _RotateMode.ROTATE_90DEG_AND_BACK
+    return _RotateMode.FULL_ROTATING
+
+
 def create_moving_squares(score: int) -> set[Square]:
     bomb_probability_as_percents = score / 800 + 1
     drill_probability_as_percents = score / 2000
@@ -184,18 +200,22 @@ def create_moving_squares(score: int) -> set[Square]:
 
     extra_square_probability_as_percents = 50
 
+    rotate_mode = _RotateMode.NO_ROTATING
     if random.uniform(0, 100) < bomb_probability_as_percents:
         center_square: Square = BombSquare()
         relative_coords = [(-1, 0), (0, 0), (0, -1), (-1, -1)]
+        rotate_mode = _RotateMode.NO_ROTATING
     elif random.uniform(0, 100) < drill_probability_as_percents:
         center_square = DrillSquare()
         relative_coords = [(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)]
+        rotate_mode = _RotateMode.NO_ROTATING
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
         center_square = NormalSquare(shape_letter)
         relative_coords = BLOCK_SHAPES[shape_letter].copy()
         if random.uniform(0, 100) < extra_square_probability_as_percents:
-            add_extra_square(relative_coords)
+            _add_extra_square(relative_coords)
+        rotate_mode = _choose_rotate_mode(set(relative_coords))
 
     result = set()
 
@@ -209,6 +229,7 @@ def create_moving_squares(score: int) -> set[Square]:
         square.offset_y = -y
         square.original_offset_x = -x
         square.original_offset_y = -y
+        square.rotate_mode = rotate_mode
         if isinstance(square, DrillSquare):
             square.picture_x = 1 + x
             square.picture_y = DRILL_HEIGHT - 1 + y
