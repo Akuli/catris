@@ -164,17 +164,6 @@ class DrillSquare(Square):
         return result
 
 
-def _add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
-    while True:
-        x, y = random.choice(relative_coords)
-        offset_x, offset_y = random.choice([(-1, 0), (1, 0), (0, -1), (0, 1)])
-        x += offset_x
-        y += offset_y
-        if (x, y) not in relative_coords:
-            relative_coords.append((x, y))
-            return
-
-
 def _shapes_match_but_maybe_not_locations(a: set[tuple[int, int]], b: set[tuple[int, int]]):
     offset_x = min(x for x, y in b) - min(x for x, y in a)
     offset_y = min(y for x, y in b) - min(y for x, y in a)
@@ -190,6 +179,25 @@ def _choose_rotate_mode(not_rotated: set[tuple[int, int]]) -> None:
     if _shapes_match_but_maybe_not_locations(not_rotated, rotated_twice):
         return _RotateMode.ROTATE_90DEG_AND_BACK
     return _RotateMode.FULL_ROTATING
+
+
+def _add_extra_square(relative_coords: list[tuple[int, int]]) -> None:
+    while True:
+        x, y = random.choice(relative_coords)
+        offset_x, offset_y = random.choice([(-1, 0), (1, 0), (0, -1), (0, 1)])
+        x += offset_x
+        y += offset_y
+        if (x, y) not in relative_coords:
+            relative_coords.append((x, y))
+            return
+
+
+# Once extra square has been added, blocks can rotate wildly.
+# This function adjusts the center of rotation to be in the center of mass.
+def _fix_rotation_center(relative_coords: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    com_x = round(sum(x for x, y in relative_coords) / len(relative_coords))
+    com_y = round(sum(y for x, y in relative_coords) / len(relative_coords))
+    return [(x - com_x, y - com_y) for x, y in relative_coords]
 
 
 def create_moving_squares(score: int) -> set[Square]:
@@ -215,6 +223,7 @@ def create_moving_squares(score: int) -> set[Square]:
         relative_coords = BLOCK_SHAPES[shape_letter].copy()
         if random.uniform(0, 100) < extra_square_probability_as_percents:
             _add_extra_square(relative_coords)
+            relative_coords = _fix_rotation_center(relative_coords)
         rotate_mode = _choose_rotate_mode(set(relative_coords))
 
     result = set()
