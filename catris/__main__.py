@@ -23,7 +23,7 @@ async def main() -> None:
     )
 
     # Send TCP keepalive packets periodically as configured in /etc/sysctl.conf
-    # Prevents things from disconnecting by itself.
+    # Prevents clients from disconnecting after about 5 minutes of inactivity.
     for sock in asyncio_server.sockets:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 
