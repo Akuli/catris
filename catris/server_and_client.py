@@ -177,12 +177,12 @@ class Client:
         assert self._current_receive_task is None
         self._current_receive_task = asyncio.create_task(self._reader.read(100))
         try:
-            result = await asyncio.wait_for(self._current_receive_task, timeout=3 * 60)
+            result = await asyncio.wait_for(self._current_receive_task, timeout=10 * 60)
         except asyncio.TimeoutError:
-            self.log("Nothing received in 3min, disconnecting")
+            self.log("Nothing received in 10min, disconnecting")
             self._send_bytes(
                 SHOW_CURSOR
-                + b"Closing connection because it has been idle for 3 minutes.\r\n"
+                + b"Closing connection because it has been idle for 10 minutes.\r\n"
             )
             return None
         except asyncio.CancelledError:
