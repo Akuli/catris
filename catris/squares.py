@@ -15,7 +15,7 @@ class _RotateMode(Enum):
 
 
 class Square:
-    def __init__(self) -> None:
+    def __init__(self, rotate_mode: _RotateMode) -> None:
         self.x = 0
         self.y = 0
         # The offset is a vector from current position (x, y) to center of rotation
@@ -28,7 +28,7 @@ class Square:
         self.original_offset_x = 0
         self.original_offset_y = 0
         self.wrap_around_end = False  # for ring mode
-        self.rotate_mode = _RotateMode.NO_ROTATING
+        self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
 
     def _raw_rotate(self, counter_clockwise: bool) -> None:
@@ -42,15 +42,15 @@ class Square:
         self.y -= self.offset_y
 
     def rotate(self, counter_clockwise: bool) -> None:
-        if self.rotate_mode == _RotateMode.NO_ROTATING:
+        if self._rotate_mode == _RotateMode.NO_ROTATING:
             pass
-        elif self.rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
+        elif self._rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
             self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
             self._raw_rotate(counter_clockwise=self._next_rotate_goes_backwards)
-        elif self.rotate_mode == _RotateMode.FULL_ROTATING:
+        elif self._rotate_mode == _RotateMode.FULL_ROTATING:
             self._raw_rotate(counter_clockwise)
         else:
-            raise NotImplementedError(self.rotate_mode)
+            raise NotImplementedError(self._rotate_mode)
 
     @abstractmethod
     def get_text(self, landed: bool) -> bytes:
@@ -79,8 +79,8 @@ BLOCK_COLORS = {
 
 
 class NormalSquare(Square):
-    def __init__(self, shape_letter: str) -> None:
-        super().__init__()
+    def __init__(self, rotate_mode: _RotateMode, shape_letter: str) -> None:
+        super().__init__(rotate_mode)
         self.shape_letter = shape_letter
 
     def get_text(self, landed: bool) -> bytes:
@@ -89,7 +89,7 @@ class NormalSquare(Square):
 
 class BombSquare(Square):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(_RotateMode.NO_ROTATING)
         self.timer = 15
 
     def get_text(self, landed: bool) -> bytes:
@@ -101,7 +101,7 @@ class BombSquare(Square):
 
 class BottleSeparatorSquare(Square):
     def __init__(self, left_color: int, right_color: int) -> None:
-        super().__init__()
+        super().__init__(_RotateMode.NO_ROTATING)
         self._left_color = left_color
         self._right_color = right_color
 
@@ -147,7 +147,7 @@ DRILL_PICTURES = rb"""
 
 class DrillSquare(Square):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(_RotateMode.NO_ROTATING)
         self.picture_x = 0
         self.picture_y = 0
         self.picture_counter = 0
@@ -211,19 +211,16 @@ def create_moving_squares(score: int) -> set[Square]:
     if random.uniform(0, 100) < bomb_probability_as_percents:
         center_square: Square = BombSquare()
         relative_coords = {(-1, 0), (0, 0), (0, -1), (-1, -1)}
-        rotate_mode = _RotateMode.NO_ROTATING
     elif random.uniform(0, 100) < drill_probability_as_percents:
         center_square = DrillSquare()
         relative_coords = {(x, y) for x in (-1, 0) for y in range(1 - DRILL_HEIGHT, 1)}
-        rotate_mode = _RotateMode.NO_ROTATING
     else:
         shape_letter = random.choice(list(BLOCK_SHAPES.keys()))
-        center_square = NormalSquare(shape_letter)
         relative_coords = BLOCK_SHAPES[shape_letter].copy()
         if random.uniform(0, 100) < extra_square_probability_as_percents:
             _add_extra_square(relative_coords)
             relative_coords = _fix_rotation_center(relative_coords)
-        rotate_mode = _choose_rotate_mode(relative_coords)
+        center_square = NormalSquare(_choose_rotate_mode(relative_coords), shape_letter)
 
     result = set()
 
@@ -237,7 +234,6 @@ def create_moving_squares(score: int) -> set[Square]:
         square.offset_y = -y
         square.original_offset_x = -x
         square.original_offset_y = -y
-        square.rotate_mode = rotate_mode
         if isinstance(square, DrillSquare):
             square.picture_x = 1 + x
             square.picture_y = DRILL_HEIGHT - 1 + y
