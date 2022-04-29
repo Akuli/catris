@@ -5,7 +5,10 @@
 #    systemctl status catris
 #    journalctl -fu catris
 #
-# Logs should go to /var/log/syslog
+# Also add to end of /etc/sysctl.conf:
+#
+#    net.ipv4.tcp_keepalive_time = 180
+#    net.ipv4.tcp_keepalive_intvl = 180
 
 [Unit]
 Description=catris
