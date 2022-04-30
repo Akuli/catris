@@ -40,6 +40,7 @@ class Square:
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
 
+    # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
         self.x = self.original_x
         self.y = self.original_y
