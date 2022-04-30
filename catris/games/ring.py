@@ -330,7 +330,7 @@ class RingGame(Game):
             players_by_letter[letter] = player
 
         middle_area_content = self._get_middle_area_content(players_by_letter)
-        square_texts = self.get_square_texts()
+        square_texts = self.get_square_texts(rendering_for_this_player)
 
         for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
             insert_middle_area_here = None
