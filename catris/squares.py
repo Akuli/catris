@@ -81,6 +81,7 @@ class Square:
         else:
             raise NotImplementedError(self._rotate_mode)
 
+    # player is None when the block is not yet in world coordinates
     @abstractmethod
     def get_text(self, player: Player | None, landed: bool) -> bytes:
         raise NotImplementedError
