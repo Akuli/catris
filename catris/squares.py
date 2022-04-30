@@ -231,33 +231,39 @@ class DrillSquare(Square):
         self.picture_counter = 0
 
     def get_text(self, player: Player | None, landed: bool) -> bytes:
-        if player is not None:
-            assert self._in_world_coordinates
-            moving_dir = player.world_to_player(self.moving_dir_x, self.moving_dir_y)
-        else:
-            assert not self._in_world_coordinates
-            moving_dir = 0, 1
+        dir_x = self.moving_dir_x
+        dir_y = self.moving_dir_y
+        if self._in_world_coordinates:
+            assert player is not None
+            dir_x, dir_y = player.world_to_player(dir_x, dir_y)
 
-        x, y = self.original_x, self.original_y
-        # TODO: replace this bubble gum with something that isn't based on guesses
-        if moving_dir == (0, -1):
-            pictures_string = DRILL_PICTURES_UP
-            x, y = -x, -y
-        elif moving_dir == (0, 1):
-            pictures_string = DRILL_PICTURES_DOWN
-            x, y = x + 1, y + 4
-        elif moving_dir == (-1, 0):
-            pictures_string = DRILL_PICTURES_LEFT
-            x, y = -y, x + 1
-        elif moving_dir == (1, 0):
-            pictures_string = DRILL_PICTURES_RIGHT
-            x, y = y + 4, -x
+        def rotate(x: int, y: int) -> tuple[int, int]:
+            return (dir_y * x + dir_x * y, -dir_x * x + dir_y * y)
 
-        picture_list = pictures_string.strip(b"\n").split(b"\n\n")
+        x, y = rotate(self.original_x, self.original_y)
+        corners = {
+            rotate(-1, 0),
+            rotate(-1, 1 - DRILL_HEIGHT),
+            rotate(0, 0),
+            rotate(0, 1 - DRILL_HEIGHT),
+        }
+        relative_x = x - min(x for x, y in corners)
+        relative_y = y - min(y for x, y in corners)
+
+        picture_list = (
+            {
+                (0, -1): DRILL_PICTURES_UP,
+                (0, 1): DRILL_PICTURES_DOWN,
+                (-1, 0): DRILL_PICTURES_LEFT,
+                (1, 0): DRILL_PICTURES_RIGHT,
+            }[dir_x, dir_y]
+            .strip(b"\n")
+            .split(b"\n\n")
+        )
         picture = picture_list[self.picture_counter % len(picture_list)]
-        assert 0 <= x < DRILL_HEIGHT
-        assert 0 <= y < DRILL_HEIGHT
-        result = picture.splitlines()[y].ljust(100)[2 * x : 2 * x + 2]
+        result = picture.splitlines()[relative_y].ljust(100)[
+            2 * relative_x : 2 * (relative_x + 1)
+        ]
         if landed:
             return (COLOR % 100) + result + (COLOR % 0)
         return result
