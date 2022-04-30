@@ -151,84 +151,96 @@ class BottleSeparatorSquare(Square):
 
 
 DRILL_HEIGHT = 5
-DRILL_PICTURES_UP = rb"""
-
- /\
-|. |
-| /|
-|/ |
-| .|
-
- /\
-| .|
-|. |
-| /|
-|/ |
-
- /\
-|/ |
-| .|
-|. |
-| /|
-
- /\
-| /|
-|/ |
-| .|
-|. |
-
-"""
-DRILL_PICTURES_DOWN = rb"""
-
-| /|
-|/ |
-| .|
-|. |
- \/
-
-|/ |
-| .|
-|. |
-| /|
- \/
-
-| .|
-|. |
-| /|
-|/ |
- \/
-
-|. |
-| /|
-|/ |
-| .|
- \/
-
-"""
-DRILL_PICTURES_LEFT = rb"""
-
- .--------
-'._\__\__\
-
- .--------
-'.__\__\__
-
- .--------
-'.\__\__\_
-
-"""
-DRILL_PICTURES_RIGHT = rb"""
-
---------.
-_/__/__/.'
-
---------.
-/__/__/_.'
-
---------.
-__/__/__.'
-
-"""
+DRILL_PICTURES = {
+    (0, -1): [
+        [
+            rb" /\ ",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+        ],
+        [
+            rb" /\ ",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+        ],
+        [
+            rb" /\ ",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+        ],
+        [
+            rb" /\ ",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+        ],
+    ],
+    (0, 1): [
+        [
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb" \/ ",
+        ],
+        [
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb" \/ ",
+        ],
+        [
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb" \/ ",
+        ],
+        [
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb" \/ ",
+        ],
+    ],
+    (-1, 0): [
+        [
+            rb" .--------",
+            rb"'._\__\__\ ".rstrip(),  # python's syntax is weird
+        ],
+        [
+            rb" .--------",
+            rb"'.__\__\__",
+        ],
+        [
+            rb" .--------",
+            rb"'.\__\__\_",
+        ],
+    ],
+    (-1, 0): [
+        [
+            rb"--------. ",
+            rb"_/__/__/.'",
+        ],
+        [
+            rb"--------. ",
+            rb"/__/__/_.'",
+        ],
+        [
+            rb"--------. ",
+            rb"__/__/__.'",
+        ],
+    ],
+}
 
 
 class DrillSquare(Square):
@@ -257,20 +269,9 @@ class DrillSquare(Square):
         relative_x = x - min(x for x, y in corners)
         relative_y = y - min(y for x, y in corners)
 
-        picture_list = (
-            {
-                (0, -1): DRILL_PICTURES_UP,
-                (0, 1): DRILL_PICTURES_DOWN,
-                (-1, 0): DRILL_PICTURES_LEFT,
-                (1, 0): DRILL_PICTURES_RIGHT,
-            }[dir_x, dir_y]
-            .strip(b"\n")
-            .split(b"\n\n")
-        )
+        picture_list = DRILL_PICTURES[dir_x, dir_y]
         picture = picture_list[self.picture_counter % len(picture_list)]
-        result = picture.splitlines()[relative_y].ljust(100)[
-            2 * relative_x : 2 * (relative_x + 1)
-        ]
+        result = picture.splitlines()[relative_y][2 * relative_x : 2 * (relative_x + 1)]
         if landed:
             return (COLOR % 100) + result + (COLOR % 0)
         return result
