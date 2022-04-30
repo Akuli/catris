@@ -243,6 +243,7 @@ class DrillSquare(Square):
             dir_x, dir_y = player.world_to_player(dir_x, dir_y)
 
         def rotate(x: int, y: int) -> tuple[int, int]:
+            # Trial and error was used to figure out some of this
             return (dir_y * x + dir_x * y, -dir_x * x + dir_y * y)
 
         x, y = rotate(self.original_x, self.original_y)
