@@ -252,7 +252,10 @@ class Game:
             for square in player.moving_block_or_wait_counter.squares:
                 square.rotate(counter_clockwise)
                 self.fix_moving_square(player, square)
-            if not self.is_valid():
+
+            if self.is_valid():
+                self.need_render_event.set()
+            else:
                 for square in player.moving_block_or_wait_counter.squares:
                     square.rotate(not counter_clockwise)
                     self.fix_moving_square(player, square)
