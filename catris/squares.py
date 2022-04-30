@@ -42,7 +42,7 @@ class Square:
 
     # Squares are initially in relative coordinates: up = (0,1), rotation center = (0,0)
     # This way they don't need updating if spawn location or player's orientation changes.
-    # When squares are added to the game, we switch to the game's coordinates.
+    # When squares are added to the game, they switch to the game's coordinates.
     # This way we don't need lots of conversions in game logic.
     def switch_to_world_coordinates(self, player: Player) -> None:
         assert not self._in_world_coordinates
