@@ -246,7 +246,10 @@ class Game:
             for square in player.moving_block_or_wait_counter.squares:
                 square.rotate(counter_clockwise)
                 self.fix_moving_square(player, square)
-            if not self.is_valid():
+
+            if self.is_valid():
+                self.need_render_event.set()
+            else:
                 for square in player.moving_block_or_wait_counter.squares:
                     square.rotate(not counter_clockwise)
                     self.fix_moving_square(player, square)
@@ -285,9 +288,11 @@ class Game:
         )
 
     # Where will the block move if user presses down arrow key?
-    def _predict_landing_places(
-        self, player: Player, block: MovingBlock
-    ) -> set[tuple[int, int]]:
+    def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
+            return set()
+
         # Drill squares land differently and I don't want to duplicate their
         # landing logic here
         if any(isinstance(square, DrillSquare) for square in block.squares):
@@ -314,23 +319,20 @@ class Game:
         finally:
             block.squares = old_squares
 
-    def get_square_texts(
-        self, rendering_for_this_player: Player
-    ) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
-        for player, block in self._get_moving_blocks().items():
-            for point in self._predict_landing_places(player, block):
-                result[point] = b"::"
+        for point in self._predict_landing_places(player):
+            result[point] = b"::"
         for player, block in self._get_moving_blocks().items():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(
-                    rendering_for_this_player, landed=False
+                    player, landed=False
                 )
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(
-                rendering_for_this_player, landed=True
+                player, landed=True
             )
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
