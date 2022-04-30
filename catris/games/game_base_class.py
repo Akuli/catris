@@ -314,7 +314,9 @@ class Game:
         finally:
             block.squares = old_squares
 
-    def get_square_texts(self, rendering_for_this_player: Player) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(
+        self, rendering_for_this_player: Player
+    ) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
@@ -323,9 +325,13 @@ class Game:
                 result[point] = b"::"
         for player, block in self._get_moving_blocks().items():
             for square in block.squares:
-                result[square.x, square.y] = square.get_text(rendering_for_this_player, landed=False)
+                result[square.x, square.y] = square.get_text(
+                    rendering_for_this_player, landed=False
+                )
         for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(rendering_for_this_player, landed=True)
+            result[square.x, square.y] = square.get_text(
+                rendering_for_this_player, landed=True
+            )
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 

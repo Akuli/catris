@@ -7,6 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from catris.ansi import COLOR
+
 if TYPE_CHECKING:
     from catris.player import Player
 
@@ -51,8 +52,12 @@ class Square:
     def switch_to_world_coordinates(self, player: Player) -> None:
         assert not self._in_world_coordinates
         self.x, self.y = player.player_to_world(self.x, self.y)
-        self.offset_x, self.offset_y = player.player_to_world(self.offset_x, self.offset_y)
-        self.moving_dir_x, self.moving_dir_y = player.player_to_world(self.moving_dir_x, self.moving_dir_y)
+        self.offset_x, self.offset_y = player.player_to_world(
+            self.offset_x, self.offset_y
+        )
+        self.moving_dir_x, self.moving_dir_y = player.player_to_world(
+            self.moving_dir_x, self.moving_dir_y
+        )
         self._in_world_coordinates = True
 
     def _raw_rotate(self, counter_clockwise: bool) -> None:
@@ -240,19 +245,19 @@ class DrillSquare(Square):
             x, y = -x, -y
         elif moving_dir == (0, 1):
             pictures_string = DRILL_PICTURES_DOWN
-            x, y = x+1, y+4
+            x, y = x + 1, y + 4
         elif moving_dir == (-1, 0):
             pictures_string = DRILL_PICTURES_LEFT
-            x, y = -y, x+1
+            x, y = -y, x + 1
         elif moving_dir == (1, 0):
             pictures_string = DRILL_PICTURES_RIGHT
-            x, y = y+4, -x
+            x, y = y + 4, -x
 
         picture_list = pictures_string.strip(b"\n").split(b"\n\n")
         picture = picture_list[self.picture_counter % len(picture_list)]
         assert 0 <= x < DRILL_HEIGHT
         assert 0 <= y < DRILL_HEIGHT
-        result = picture.splitlines()[y].ljust(100)[2*x:2*x+2]
+        result = picture.splitlines()[y].ljust(100)[2 * x : 2 * x + 2]
         if landed:
             return (COLOR % 100) + result + (COLOR % 0)
         return result
