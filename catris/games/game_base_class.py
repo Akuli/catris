@@ -328,7 +328,9 @@ class Game:
 
         result = {}
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            for point in self._predict_landing_places(player, player.moving_block_or_wait_counter):
+            for point in self._predict_landing_places(
+                player, player.moving_block_or_wait_counter
+            ):
                 result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
