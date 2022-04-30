@@ -40,16 +40,6 @@ class Square:
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
 
-    # Undoes the switch to world coordinates. Useful for the "hold" feature.
-    def restore_original_coordinates(self) -> None:
-        self.x = self.original_x
-        self.y = self.original_y
-        self.offset_x = self.original_offset_x
-        self.offset_y = self.original_offset_y
-        self.moving_dir_x = 0
-        self.moving_dir_y = 1
-        self._in_world_coordinates = False
-
     # Squares are initially in relative coordinates: up = (0,1), rotation center = (0,0)
     # This way they don't need updating if spawn location or player's orientation changes.
     # When squares are added to the game, we switch to the game's coordinates.
@@ -64,6 +54,16 @@ class Square:
             self.moving_dir_x, self.moving_dir_y
         )
         self._in_world_coordinates = True
+
+    # Undoes the switch to world coordinates. Useful for the "hold" feature.
+    def restore_original_coordinates(self) -> None:
+        self.x = self.original_x
+        self.y = self.original_y
+        self.offset_x = self.original_offset_x
+        self.offset_y = self.original_offset_y
+        self.moving_dir_x = 0
+        self.moving_dir_y = 1
+        self._in_world_coordinates = False
 
     def _raw_rotate(self, counter_clockwise: bool) -> None:
         self.x += self.offset_x
