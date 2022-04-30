@@ -271,7 +271,7 @@ class DrillSquare(Square):
 
         picture_list = DRILL_PICTURES[dir_x, dir_y]
         picture = picture_list[self.picture_counter % len(picture_list)]
-        result = picture.splitlines()[relative_y][2 * relative_x : 2 * (relative_x + 1)]
+        result = picture[relative_y][2 * relative_x : 2 * (relative_x + 1)]
         if landed:
             return (COLOR % 100) + result + (COLOR % 0)
         return result
