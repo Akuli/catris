@@ -294,9 +294,7 @@ class Game:
         )
 
     # Where will the block move if user presses down arrow key?
-    def _predict_landing_places(
-        self, player: Player
-    ) -> set[tuple[int, int]]:
+    def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
         block = player.moving_block_or_wait_counter
         if not isinstance(block, MovingBlock):
             return set()
