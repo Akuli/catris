@@ -320,12 +320,12 @@ class Game:
         finally:
             block.squares = old_squares
 
-    def get_square_texts(self) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
-        for player, block in self._get_moving_blocks().items():
-            for point in self._predict_landing_places(player, block):
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            for point in self._predict_landing_places(player, player.moving_block_or_wait_counter):
                 result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
