@@ -294,6 +294,11 @@ class Game:
     def _predict_landing_places(
         self, player: Player, block: MovingBlock
     ) -> set[tuple[int, int]]:
+        # Drill squares land differently and I don't want to duplicate their
+        # landing logic here
+        if any(isinstance(square, DrillSquare) for square in block.squares):
+            return set()
+
         # Temporarily changing squares feels a bit hacky, but it's simple and it works
         old_squares = block.squares
         block.squares = {copy.copy(square) for square in block.squares}
