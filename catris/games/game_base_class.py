@@ -295,8 +295,12 @@ class Game:
 
     # Where will the block move if user presses down arrow key?
     def _predict_landing_places(
-        self, player: Player, block: MovingBlock
+        self, player: Player
     ) -> set[tuple[int, int]]:
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
+            return set()
+
         # Drill squares land differently and I don't want to duplicate their
         # landing logic here
         if any(isinstance(square, DrillSquare) for square in block.squares):
@@ -327,11 +331,8 @@ class Game:
         assert self.is_valid()
 
         result = {}
-        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            for point in self._predict_landing_places(
-                player, player.moving_block_or_wait_counter
-            ):
-                result[point] = b"::"
+        for point in self._predict_landing_places(player):
+            result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(landed=False)
