@@ -138,7 +138,7 @@ class BottleGame(Game):
         return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
-        square_texts = self.get_square_texts()
+        square_texts = self.get_square_texts(rendering_for_this_player)
 
         result = []
         for y, bottle_row in enumerate(self.BOTTLE):

@@ -145,7 +145,7 @@ class TraditionalGame(Game):
         header_line += b"o"
 
         lines = [name_line, header_line]
-        square_texts = self.get_square_texts()
+        square_texts = self.get_square_texts(rendering_for_this_player)
 
         for y in range(self.HEIGHT):
             line = b"|"
