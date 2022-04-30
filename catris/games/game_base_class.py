@@ -327,13 +327,9 @@ class Game:
             result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
-                result[square.x, square.y] = square.get_text(
-                    player, landed=False
-                )
+                result[square.x, square.y] = square.get_text(player, landed=False)
         for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(
-                player, landed=True
-            )
+            result[square.x, square.y] = square.get_text(player, landed=True)
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
