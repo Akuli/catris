@@ -461,7 +461,7 @@ def get_block_preview(squares: set[Square]) -> list[bytes]:
 
     result = [[b"  "] * width for y in range(height)]
     for square in squares:
-        result[square.y - min_y][square.x - min_x] = square.get_text(None, landed=False)
+        result[square.y - min_y][square.x - min_x] = square.get_text(player=None, landed=False)
     return [b"".join(row) for row in result]
 
 

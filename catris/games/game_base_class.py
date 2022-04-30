@@ -325,7 +325,7 @@ class Game:
         result = {}
         for point in self._predict_landing_places(player):
             result[point] = b"::"
-        for player, block in self._get_moving_blocks().items():
+        for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(
                     player, landed=False
