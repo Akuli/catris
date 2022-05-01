@@ -132,8 +132,6 @@ class Game:
         # coordinates change.
         for square in squares:
             square.switch_to_world_coordinates(player)
-            square.x += player.moving_block_start_x
-            square.y += player.moving_block_start_y
 
         player.moving_block_or_wait_counter = MovingBlock(
             squares, came_from_hold=from_hold

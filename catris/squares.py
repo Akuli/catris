@@ -47,6 +47,8 @@ class Square:
     def switch_to_world_coordinates(self, player: Player) -> None:
         assert not self._in_world_coordinates
         self.x, self.y = player.player_to_world(self.x, self.y)
+        self.x += player.moving_block_start_x
+        self.y += player.moving_block_start_y
         self.offset_x, self.offset_y = player.player_to_world(
             self.offset_x, self.offset_y
         )
