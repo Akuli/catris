@@ -4,8 +4,12 @@ import copy
 import random
 from abc import abstractmethod
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from catris.ansi import COLOR
+
+if TYPE_CHECKING:
+    from catris.player import Player
 
 
 class _RotateMode(Enum):
@@ -21,15 +25,47 @@ class Square:
         # The offset is a vector from current position (x, y) to center of rotation
         self.offset_x = 0
         self.offset_y = 0
+        # Moving direction is used to display drill squares correctly for all players
+        self.moving_dir_x = 0
+        self.moving_dir_y = 1
         # These don't change as the square moves down and lands.
         # Used in the hold feature, where an already moving block has to be respawned
         self.original_x = 0
         self.original_y = 0
         self.original_offset_x = 0
         self.original_offset_y = 0
+        self._in_world_coordinates = False
+
         self.wrap_around_end = False  # for ring mode
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
+
+    # Squares are initially in relative coordinates: up = (0,1), rotation center = (0,0)
+    # This way they don't need updating if spawn location or player's orientation changes.
+    # When squares are added to the game, they switch to the game's coordinates.
+    # This way we don't need lots of conversions in game logic.
+    def switch_to_world_coordinates(self, player: Player) -> None:
+        assert not self._in_world_coordinates
+        self.x, self.y = player.player_to_world(self.x, self.y)
+        self.x += player.moving_block_start_x
+        self.y += player.moving_block_start_y
+        self.offset_x, self.offset_y = player.player_to_world(
+            self.offset_x, self.offset_y
+        )
+        self.moving_dir_x, self.moving_dir_y = player.player_to_world(
+            self.moving_dir_x, self.moving_dir_y
+        )
+        self._in_world_coordinates = True
+
+    # Undoes the switch to world coordinates. Useful for the "hold" feature.
+    def restore_original_coordinates(self) -> None:
+        self.x = self.original_x
+        self.y = self.original_y
+        self.offset_x = self.original_offset_x
+        self.offset_y = self.original_offset_y
+        self.moving_dir_x = 0
+        self.moving_dir_y = 1
+        self._in_world_coordinates = False
 
     def _raw_rotate(self, counter_clockwise: bool) -> None:
         self.x += self.offset_x
@@ -52,8 +88,9 @@ class Square:
         else:
             raise NotImplementedError(self._rotate_mode)
 
+    # player is None when the block is not yet in world coordinates
     @abstractmethod
-    def get_text(self, landed: bool) -> bytes:
+    def get_text(self, player: Player | None, landed: bool) -> bytes:
         raise NotImplementedError
 
 
@@ -83,7 +120,7 @@ class NormalSquare(Square):
         super().__init__(rotate_mode)
         self.shape_letter = shape_letter
 
-    def get_text(self, landed: bool) -> bytes:
+    def get_text(self, player: Player | None, landed: bool) -> bytes:
         return (COLOR % BLOCK_COLORS[self.shape_letter]) + b"  " + (COLOR % 0)
 
 
@@ -92,7 +129,7 @@ class BombSquare(Square):
         super().__init__(_RotateMode.NO_ROTATING)
         self.timer = 15
 
-    def get_text(self, landed: bool) -> bytes:
+    def get_text(self, player: Player | None, landed: bool) -> bytes:
         # red middle text when bomb about to explode
         color = 31 if self.timer <= 3 else 33
         text = str(self.timer).center(2).encode("ascii")
@@ -105,7 +142,7 @@ class BottleSeparatorSquare(Square):
         self._left_color = left_color
         self._right_color = right_color
 
-    def get_text(self, landed: bool) -> bytes:
+    def get_text(self, player: Player | None, landed: bool) -> bytes:
         return (
             (COLOR % self._left_color)
             + b"|"
@@ -116,49 +153,127 @@ class BottleSeparatorSquare(Square):
 
 
 DRILL_HEIGHT = 5
-DRILL_PICTURES = rb"""
-
-| /|
-|/ |
-| .|
-|. |
- \/
-
-|/ |
-| .|
-|. |
-| /|
- \/
-
-| .|
-|. |
-| /|
-|/ |
- \/
-
-|. |
-| /|
-|/ |
-| .|
- \/
-
-"""
+DRILL_PICTURES = {
+    (0, -1): [
+        [
+            rb" /\ ",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+        ],
+        [
+            rb" /\ ",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+        ],
+        [
+            rb" /\ ",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+        ],
+        [
+            rb" /\ ",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+        ],
+    ],
+    (0, 1): [
+        [
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb" \/ ",
+        ],
+        [
+            rb"|/ |",
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb" \/ ",
+        ],
+        [
+            rb"| .|",
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb" \/ ",
+        ],
+        [
+            rb"|. |",
+            rb"| /|",
+            rb"|/ |",
+            rb"| .|",
+            rb" \/ ",
+        ],
+    ],
+    (-1, 0): [
+        [
+            rb" .--------",
+            rb"'._\__\__\ ".rstrip(),  # python's syntax is weird
+        ],
+        [
+            rb" .--------",
+            rb"'.__\__\__",
+        ],
+        [
+            rb" .--------",
+            rb"'.\__\__\_",
+        ],
+    ],
+    (1, 0): [
+        [
+            rb"--------. ",
+            rb"_/__/__/.'",
+        ],
+        [
+            rb"--------. ",
+            rb"/__/__/_.'",
+        ],
+        [
+            rb"--------. ",
+            rb"__/__/__.'",
+        ],
+    ],
+}
 
 
 class DrillSquare(Square):
     def __init__(self) -> None:
         super().__init__(_RotateMode.NO_ROTATING)
-        self.picture_x = 0
-        self.picture_y = 0
         self.picture_counter = 0
 
-    def get_text(self, landed: bool) -> bytes:
-        picture_list = DRILL_PICTURES.strip().split(b"\n\n")
-        picture = picture_list[self.picture_counter % len(picture_list)]
-        start = 2 * self.picture_x
-        end = 2 * (self.picture_x + 1)
+    def get_text(self, player: Player | None, landed: bool) -> bytes:
+        dir_x = self.moving_dir_x
+        dir_y = self.moving_dir_y
+        if self._in_world_coordinates:
+            assert player is not None
+            dir_x, dir_y = player.world_to_player(dir_x, dir_y)
 
-        result = picture.splitlines()[self.picture_y].ljust(4)[start:end]
+        def rotate(x: int, y: int) -> tuple[int, int]:
+            # Trial and error was used to figure out some of this
+            return (dir_y * x + dir_x * y, -dir_x * x + dir_y * y)
+
+        x, y = rotate(self.original_x, self.original_y)
+        corners = {
+            rotate(-1, 0),
+            rotate(-1, 1 - DRILL_HEIGHT),
+            rotate(0, 0),
+            rotate(0, 1 - DRILL_HEIGHT),
+        }
+        relative_x = x - min(x for x, y in corners)
+        relative_y = y - min(y for x, y in corners)
+
+        picture_list = DRILL_PICTURES[dir_x, dir_y]
+        picture = picture_list[self.picture_counter % len(picture_list)]
+        result = picture[relative_y][2 * relative_x : 2 * (relative_x + 1)]
         if landed:
             return (COLOR % 100) + result + (COLOR % 0)
         return result
@@ -234,9 +349,6 @@ def create_moving_squares(score: int) -> set[Square]:
         square.offset_y = -y
         square.original_offset_x = -x
         square.original_offset_y = -y
-        if isinstance(square, DrillSquare):
-            square.picture_x = 1 + x
-            square.picture_y = DRILL_HEIGHT - 1 + y
         result.add(square)
 
     return result

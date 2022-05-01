@@ -1,5 +1,2 @@
-[tool.black]
-skip-magic-trailing-comma = true
-
 [tool.isort]
 profile = "black"

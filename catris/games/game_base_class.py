@@ -124,19 +124,8 @@ class Game:
             squares = player.next_moving_squares
             player.next_moving_squares = create_moving_squares(self.score)
 
-        # Convert to world coordinates. Rotations are needed to give the user
-        # exactly what the next block display promises and to avoid subtle bugs.
-        #
-        # It's good to do this as late as possible, so that next_moving_squares
-        # don't have to be updated if e.g. the player's view or spawning
-        # coordinates change.
         for square in squares:
-            square.offset_x, square.offset_y = player.player_to_world(
-                square.offset_x, square.offset_y
-            )
-            square.x, square.y = player.player_to_world(square.x, square.y)
-            square.x += player.moving_block_start_x
-            square.y += player.moving_block_start_y
+            square.switch_to_world_coordinates(player)
 
         player.moving_block_or_wait_counter = MovingBlock(
             squares, came_from_hold=from_hold
@@ -157,10 +146,7 @@ class Game:
         to_hold = player.moving_block_or_wait_counter.squares
         self.new_block(player, from_hold=(player.held_squares is not None))
         for square in to_hold:
-            square.x = square.original_x
-            square.y = square.original_y
-            square.offset_x = square.original_offset_x
-            square.offset_y = square.original_offset_y
+            square.restore_original_coordinates()
         player.held_squares = to_hold
 
     # For clearing squares when a player's wait time ends
@@ -333,9 +319,9 @@ class Game:
             result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
-                result[square.x, square.y] = square.get_text(landed=False)
+                result[square.x, square.y] = square.get_text(player, landed=False)
         for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(landed=True)
+            result[square.x, square.y] = square.get_text(player, landed=True)
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
