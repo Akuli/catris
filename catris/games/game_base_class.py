@@ -124,12 +124,6 @@ class Game:
             squares = player.next_moving_squares
             player.next_moving_squares = create_moving_squares(self.score)
 
-        # Convert to world coordinates. Rotations are needed to give the user
-        # exactly what the next block display promises and to avoid subtle bugs.
-        #
-        # It's good to do this as late as possible, so that next_moving_squares
-        # don't have to be updated if e.g. the player's view or spawning
-        # coordinates change.
         for square in squares:
             square.switch_to_world_coordinates(player)
 
