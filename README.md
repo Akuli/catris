@@ -19,9 +19,10 @@ On the download page, choose the 64-bit x86 putty.exe under "Alternative binary 
 
 Open putty.exe from your downloads, and fill in these settings:
 - Session: Host Name `172.104.132.97`, Port `12345`, Connection Type "Raw"
-- Terminal: Local echo "Force off", Local line editing "Force off"
 
 ![Settings of Session tab](putty1.png)
+
+- Terminal: Local echo "Force off", Local line editing "Force off"
 
 ![Settings of Terminal tab](putty2.png)
 
