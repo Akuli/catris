@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
       this._div = document.getElementById("terminal");
 
       this._rows = [];
-      for (let y = 0; y < 25; y++) {
+      for (let y = 0; y < 33; y++) {
         const row = [];
         for (let x = 0; x < 80; x++) {
           const span = document.createElement("span");
@@ -30,6 +30,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return this._div.querySelector(".cursor");
     }
 
+    getCursorY() {
+      const cursor = this._getCursorSpan();
+      return this._rows.findIndex(row => row.includes(cursor));
+    }
+
+    getCursorX() {
+      return this._rows[this.getCursorY()].indexOf(this._getCursorSpan());
+    }
+
     moveCursor(x, y) {
       this._getCursorSpan().classList.remove("cursor");
       this._rows[y][x].classList.add("cursor");
@@ -49,7 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     hideCursor() {
-      this._div.classList.add("cursor-is-showing");
+      this._div.classList.remove("cursor-is-showing");
     }
 
     clearFromCursorToEndOfScreen() {
@@ -58,32 +67,28 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    _getSpansFromCursorToEndOfLine() {
-      const cursor = this._getCursorSpan();
-      for (const row of this._rows) {
-        const i = row.indexOf(cursor);
-        if (i !== -1) {
-          return row.slice(i);
-        }
-      }
-      throw new Error("wut");
-    }
-
     clearFromCursorToEndOfLine() {
-      for (const span of this._getSpansFromCursorToEndOfLine()) {
+      for (const span of this._rows[this.getCursorY()].slice(this.getCursorX())) {
         span.innerHTML = "&nbsp;";
       }
     }
 
     addText(text) {
-      const spans = this._getSpansFromCursorToEndOfLine();
-      for (let i = 0; i < spans.length && i < text.length; i++) {
+      const x = this.getCursorX();
+      const spans = this._rows[this.getCursorY()].slice(x, x + text.length);
+      if (spans.length === 0) {
+        return;
+      }
+
+      for (let i = 0; i < spans.length; i++) {
         if (text[i] === " "){
           spans[i].innerHTML = "&nbsp;";
         } else {
           spans[i].textContent = text[i];
         }
       }
+      this._getCursorSpan().classList.remove("cursor");
+      spans[spans.length - 1].nextElementSibling.classList.add("cursor");
     }
 
     addTextWithEscapeSequences(text) {
@@ -93,10 +98,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const specialCharMatch = /\x1b|\r|\n/.exec(this._inputBuffer);
         if (specialCharMatch !== null && specialCharMatch.index === 0) {
           if (specialCharMatch[0] === '\r') {
-            console.log("Move cursor to start of line");
+            this.moveCursor(0, this.getCursorY());
             this._inputBuffer = this._inputBuffer.slice(1);
           } else if (specialCharMatch[0] === '\n') {
-            console.log("Move cursor down");
+            this.moveCursor(this.getCursorX(), this.getCursorY() + 1);
             this._inputBuffer = this._inputBuffer.slice(1);
           } else if (specialCharMatch[0] === '\x1b') {
             // Start of ANSI code
@@ -153,22 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
             normalText = this._inputBuffer.slice(0, specialCharMatch.index);
           }
           this._inputBuffer = this._inputBuffer.slice(normalText.length);
-
-          let cursor = this._getCursorSpan();
-          for (const character of normalText) {
-            if(character == " ") {
-              cursor.innerHTML = "&nbsp;";
-            } else {
-              cursor.textContent = character;
-            }
-
-            if(!cursor.nextElementSibling) {
-              break;
-            }
-            cursor = cursor.nextElementSibling;
-          }
-          this._getCursorSpan().classList.remove("cursor");
-          cursor.classList.add("cursor");
+          this.addText(normalText);
         }
       }
     }
