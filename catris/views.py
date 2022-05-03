@@ -361,9 +361,12 @@ class ChooseGameView(MenuView):
             return True
 
         if not self._should_show_cannot_join_error():
-            self._client.view = CheckTerminalSizeView(
-                self._client, GAME_CLASSES[self.selected_index]
-            )
+            game_class = GAME_CLASSES[self.selected_index]
+            if self._client.user_can_resize_terminal:
+                self._client.view = CheckTerminalSizeView(self._client, game_class)
+            else:
+                assert self._client.lobby is not None
+                self._client.lobby.start_game(self._client, game_class)
         return False
 
 

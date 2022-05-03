@@ -196,6 +196,9 @@ class Client:
         self.rotate_counter_clockwise = False
         self.lobby_id_hidden = False
 
+        # Web UI doesn't have any way to resize. It's always big enough.
+        self.user_can_resize_terminal = not isinstance(connection, _WebSocketConnection)
+
     def get_lobby_id_for_display(self) -> bytes:
         assert self.lobby is not None
         if self.lobby.lobby_id is None:
