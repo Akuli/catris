@@ -2,7 +2,8 @@
 <html>
   <head>
     <script>
-      const ws = new WebSocket('ws://localhost:54321');
+      asdf
+      const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
 
       document.onkeydown = event => {
         if (ws.readyState !== WebSocket.OPEN) {
@@ -45,7 +46,10 @@
           const blobs = receivedBlobs;
           receivedBlobs = [];
           const texts = await Promise.all(blobs.map(b => b.text()));
-          document.body.textContent += texts.join("");
+          
+          if (ws.readyState === WebSocket.OPEN) {
+            document.body.textContent += texts.join("");
+          }
         }
       }
 
@@ -58,15 +62,49 @@
       };
       ws.onerror = event => {
         console.log("WebSocket error: ", event);
-        document.body.innerHTML = "Connection to server lost.";
+        // no need to show anything to user, because onclose() will run too
       };
       ws.onclose = () => {
-        console.log("onclose callback runs");
-        document.body.innerHTML = "Connection to server lost.";
+        document.body.innerHTML = "Connection closed.";
       };
     </script>
+    <style>
+      body {
+        background-color: #333;
+        color: white;
+      }
+
+      .terminal {
+        color: white;
+        background-color: black;
+        font-family: monospace;
+        padding: 0.2em;
+        border-radius: 0.5em;
+        white-space: nowrap;
+      }
+
+      .cursor {
+        animation: blinking_cursor 1s step-start infinite;
+      }
+
+      /* https://stackoverflow.com/a/48320520 */
+      @keyframes blinking_cursor {
+        50% {
+          color: black;
+          background-color: white;
+        }
+      }
+    </style>
   </head>
   <body>
-    asdf
+    <div class="terminal">
+      akuli@akuli-desktop:~$&nbsp;ls<br>
+      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
+      akuli@akuli-desktop:~$&nbsp;ls<br>
+      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
+      akuli@akuli-desktop:~$&nbsp;ls<br>
+      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
+      akuli@akuli-desktop:~$&nbsp;<span class="cursor">&nbsp;</span>
+    </div>
   </body>
 </html>
