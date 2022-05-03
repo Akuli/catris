@@ -121,7 +121,7 @@ class _WebSocketConnection:
     #
     # A small close_timeout is set when creating the connection, so
     # this shouldn't create many simultaneously running tasks.
-    async def close(self) -> None:
+    def close(self) -> None:
         asyncio.create_task(self._ws.close())
 
     @property

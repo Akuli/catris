@@ -29,9 +29,7 @@ async def main() -> None:
     catris_server = Server(args.lobbies)
 
     tcp_server = await asyncio.start_server(
-        catris_server.handle_raw_tcp_connection,
-        port=12345,
-        close_timeout=0.1,  # See the code that closes connections for an explanation
+        catris_server.handle_raw_tcp_connection, port=12345
     )
 
     # Send TCP keepalive packets periodically as configured in /etc/sysctl.conf
@@ -49,8 +47,13 @@ async def main() -> None:
         async with tcp_server:
             await tcp_server.serve_forever()
     else:
+        # hide unnecessary INFO messages
+        logging.getLogger("websockets.server").setLevel(logging.WARNING)
+
         ws_server = websockets_serve(
-            catris_server.handle_websocket_connection, port=54321
+            catris_server.handle_websocket_connection,
+            port=54321,
+            close_timeout=0.1,  # See the code that closes connections for an explanation
         )
         logging.info("Listening for websocket connections on port 54321...")
         async with tcp_server, ws_server:
