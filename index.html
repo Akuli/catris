@@ -2,109 +2,280 @@
 <html>
   <head>
     <script>
-      asdf
-      const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
+document.addEventListener("DOMContentLoaded", () => {
+  const terminal = new class {
+    constructor() {
+      this._div = document.getElementById("terminal");
 
-      document.onkeydown = event => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          return;
+      this._rows = [];
+      for (let y = 0; y < 25; y++) {
+        const row = [];
+        for (let x = 0; x < 80; x++) {
+          const span = document.createElement("span");
+          span.innerHTML = "&nbsp";
+          span.style.gridRow = y+1;
+          span.style.gridColumn = x+1;
+          span.classList.add("grid-cell");
+          this._div.appendChild(span);
+          row.push(span);
         }
-
-        let textToSend;
-        if (event.key.length === 1) {
-          textToSend = event.key;
-        } else if (event.key === "ArrowUp") {
-          textToSend = "\x1b[A";
-        } else if (event.key === "ArrowDown") {
-          textToSend = "\x1b[B";
-        } else if (event.key === "ArrowRight") {
-          textToSend = "\x1b[C";
-        } else if (event.key === "ArrowLeft") {
-          textToSend = "\x1b[D";
-        } else if (event.key === "Backspace") {
-          textToSend = "\x7f";
-        } else if (event.key === "Enter") {
-          textToSend = "\r";
-        } else {
-          console.log(event.key);
-          return;
-        }
-
-        const utf8 = new TextEncoder().encode(textToSend);
-        ws.send(utf8);
-
-        event.preventDefault();
-      };
-
-      // For some reason, the .text() method on Blob is asynchronous.
-      // We need to make sure they run in the correct order, and not at the same time.
-      let receivedBlobs = [];
-      let blobTask = null;
-
-      async function handleBlobs() {
-        while (receivedBlobs.length !== 0) {
-          const blobs = receivedBlobs;
-          receivedBlobs = [];
-          const texts = await Promise.all(blobs.map(b => b.text()));
-          
-          if (ws.readyState === WebSocket.OPEN) {
-            document.body.textContent += texts.join("");
-          }
-        }
+        this._rows.push(row);
       }
 
-      ws.onmessage = (msg) => {
-        receivedBlobs.push(msg.data);
-        if (blobTask === null) {
-          blobTask = handleBlobs();
-          blobTask.then(() => blobTask=null);
+      this._inputBuffer = "";
+      this._rows[0][0].classList.add("cursor");
+    }
+
+    _getCursorSpan() {
+      return this._div.querySelector(".cursor");
+    }
+
+    moveCursor(x, y) {
+      this._getCursorSpan().classList.remove("cursor");
+      this._rows[y][x].classList.add("cursor");
+    }
+
+    clear() {
+      for (const row of this._rows) {
+        for (const span of row) {
+          span.innerHTML = "&nbsp";
         }
-      };
-      ws.onerror = event => {
-        console.log("WebSocket error: ", event);
-        // no need to show anything to user, because onclose() will run too
-      };
-      ws.onclose = () => {
-        document.body.innerHTML = "Connection closed.";
-      };
+      }
+      this.moveCursor(0, 0);
+    }
+
+    showCursor() {
+      this._div.classList.add("cursor-is-showing");
+    }
+
+    hideCursor() {
+      this._div.classList.add("cursor-is-showing");
+    }
+
+    clearFromCursorToEndOfScreen() {
+      for (let e = this._getCursorSpan(); e; e=e.nextElementSibling) {
+        e.innerHTML = "&nbsp;";
+      }
+    }
+
+    _getSpansFromCursorToEndOfLine() {
+      const cursor = this._getCursorSpan();
+      for (const row of this._rows) {
+        const i = row.indexOf(cursor);
+        if (i !== -1) {
+          return row.slice(i);
+        }
+      }
+      throw new Error("wut");
+    }
+
+    clearFromCursorToEndOfLine() {
+      for (const span of this._getSpansFromCursorToEndOfLine()) {
+        span.innerHTML = "&nbsp;";
+      }
+    }
+
+    addText(text) {
+      const spans = this._getSpansFromCursorToEndOfLine();
+      for (let i = 0; i < spans.length && i < text.length; i++) {
+        if (text[i] === " "){
+          spans[i].innerHTML = "&nbsp;";
+        } else {
+          spans[i].textContent = text[i];
+        }
+      }
+    }
+
+    addTextWithEscapeSequences(text) {
+      this._inputBuffer += text;
+
+      while (this._inputBuffer !== "") {
+        const specialCharMatch = /\x1b|\r|\n/.exec(this._inputBuffer);
+        if (specialCharMatch !== null && specialCharMatch.index === 0) {
+          if (specialCharMatch[0] === '\r') {
+            console.log("Move cursor to start of line");
+            this._inputBuffer = this._inputBuffer.slice(1);
+          } else if (specialCharMatch[0] === '\n') {
+            console.log("Move cursor down");
+            this._inputBuffer = this._inputBuffer.slice(1);
+          } else if (specialCharMatch[0] === '\x1b') {
+            // Start of ANSI code
+            if (this._inputBuffer.length < 2) {
+              break;  // need more data
+            }
+            if (this._inputBuffer.slice(0, 2) != "\x1b[") {
+              // server sent something weird, this is how every ansi sequence starts
+              this._inputBuffer = this._inputBuffer.slice(1);
+              continue;
+            }
+
+            const letterMatch = /[A-Za-z]/.exec(this._inputBuffer);
+            if (letterMatch === null) {
+              if (canBeIncompleteAnsiCode) {
+                break;  // need more data
+              } else {
+                // server sent invalid ansi sequences???
+                this._inputBuffer = this._inputBuffer.slice(1);
+                continue;
+              }
+            }
+            const letter = letterMatch[0];
+            const contents = this._inputBuffer.slice(2, letterMatch.index);
+            this._inputBuffer = this._inputBuffer.slice(letterMatch.index + 1);
+
+            if (letter === 'J' && contents === '2') {
+              this.clear();
+            } else if (letter === 'J' && contents === '0') {
+              this.clearFromCursorToEndOfScreen();
+            } else if (letter === 'K' && contents === '0') {
+              this.clearFromCursorToEndOfLine();
+            } else if (letter === 'h' && contents === '?25') {
+              this.showCursor();
+            } else if (letter === 'l' && contents === '?25') {
+              this.hideCursor();
+            } else if (letter === 'H') {
+              const [line, column] = contents.split(';').map(x => +x);
+              this.moveCursor(column-1, line-1);
+            } else if (letter === 'm' && contents.startsWith("1;")) {
+              console.log("Color", contents);
+            } else {
+              console.warn("Unknown ANSI escape sequence: " + contents + letter);
+            }
+          } else {
+            throw new Error("wut");
+          }
+        } else {
+          // Normal text, aka 1 or more non-special chars
+          let normalText;
+          if (specialCharMatch === null) {
+            normalText = this._inputBuffer;
+          } else {
+            normalText = this._inputBuffer.slice(0, specialCharMatch.index);
+          }
+          this._inputBuffer = this._inputBuffer.slice(normalText.length);
+
+          let cursor = this._getCursorSpan();
+          for (const character of normalText) {
+            if(character == " ") {
+              cursor.innerHTML = "&nbsp;";
+            } else {
+              cursor.textContent = character;
+            }
+
+            if(!cursor.nextElementSibling) {
+              break;
+            }
+            cursor = cursor.nextElementSibling;
+          }
+          this._getCursorSpan().classList.remove("cursor");
+          cursor.classList.add("cursor");
+        }
+      }
+    }
+  };
+
+  const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
+
+  document.onkeydown = event => {
+    if (event.ctrlKey || event.altKey || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    let textToSend;
+    if (event.key.length === 1) {
+      textToSend = event.key;
+    } else if (event.key === "ArrowUp") {
+      textToSend = "\x1b[A";
+    } else if (event.key === "ArrowDown") {
+      textToSend = "\x1b[B";
+    } else if (event.key === "ArrowRight") {
+      textToSend = "\x1b[C";
+    } else if (event.key === "ArrowLeft") {
+      textToSend = "\x1b[D";
+    } else if (event.key === "Backspace") {
+      textToSend = "\x7f";
+    } else if (event.key === "Enter") {
+      textToSend = "\r";
+    } else {
+      console.log("Unrecognized key:", event.key);
+      return;
+    }
+
+    const utf8 = new TextEncoder().encode(textToSend);
+    ws.send(utf8);
+
+    event.preventDefault();
+  };
+
+  // For some reason, the .text() method on Blob is asynchronous.
+  // We need to make sure they run in the correct order, and not at the same time.
+  let receivedBlobs = [];
+  let blobTask = null;
+
+  async function handleBlobs() {
+    while (receivedBlobs.length !== 0) {
+      const blobs = receivedBlobs;
+      receivedBlobs = [];
+      const texts = await Promise.all(blobs.map(b => b.text()));
+      
+      if (ws.readyState === WebSocket.OPEN) {
+        terminal.addTextWithEscapeSequences(texts.join(""));
+      }
+    }
+  }
+
+  ws.onmessage = (msg) => {
+    receivedBlobs.push(msg.data);
+    if (blobTask === null) {
+      blobTask = handleBlobs();
+      blobTask.then(() => blobTask=null);
+    }
+  };
+  // no need for onerror(), because onclose() will run on errors too
+  ws.onclose = () => {
+    document.body.innerHTML = "Connection closed.";
+  };
+});
     </script>
     <style>
-      body {
-        background-color: #333;
-        color: white;
-      }
+body {
+  background-color: #333;
+  color: white;
+}
 
-      .terminal {
-        color: white;
-        background-color: black;
-        font-family: monospace;
-        padding: 0.2em;
-        border-radius: 0.5em;
-        white-space: nowrap;
-      }
+#terminal-container {
+  /* https://stackoverflow.com/a/11679737 */
+  display: inline-block;
+}
 
-      .cursor {
-        animation: blinking_cursor 1s step-start infinite;
-      }
+#terminal {
+  color: white;
+  background-color: black;
+  font-family: monospace;
+  padding: 0.2em;
+  border-radius: 0.5em;
+  white-space: nowrap;
 
-      /* https://stackoverflow.com/a/48320520 */
-      @keyframes blinking_cursor {
-        50% {
-          color: black;
-          background-color: white;
-        }
-      }
+  display: grid;
+  grid-template-columns: auto 1fr;
+}
+
+#terminal.cursor-is-showing > .cursor {
+  animation: blinking_cursor 1s step-start infinite;
+}
+
+/* https://stackoverflow.com/a/48320520 */
+@keyframes blinking_cursor {
+  50% {
+    color: black;
+    background-color: white;
+  }
+}
     </style>
   </head>
   <body>
-    <div class="terminal">
-      akuli@akuli-desktop:~$&nbsp;ls<br>
-      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
-      akuli@akuli-desktop:~$&nbsp;ls<br>
-      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
-      akuli@akuli-desktop:~$&nbsp;ls<br>
-      foo&nbsp;&nbsp;bar&nbsp;&nbsp;baz<br>
-      akuli@akuli-desktop:~$&nbsp;<span class="cursor">&nbsp;</span>
+    <div id="terminal-container">
+      <div id="terminal"></div>
     </div>
   </body>
 </html>
