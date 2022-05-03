@@ -257,12 +257,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function handleBlobs() {
     while (receivedBlobs.length !== 0) {
+      let a = performance.now();
       const blobs = receivedBlobs;
       receivedBlobs = [];
       const texts = await Promise.all(blobs.map(b => b.text()));
-      
+      let b = performance.now();
+      const blobTime = b-a;
+      console.log(`blobbing took ${Math.round(blobTime)}ms with ${blobs.length} blobs`);
+
       if (ws.readyState === WebSocket.OPEN) {
+        let a = performance.now();
         terminal.addTextWithEscapeSequences(texts.join(""));
+        let b = performance.now();
+        const addTextTime = b-a;
+
+        console.log(`addText took ${Math.round(addTextTime)}ms with ${texts.join("").length} chars`);
       }
     }
   }
