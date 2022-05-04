@@ -274,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
           this.moveCursorToStartOfLine();
         } else if (chunk === "\n") {
           this.moveCursorDown();
-        } else if (chunk.startsWith("\x1b")) {
+        } else if (chunk.startsWith("\x1b[")) {
           this._handleAnsiCode(chunk);
         } else {
           this.addText(chunk);
