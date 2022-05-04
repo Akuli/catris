@@ -167,13 +167,16 @@ class Client:
         self.connection.put_to_send_queue(b)
 
         # Prevent filling the server's memory if client sends but never receives.
-        # Usually send buffer is empty (0 bytes) because operating system has buffering too.
-        # But it feels weird to rely on operating system's (undocumented?) buffer size.
+        # This is needed for websocket connections.
         #
-        # On 80x24 terminal with no colors, we send max 80*24 = 1920 bytes at a time.
-        # There's some extra space for colors and bigger terminals.
-        if self.connection.get_send_queue_size() > 4 * 1024:
-            self.log("More than 4K of data in send buffer, disconnecting")
+        # For raw TCP connections, the send buffer is usually empty (0 bytes),
+        # because operating system has buffering too. But it feels weird to
+        # rely on operating system's (undocumented?) buffer size.
+        #
+        # On 80x32 terminal (ring mode) with no colors, we send max 80*32 = 2560 bytes at a time.
+        # There's extra space for colors, bigger terminals and network lag.
+        if self.connection.get_send_queue_size() > 32 * 1024:
+            self.log("More than 32K of data in send buffer, disconnecting")
             self.connection.close()
             # Closing isn't enough to stop receiving immediately.
             # At least not with raw TCP connections
