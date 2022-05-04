@@ -58,7 +58,6 @@ class _RawTCPConnection:
     def close(self) -> None:
         self._writer.transport.close()
 
-    @property
     def is_closing(self) -> bool:
         return self._writer.transport.is_closing()
 
@@ -120,7 +119,6 @@ class _WebSocketConnection:
     def close(self) -> None:
         asyncio.create_task(self._ws.close())
 
-    @property
     def is_closing(self) -> bool:
         # Docs say: "Be aware that both open and closed are False during the
         # opening and closing sequences."
@@ -261,7 +259,7 @@ class Client:
         self._send_bytes(to_send)
 
     def _send_bytes(self, b: bytes) -> None:
-        if self._connection.is_closing:
+        if self._connection.is_closing():
             return
 
         self._connection.put_to_send_queue(b)
@@ -285,7 +283,7 @@ class Client:
         # Should no longer be necessary, but just in case...
         await asyncio.sleep(0)
 
-        if self._connection.is_closing:
+        if self._connection.is_closing():
             return None
 
         assert self._current_receive_task is None
