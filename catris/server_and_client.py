@@ -24,16 +24,12 @@ from catris.ansi import (
 from catris.lobby import Lobby
 from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
 
-if TYPE_CHECKING:
+try:
     from websockets.server import WebSocketServerProtocol
     from websockets.exceptions import WebSocketException
-else:
-    try:
-        from websockets.server import WebSocketServerProtocol
-        from websockets.exceptions import WebSocketException
-    except ImportError:
-        WebSocketServerProtocol = None
-        WebSocketException = None
+except ImportError:
+    WebSocketServerProtocol = None  # type: ignore
+    WebSocketException = None  # type: ignore
 
 
 class _RawTCPConnection:
