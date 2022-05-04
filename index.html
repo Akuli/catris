@@ -199,9 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearFromCursorToEndOfLine() {
       const lineStartToCursor = this._cursorPos % (WIDTH + 1)
-      const lineStart = this._cursorPos - lineStartToCursor;
-      const lineEnd = lineStart + WIDTH;
-      this._replaceText(this._cursorPos, " ".repeat(lineEnd - this._cursorPos) + '\n');
+      this._replaceText(this._cursorPos, " ".repeat(WIDTH - lineStartToCursor) + '\n');
     }
 
     clearFromCursorToEndOfScreen() {
