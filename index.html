@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const COLORS = {
     // taken from mate-terminal with a color picker program
     '0': {fg: '#FFFFFF', bg: '#000000'},  // reset all colors
+
     '30': {fg: '#555753'},
     '31': {fg: '#EF2929'},
     '32': {fg: '#8AE234'},
@@ -14,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
     '34': {fg: '#729FCF'},
     '35': {fg: '#AD7FA8'},
     '36': {fg: '#34E2E2'},
+
     '40': {bg: '#2E3436'},
     '41': {bg: '#CC0000'},
     '42': {bg: '#4E9A06'},
@@ -23,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     '46': {bg: '#06989A'},
     '47': {bg: '#D3D7CF'},
 
-    // TODO: these duplicates of above colors, stop using these
+    // 3x and 9x are the same colors
     '90': {fg: '#555753'},
     '91': {fg: '#EF2929'},
     '92': {fg: '#8AE234'},
@@ -31,14 +33,16 @@ document.addEventListener("DOMContentLoaded", () => {
     '94': {fg: '#729FCF'},
     '95': {fg: '#AD7FA8'},
     '96': {fg: '#34E2E2'},
-    '100': {bg: '#2E3436'},
-    '101': {bg: '#CC0000'},
-    '102': {bg: '#4E9A06'},
-    '103': {bg: '#C4A000'},
-    '104': {bg: '#3465A4'},
-    '105': {bg: '#75507B'},
-    '106': {bg: '#06989A'},
-    '107': {bg: '#D3D7CF'},
+
+    // 4x and 10x are slightly different background colors, 10x is generally brighter
+    '100': {bg: '#555753'},
+    '101': {bg: '#EF2929'},
+    '102': {bg: '#81D431'},
+    '103': {bg: '#FCE94F'},
+    '104': {bg: '#729FCF'},
+    '105': {bg: '#AD7FA8'},
+    '106': {bg: '#34E2E2'},
+    '107': {bg: '#EEEEEC'},
   };
 
   WIDTH = 80;
