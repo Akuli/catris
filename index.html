@@ -348,7 +348,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
-    document.body.innerHTML = "Connection closed.";
+    document.body.innerHTML = "Disconnected.";
   };
 });
     </script>
