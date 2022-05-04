@@ -266,6 +266,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     addTextWithEscapeSequences(text) {
+      // UTF-8 characters, ANSI escape sequences etc are never received in two parts.
+      // This is because of how websockets work, and isn't true for raw TCP connections.
       const chunks = text.match(/\x1b\[[^A-Za-z]+[A-Za-z]|\r|\n|[^\x1b\r\n]+/g);
       for (const chunk of chunks) {
         if (chunk === "\r") {
@@ -318,9 +320,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // For some reason, the .text() method on Blob is asynchronous.
   // We need to make sure they run in the correct order, and not at the same time.
-  //
-  // UTF-8 characters, ANSI escape sequences etc are never received in two parts.
-  // This is because of how websockets work, and isn't true for TCP.
 
   let receivedBlobs = [];
   let handleBlobsRunning = false;
