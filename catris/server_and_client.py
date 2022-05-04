@@ -6,6 +6,11 @@ import itertools
 import logging
 import time
 
+try:
+    from websockets.server import WebSocketServerProtocol
+except ImportError:
+    WebSocketServerProtocol = None  # type: ignore
+
 from catris.ansi import (
     CLEAR_FROM_CURSOR_TO_END_OF_SCREEN,
     CLEAR_SCREEN,
@@ -20,6 +25,7 @@ from catris.ansi import (
     MOVE_CURSOR,
     SHOW_CURSOR,
 )
+from catris.connections import RawTCPConnection, WebSocketConnection
 from catris.lobby import Lobby
 from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
 
@@ -36,12 +42,8 @@ class Server:
             # Create a single lobby that will be used for everything
             self.only_lobby = Lobby(None)
 
-    async def handle_connection(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        client = Client(self, reader, writer)
-
-        ip = writer.get_extra_info("peername")[0]
+    async def _handle_any_connection(self, client: Client) -> None:
+        ip = client.connection.get_ip()
         self._connection_ips.append((time.monotonic(), ip))
         one_min_ago = time.monotonic() - 60
         while self._connection_ips and self._connection_ips[0][0] < one_min_ago:
@@ -55,18 +57,29 @@ class Server:
 
         await client.handle()
 
+    async def handle_raw_tcp_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        client = Client(self, RawTCPConnection(reader, writer))
+        client.log("New raw TCP connection")
+        await self._handle_any_connection(client)
+
+    async def handle_websocket_connection(self, ws: WebSocketServerProtocol) -> None:
+        client = Client(self, WebSocketConnection(ws))
+        client.log("New websocket connection")
+        await self._handle_any_connection(client)
+
 
 _id_counter = itertools.count(1)
 
 
 class Client:
     def __init__(
-        self, server: Server, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self, server: Server, connection: RawTCPConnection | WebSocketConnection
     ) -> None:
+        self.connection = connection
         self._client_id = next(_id_counter)
         self.server = server
-        self._reader = reader
-        self._writer = writer
         self._current_receive_task: asyncio.Task[bytes] | None = None
         self._recv_stats: collections.deque[tuple[float, int]] = collections.deque()
 
@@ -148,21 +161,25 @@ class Client:
         self._send_bytes(to_send)
 
     def _send_bytes(self, b: bytes) -> None:
-        if self._writer.transport.is_closing():
+        if self.connection.is_closing():
             return
 
-        self._writer.write(b)
+        self.connection.put_to_send_queue(b)
 
         # Prevent filling the server's memory if client sends but never receives.
-        # Usually send buffer is empty (0 bytes) because operating system has buffering too.
-        # But it feels weird to rely on operating system's (undocumented?) buffer size.
+        # This is needed for websocket connections.
         #
-        # On 80x24 terminal with no colors, we send max 80*24 = 1920 bytes at a time.
-        # There's some extra space for colors and bigger terminals.
-        if self._writer.transport.get_write_buffer_size() > 4 * 1024:  # type: ignore
-            self.log("More than 4K of data in send buffer, disconnecting")
-            self._writer.transport.close()
-            # Closing isn't enough to stop receiving immediately
+        # For raw TCP connections, the send buffer is usually empty (0 bytes),
+        # because operating system has buffering too. But it feels weird to
+        # rely on operating system's (undocumented?) buffer size.
+        #
+        # On 80x32 terminal (ring mode) with no colors, we send max 80*32 = 2560 bytes at a time.
+        # There's extra space for colors, bigger terminals and network lag.
+        if self.connection.get_send_queue_size() > 32 * 1024:
+            self.log("More than 32K of data in send buffer, disconnecting")
+            self.connection.close()
+            # Closing isn't enough to stop receiving immediately.
+            # At least not with raw TCP connections
             if self._current_receive_task is not None:
                 self._current_receive_task.cancel()
 
@@ -171,11 +188,13 @@ class Client:
         # Should no longer be necessary, but just in case...
         await asyncio.sleep(0)
 
-        if self._writer.transport.is_closing():
+        if self.connection.is_closing():
             return None
 
         assert self._current_receive_task is None
-        self._current_receive_task = asyncio.create_task(self._reader.read(100))
+        self._current_receive_task = asyncio.create_task(
+            self.connection.receive_bytes()
+        )
         try:
             result = await asyncio.wait_for(self._current_receive_task, timeout=10 * 60)
         except asyncio.TimeoutError:
@@ -219,8 +238,6 @@ class Client:
         return result
 
     async def handle(self) -> None:
-        self.log("New connection")
-
         try:
             self.server.all_clients.add(self)
             self.log(f"There are now {len(self.server.all_clients)} connected clients")
@@ -271,7 +288,7 @@ class Client:
             self._send_bytes(b"\r" + CLEAR_FROM_CURSOR_TO_END_OF_SCREEN + SHOW_CURSOR)
 
             try:
-                await asyncio.wait_for(self._writer.drain(), timeout=3)
+                await asyncio.wait_for(self.connection.flush(), timeout=3)
             except (OSError, asyncio.TimeoutError):
                 pass
-            self._writer.transport.close()
+            self.connection.close()

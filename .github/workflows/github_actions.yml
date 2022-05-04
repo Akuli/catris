@@ -12,10 +12,8 @@ jobs:
       - uses: actions/setup-python@v1
         with:
           python-version: '3.9'
-      - run: |
-          pip install -r requirements-dev.txt
-      - run: |
-          black --check catris/
+      - run: pip install -r requirements-dev.txt
+      - run: black --check catris/
   isort:
     runs-on: ubuntu-latest
     steps:
@@ -23,10 +21,8 @@ jobs:
       - uses: actions/setup-python@v1
         with:
           python-version: '3.9'
-      - run: |
-          pip install -r requirements-dev.txt
-      - run: |
-          isort --check catris/
+      - run: pip install -r requirements-dev.txt
+      - run: isort --check catris/
   mypy:
     runs-on: ubuntu-latest
     steps:
@@ -34,13 +30,12 @@ jobs:
       - uses: actions/setup-python@v1
         with:
           python-version: '3.9'
-      - run: |
-          pip install -r requirements-dev.txt
-      - run: |
-          mypy --python-version 3.7 --strict catris/
-          mypy --python-version 3.8 --strict catris/
-          mypy --python-version 3.9 --strict catris/
-          mypy --python-version 3.10 --strict catris/
+      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
+      - run: mypy --python-version 3.7 --strict catris/
+      - run: mypy --python-version 3.8 --strict catris/
+      - run: mypy --python-version 3.9 --strict catris/
+      - run: mypy --python-version 3.10 --strict catris/
   pyflakes:
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +43,5 @@ jobs:
       - uses: actions/setup-python@v1
         with:
           python-version: '3.9'
-      - run: |
-          pip install -r requirements-dev.txt
-      - run: |
-          pyflakes catris/
+      - run: pip install -r requirements-dev.txt
+      - run: pyflakes catris/

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script>
+document.addEventListener("DOMContentLoaded", () => {
+  const COLORS = {
+    // taken from mate-terminal with a color picker program
+    '0': {fg: '#FFFFFF', bg: '#000000'},  // reset all colors
+
+    '30': {fg: '#555753'},
+    '31': {fg: '#EF2929'},
+    '32': {fg: '#8AE234'},
+    '33': {fg: '#FCE94F'},
+    '34': {fg: '#729FCF'},
+    '35': {fg: '#AD7FA8'},
+    '36': {fg: '#34E2E2'},
+
+    '40': {bg: '#2E3436'},
+    '41': {bg: '#CC0000'},
+    '42': {bg: '#4E9A06'},
+    '43': {bg: '#C4A000'},
+    '44': {bg: '#3465A4'},
+    '45': {bg: '#75507B'},
+    '46': {bg: '#06989A'},
+    '47': {bg: '#D3D7CF'},
+
+    // 3x and 9x are the same colors
+    '90': {fg: '#555753'},
+    '91': {fg: '#EF2929'},
+    '92': {fg: '#8AE234'},
+    '93': {fg: '#FCE94F'},
+    '94': {fg: '#729FCF'},
+    '95': {fg: '#AD7FA8'},
+    '96': {fg: '#34E2E2'},
+
+    // In general, 10x colors are brighter than 4x colors.
+    //
+    // Some (not all) of the 10x background colors are same as 3x and 9x foreground colors.
+    // I don't know why this is, but I do what mate-terminal does :)
+    '100': {bg: '#555753'},
+    '101': {bg: '#EF2929'},
+    '102': {bg: '#81D431'},
+    '103': {bg: '#FCE94F'},
+    '104': {bg: '#729FCF'},
+    '105': {bg: '#AD7FA8'},
+    '106': {bg: '#34E2E2'},
+    '107': {bg: '#EEEEEC'},
+  };
+
+  WIDTH = 80;
+  HEIGHT = 33;  // enough for ring game
+
+  const terminal = new class {
+    constructor() {
+      this._pre = document.getElementById("terminal");
+      this._pre.style.width = WIDTH + "ch";
+
+      this._cursorPos = 0;  // index into the text as a string including \n chars
+      this._cursorIsShowing = true;
+
+      this.fgColor = COLORS['0'].fg;
+      this.bgColor = COLORS['0'].bg;
+      this.clear();
+    }
+
+    clear() {
+      this._pre.innerHTML = "<span></span>";
+      const span = this._pre.querySelector("span");
+      span.textContent = (" ".repeat(WIDTH) + "\n").repeat(HEIGHT);
+      this._applyStyle(span);
+    }
+
+    _applyStyle(span) {
+      span.style.color = this.fgColor;
+      span.style.backgroundColor = this.bgColor;
+    }
+
+    moveCursor(x, y) {
+      this._cursorPos = y*(WIDTH + 1) + x;
+    }
+
+    moveCursorToStartOfLine() {
+      const lineStartToCursor = this._cursorPos % (WIDTH + 1);
+      this._cursorPos -= lineStartToCursor;
+    }
+
+    moveCursorDown() {
+      this._cursorPos += WIDTH + 1;
+
+      const end = (WIDTH + 1)*HEIGHT;
+      if (this._cursorPos > end) {
+        this._cursorPos = end;
+      }
+    }
+
+    // Can be called in a loop, but calls must be in the same order as spans appear in the terminal.
+    // May change text of the span given as argument, but doesn't delete it.
+    _mergeWithPreviousSpanIfPossible(right) {
+      const left = right?.previousElementSibling;
+      if (left && right
+          && left.style.color === right.style.color
+          && left.style.backgroundColor === right.style.backgroundColor)
+      {
+        right.textContent = left.textContent + right.textContent;
+        left.remove();  
+      }
+    }
+
+    _deleteText(delStart, delEnd) {
+      const spansToRemove = [];
+      let spanStart = 0;
+      for (const span of this._pre.children) {
+        const spanEnd = spanStart + span.textContent.length;
+
+        const overlapStart = Math.max(spanStart, delStart);
+        const overlapEnd = Math.min(spanEnd, delEnd);
+        if (overlapStart < overlapEnd) {
+          // Delete overlapping part
+          const relativeOverlapStart = overlapStart - spanStart;
+          const relativeOverlapEnd = overlapEnd - spanStart;
+          console.assert(relativeOverlapStart >= 0);
+          console.assert(relativeOverlapEnd >= 0);
+          const t = span.textContent;
+          span.textContent = t.slice(0, relativeOverlapStart) + t.slice(relativeOverlapEnd);
+          if (span.textContent === "") {
+            // Avoid adding/removing child elements while looping over them
+            spansToRemove.push(span);
+          }
+        }
+
+        spanStart = spanEnd;
+      }
+
+      for (const span of spansToRemove) {
+        // If another non-empty span got merged into the span on a previous iteration, don't remove
+        if (span.textContent === "") {
+          const right = span.nextElementSibling;
+          span.remove();
+          this._mergeWithPreviousSpanIfPossible(right);
+        }
+      }
+    }
+
+    _insertText(index, text) {
+      if (text === "") {
+        return;
+      }
+
+      const newSpan = document.createElement("span");
+      newSpan.textContent = text;
+      this._applyStyle(newSpan);
+
+      let spanStart = 0;
+      for (const span of this._pre.children) {
+        if (index === spanStart) {
+          // New span goes just before start of an existing span
+          this._pre.insertBefore(newSpan, span);
+          this._mergeWithPreviousSpanIfPossible(newSpan);
+          this._mergeWithPreviousSpanIfPossible(span);
+          return;
+        }
+
+        const spanEnd = spanStart + span.textContent.length;
+        if (spanStart < index && index < spanEnd) {
+          // Split span into two, add in middle
+          const leftLen = index - spanStart;
+          console.assert(leftLen >= 0);
+
+          const leftSide = span.cloneNode();
+          const rightSide = span.cloneNode();
+          leftSide.textContent = span.textContent.slice(0, leftLen);
+          rightSide.textContent = span.textContent.slice(leftLen);
+
+          this._pre.insertBefore(leftSide, span);
+          this._pre.insertBefore(newSpan, span);
+          this._pre.insertBefore(rightSide, span);
+          span.remove();
+
+          this._mergeWithPreviousSpanIfPossible(newSpan);
+          this._mergeWithPreviousSpanIfPossible(rightSide);
+          return;
+        }
+
+        spanStart = spanEnd;
+      }
+
+      // New span is not at the start of any span and not inside any span.
+      // It must be after all other spans.
+      console.assert(index === spanStart);
+      this._div.appendChild(span);
+      this._mergeWithPreviousSpanIfPossible(span);
+    }
+
+    _replaceText(startIndex, text) {
+      this._deleteText(startIndex, startIndex + text.length);
+      this._insertText(startIndex, text);
+    }
+
+    clearFromCursorToEndOfLine() {
+      const lineStartToCursor = this._cursorPos % (WIDTH + 1)
+      this._replaceText(this._cursorPos, " ".repeat(WIDTH - lineStartToCursor) + '\n');
+    }
+
+    clearFromCursorToEndOfScreen() {
+      const lineStartToCursor = this._cursorPos % (WIDTH + 1)
+      const lineStart = this._cursorPos - lineStartToCursor;
+      const lineEnd = lineStart + WIDTH;
+      const terminalEnd = i < (WIDTH + 1)*HEIGHT;
+
+      const lines = [" ".repeat(WIDTH - lineStartToCursor) + "\n"];
+      for (let i = lineEnd + 1; i < (WIDTH + 1)*HEIGHT; i += WIDTH+1) {
+        lines.push(" ".repeat(WIDTH) + "\n");
+      }
+
+      this._replaceText(this._cursorPos, lines.join(""));
+    }
+
+    addText(text) {
+      const lineStartToCursor = this._cursorPos % (WIDTH + 1);
+      const firstLineLength = WIDTH - lineStartToCursor;
+
+      const lines = [text.slice(0, firstLineLength)];
+      for (let i = firstLineLength; i < text.length; i += WIDTH) {
+        lines.push(text.slice(i, i+WIDTH));
+      }
+
+      const end = (WIDTH + 1)*HEIGHT;
+      const howMuchFits = end - this._cursorPos;
+      const toInsert = lines.join("\n").slice(0, howMuchFits);
+      this._replaceText(this._cursorPos, toInsert);
+      this._cursorPos += toInsert.length;
+    }
+
+    _updateCursor() {
+      if (this._cursorIsShowing) {
+        const x = this._cursorPos % (WIDTH + 1);
+        const y = Math.floor(this._cursorPos / (WIDTH + 1));
+        document.getElementById("cursor-overlay").textContent = "\n".repeat(y) + " ".repeat(x) + "█";
+      } else {
+        document.getElementById("cursor-overlay").textContent = "";
+      }
+    }
+
+    _handleAnsiCode(ansiCode) {
+      if (ansiCode === "\x1b[2J") {
+        this.clear();
+      } else if (ansiCode === "\x1b[0J") {
+        this.clearFromCursorToEndOfScreen();
+      } else if (ansiCode === "\x1b[0K") {
+        this.clearFromCursorToEndOfLine();
+      } else if (ansiCode === "\x1b[?25h") {
+        this._cursorIsShowing = true;
+      } else if (ansiCode === "\x1b[?25l") {
+        this._cursorIsShowing = false;
+      } else if (ansiCode.endsWith("H")) {
+        const [line, column] = ansiCode.slice(2, -1).split(';').map(x => +x);
+        this.moveCursor(column-1, line-1);
+      } else if (ansiCode.startsWith("\x1b[1;") && ansiCode.endsWith("m") && COLORS[ansiCode.slice(4, -1)]) {
+        const colorInfo = COLORS[ansiCode.slice(4, -1)];
+        if (colorInfo.fg) this.fgColor = colorInfo.fg;
+        if (colorInfo.bg) this.bgColor = colorInfo.bg;
+      } else {
+        console.warn("Unknown ANSI escape sequence: " + ansiCode);
+      }
+    }
+
+    addTextWithEscapeSequences(text) {
+      // UTF-8 characters, ANSI escape sequences etc are never received in two parts.
+      // This is because of how websockets work, and isn't true for raw TCP connections.
+      const chunks = text.match(/\x1b\[[^A-Za-z]+[A-Za-z]|\r|\n|[^\x1b\r\n]+/g);
+      for (const chunk of chunks) {
+        if (chunk === "\r") {
+          this.moveCursorToStartOfLine();
+        } else if (chunk === "\n") {
+          this.moveCursorDown();
+        } else if (chunk.startsWith("\x1b[")) {
+          this._handleAnsiCode(chunk);
+        } else {
+          this.addText(chunk);
+        }
+      }
+
+      this._updateCursor();
+    }
+  };
+
+  const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
+
+  document.onkeydown = event => {
+    if (event.ctrlKey || event.altKey || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    let textToSend;
+    if (event.key.length === 1) {
+      textToSend = event.key;
+    } else if (event.key === "ArrowUp") {
+      textToSend = "\x1b[A";
+    } else if (event.key === "ArrowDown") {
+      textToSend = "\x1b[B";
+    } else if (event.key === "ArrowRight") {
+      textToSend = "\x1b[C";
+    } else if (event.key === "ArrowLeft") {
+      textToSend = "\x1b[D";
+    } else if (event.key === "Backspace") {
+      textToSend = "\x7f";
+    } else if (event.key === "Enter") {
+      textToSend = "\r";
+    } else {
+      console.log("Unrecognized key:", event.key);
+      return;
+    }
+
+    const utf8 = new TextEncoder().encode(textToSend);
+    ws.send(utf8);
+
+    event.preventDefault();
+  };
+
+  // For some reason, the .text() method on Blob is asynchronous.
+  // We need to make sure they run in the correct order, and not at the same time.
+
+  let receivedTextPromises = [];
+  let handleBlobsRunning = false;
+
+  async function handleBlobs() {
+    while (receivedTextPromises.length !== 0) {
+      const promises = receivedTextPromises;
+      receivedTextPromises = [];
+      const text = (await Promise.all(promises)).join("");
+      if (ws.readyState === WebSocket.OPEN) {
+        terminal.addTextWithEscapeSequences(text);
+      }
+    }
+    handleBlobsRunning = false;
+  }
+
+  ws.onmessage = (msg) => {
+    receivedTextPromises.push(msg.data.text());
+    if (!handleBlobsRunning) {
+      handleBlobsRunning = true;
+      handleBlobs();
+    }
+  };
+
+  // no need for onerror(), because onclose() will run on errors too
+  ws.onclose = () => {
+    document.body.innerHTML = "Disconnected.";
+  };
+});
+    </script>
+    <style>
+body {
+  background-color: #333;
+  color: white;  /* Used when displaying the disconnected message after quitting */
+}
+
+#terminal-container {
+  position: relative;
+}
+
+#terminal, #cursor-overlay {
+  position: absolute;
+  padding: 0.2em;
+  border-radius: 0.5em;
+  color: white;
+  text-align: left;
+}
+
+#terminal {
+  background-color: black;
+}
+
+#cursor-overlay {
+  background: transparent;
+  animation: blinking_cursor 1s step-start infinite;
+}
+
+/* https://stackoverflow.com/a/48320520 */
+@keyframes blinking_cursor {
+  50% {
+    color: transparent;
+  }
+}
+    </style>
+  </head>
+  <body>
+    <div id="terminal-container">
+      <pre id="terminal"><span></span></pre>
+      <pre id="cursor-overlay"></pre>
+    </div>
+  </body>
+</html>

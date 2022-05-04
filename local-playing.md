@@ -9,7 +9,9 @@ This file explains how to do that.
 
 ## Running the server
 
-Install Python and download all files in the `catris` folder.
+If you're on Windows, use `py` instead of `python3` and `env\Scripts\activate` instead of `source env/bin/activate` below.
+
+Install Python and download this repository.
 If you already have Git, you can use it:
 
 ```
@@ -19,12 +21,32 @@ cd catris
 
 Or you can [download a zip file by clicking here](https://github.com/Akuli/catris/archive/refs/heads/main.zip),
 extract it and `cd` into it.
-Either way, you should see a folder named `catris` if you run `dir` or `ls`.
+Either way, if you run `dir` or `ls`,
+you should see files named `index.html` and `README.md` among other things.
+If you see a file named `__init__.py`, you have `cd`'d too deep
+and you need to go back up with `cd ..`.
 
-Then run the server (if you're on Windows, use `py` instead of `python3`):
+Next, create a virtualenv and install the dependencies.
+This is needed for the web interface,
+but you don't need to do this if all players will connect with netcat.
+
+```
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+```
+
+We are now ready to run the server:
 
 ```
 python3 -m catris
+```
+
+If you want to use the web UI, you also need to start a web server in a second terminal:
+
+```
+cd catris
+python3 -m http.server
 ```
 
 
@@ -63,8 +85,11 @@ and it won't connect other computers to the server.
 
 ## Connecting to the server
 
-Use instructions in the README, but replace my server's IP address (172.104.132.97)
-with the IP address of the server computer in the local network.
+Web UI: Go to `http://SERVER_IP:8000/` in a browser,
+where `SERVER_IP` is the IP address of the server computer in the local network.
+
+Terminal UI (doesn't work on Windows): `stty raw; nc SERVER_IP 12345; stty cooked`
+
 The server computer itself can also be used for playing the game,
 just like any other computer in the network.
 

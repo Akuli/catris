@@ -1,0 +1,28 @@
+# Edit /etc/nginx/nginx.conf:
+#   - uncomment "server_tokens off;"
+#   - change access_log config to:
+#
+#        log_format hideUserIpsLogFormat '$remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
+#        access_log /var/log/nginx/access.log hideUserIpsLogFormat;
+#
+# sudo apt install nginx
+# sudo rm /etc/nginx/modules-enabled/*
+# sudo rm /etc/nginx/sites-enabled/default
+# sudo rm /var/www/html/index.nginx-debian.html
+# sudo cp index.html /var/www/html/
+# sudo cp catris-nginx-site /etc/nginx/sites-available/
+# sudo ln -s /etc/nginx/sites-{available,enabled}/catris-nginx-site
+# sudo systemctl restart nginx
+
+# Based on debian's default server configuration
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+
+	root /var/www/html;
+	index index.html;
+
+	location / {
+		try_files $uri $uri/ =404;
+	}
+}

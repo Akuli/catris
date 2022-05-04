@@ -5,6 +5,16 @@ import socket
 
 from catris.server_and_client import Server
 
+# The code below is written weirdly make mypy realize that the import might fail.
+# If you put reveal_type(websockets_serve) after it, you should see Union[..., None]
+websockets_serve = None
+try:
+    from websockets.server import serve as _a_temporary_variable
+
+    websockets_serve = _a_temporary_variable
+except ImportError:
+    pass
+
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -16,20 +26,38 @@ async def main() -> None:
         help="allow users to create and join lobbies instead of having everyone play together",
     )
     args = parser.parse_args()
-
     catris_server = Server(args.lobbies)
-    asyncio_server = await asyncio.start_server(
-        catris_server.handle_connection, port=12345
+
+    tcp_server = await asyncio.start_server(
+        catris_server.handle_raw_tcp_connection, port=12345
     )
 
     # Send TCP keepalive packets periodically as configured in /etc/sysctl.conf
     # Prevents clients from disconnecting after about 5 minutes of inactivity.
-    for sock in asyncio_server.sockets:
+    for sock in tcp_server.sockets:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 
-    async with asyncio_server:
-        logging.info("Listening on port 12345...")
-        await asyncio_server.serve_forever()
+    logging.info("Listening for raw TCP connections on port 12345...")
+
+    if websockets_serve is None:
+        logging.warning(
+            "The web UI won't work because the \"websockets\" module isn't installed."
+            " See the README for installation instructions."
+        )
+        async with tcp_server:
+            await tcp_server.serve_forever()
+    else:
+        # hide unnecessary INFO messages
+        logging.getLogger("websockets.server").setLevel(logging.WARNING)
+
+        ws_server = websockets_serve(
+            catris_server.handle_websocket_connection,
+            port=54321,
+            close_timeout=0.1,  # See the code that closes connections for an explanation
+        )
+        logging.info("Listening for websocket connections on port 54321...")
+        async with tcp_server, ws_server:
+            await tcp_server.serve_forever()
 
 
 asyncio.run(main())
