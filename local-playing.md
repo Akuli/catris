@@ -11,7 +11,7 @@ This file explains how to do that.
 
 If you're on Windows, use `py` instead of `python3` and `env\Scripts\activate` instead of `source env/bin/activate` below.
 
-Install Python and download all files in the `catris` folder.
+Install Python and download this repository.
 If you already have Git, you can use it:
 
 ```
@@ -21,7 +21,10 @@ cd catris
 
 Or you can [download a zip file by clicking here](https://github.com/Akuli/catris/archive/refs/heads/main.zip),
 extract it and `cd` into it.
-Either way, you should see a folder named `catris` if you run `dir` or `ls`.
+Either way, if you run `dir` or `ls`,
+you should see files named `index.html` and `README.md` among other things.
+If you see a file named `__init__.py`, you have `cd`'d too deep
+and you need to go back up with `cd ..`.
 
 Next, create a virtualenv and install the dependencies.
 This is needed for the web interface,
@@ -39,7 +42,7 @@ We are now ready to run the server:
 python3 -m catris
 ```
 
-If you want to use a web UI, you need to also start a web server in a second terminal:
+If you want to use the web UI, you also need to start a web server in a second terminal:
 
 ```
 cd catris

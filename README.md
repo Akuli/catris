@@ -75,7 +75,7 @@ pip install -r requirements-dev.txt
 python3 -m catris
 ```
 
-When `python3 -m catris` is running, you can connect to catris with netcat:
+When `python3 -m catris` is running, you can connect to it with netcat:
 
 ```
 stty raw; nc localhost 12345; stty cooked
