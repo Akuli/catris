@@ -59,7 +59,7 @@ class _RawTCPConnection:
         self._writer.transport.close()
 
     @property
-    def close_has_been_called(self) -> bool:
+    def is_closing(self) -> bool:
         return self._writer.transport.is_closing()
 
 
@@ -68,7 +68,6 @@ class _WebSocketConnection:
         self._ws = ws
         self._send_queue = bytearray()
         self._send_task: asyncio.Task[None] | None = None
-        self._send_error: WebSocketException | None = None
 
     def get_ip(self) -> str:
         return self._ws.transport.get_extra_info("peername")[0]
@@ -82,9 +81,6 @@ class _WebSocketConnection:
             self._send_task = asyncio.create_task(self._send_from_queue())
 
     async def _send_from_queue(self) -> None:
-        if self._send_error is not None:
-            raise OSError(str(self._send_error)) from self._send_error
-
         while self._send_queue:
             data_to_send = bytes(self._send_queue)
             self._send_queue.clear()
@@ -92,8 +88,11 @@ class _WebSocketConnection:
             try:
                 await self._ws.send(data_to_send)
             except WebSocketException as e:
-                self._send_error = e
-                raise OSError(str(e)) from e
+                # Ideally we would know what client this connection belongs to.
+                # But for raw TCP connections, asyncio's internals log a message
+                # without any extra info anyway, so that wouldn't help much.
+                self.close()
+                logging.warning(f"sending to websocket failed: {e}")
 
     async def receive_bytes(self) -> bytes:
         try:
@@ -122,11 +121,9 @@ class _WebSocketConnection:
         asyncio.create_task(self._ws.close())
 
     @property
-    def close_has_been_called(self) -> bool:
+    def is_closing(self) -> bool:
         # Docs say: "Be aware that both open and closed are False during the
         # opening and closing sequences."
-        #
-        # If we're already closing, it means close() has been called.
         return not self._ws.open
 
 
@@ -264,7 +261,7 @@ class Client:
         self._send_bytes(to_send)
 
     def _send_bytes(self, b: bytes) -> None:
-        if self._connection.close_has_been_called:
+        if self._connection.is_closing:
             return
 
         self._connection.put_to_send_queue(b)
@@ -288,7 +285,7 @@ class Client:
         # Should no longer be necessary, but just in case...
         await asyncio.sleep(0)
 
-        if self._connection.close_has_been_called:
+        if self._connection.is_closing:
             return None
 
         assert self._current_receive_task is None
