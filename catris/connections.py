@@ -4,11 +4,11 @@ import asyncio
 import logging
 
 try:
-    from websockets.server import WebSocketServerProtocol
     from websockets.exceptions import WebSocketException
+    from websockets.server import WebSocketServerProtocol
 except ImportError:
-    WebSocketServerProtocol = None  # type: ignore
     WebSocketException = None  # type: ignore
+    WebSocketServerProtocol = None  # type: ignore
 
 
 class RawTCPConnection:
@@ -19,7 +19,8 @@ class RawTCPConnection:
         self._writer = writer
 
     def get_ip(self) -> str:
-        return self._writer.get_extra_info("peername")[0]
+        ip: str = self._writer.get_extra_info("peername")[0]
+        return ip
 
     def get_send_queue_size(self) -> int:
         # https://github.com/python/typeshed/issues/5779
@@ -48,7 +49,8 @@ class WebSocketConnection:
         self._send_task: asyncio.Task[None] | None = None
 
     def get_ip(self) -> str:
-        return self._ws.transport.get_extra_info("peername")[0]
+        ip: str = self._ws.transport.get_extra_info("peername")[0]
+        return ip
 
     def get_send_queue_size(self) -> int:
         return len(self._send_queue)
@@ -82,7 +84,7 @@ class WebSocketConnection:
             raise OSError("client sent text, expected bytes")
         return result
 
-    async def flush(self):
+    async def flush(self) -> None:
         if self._send_task is not None:
             try:
                 await self._send_task

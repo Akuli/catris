@@ -42,7 +42,7 @@ async def main() -> None:
     if websockets_serve is None:
         logging.warning(
             "The web UI won't work because the \"websockets\" module isn't installed."
-            ' See the README for installation instructions.'
+            " See the README for installation instructions."
         )
         async with tcp_server:
             await tcp_server.serve_forever()

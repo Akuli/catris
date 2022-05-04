@@ -29,6 +29,7 @@ from catris.connections import RawTCPConnection, WebSocketConnection
 from catris.lobby import Lobby
 from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
 
+
 class Server:
     def __init__(self, use_lobbies: bool) -> None:
         self._connection_ips: collections.deque[tuple[float, str]] = collections.deque()
@@ -41,9 +42,7 @@ class Server:
             # Create a single lobby that will be used for everything
             self.only_lobby = Lobby(None)
 
-    async def _handle_any_connection(
-        self, client: Client
-    ) -> None:
+    async def _handle_any_connection(self, client: Client) -> None:
         ip = client.connection.get_ip()
         self._connection_ips.append((time.monotonic(), ip))
         one_min_ago = time.monotonic() - 60
@@ -58,7 +57,9 @@ class Server:
 
         await client.handle()
 
-    async def handle_raw_tcp_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def handle_raw_tcp_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         client = Client(self, RawTCPConnection(reader, writer))
         client.log("New raw TCP connection")
         await self._handle_any_connection(client)
@@ -188,7 +189,9 @@ class Client:
             return None
 
         assert self._current_receive_task is None
-        self._current_receive_task = asyncio.create_task(self.connection.receive_bytes())
+        self._current_receive_task = asyncio.create_task(
+            self.connection.receive_bytes()
+        )
         try:
             result = await asyncio.wait_for(self._current_receive_task, timeout=10 * 60)
         except asyncio.TimeoutError:
