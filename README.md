@@ -1,51 +1,37 @@
 # catris
 
-This is a Tetris clone for multiple players that connect to a server with netcat or PuTTY.
+This is a Tetris clone for multiple players that connect to a server with netcat or a web interface.
 
 ![Screenshot](screenshot.png)
 
-You can play on my server.
-It's in Europe though, so the game may be very laggy if you're not in Europe.
-Create an issue if this is a problem for you.
-
-<details>
-<summary>Windows instructions</summary>
-
-Download PuTTY from [here](https://www.putty.org/),
-or search "putty download" or similar and click the first result.
-On the download page, choose the 64-bit x86 putty.exe under "Alternative binary files".
-
-![Putty's download page](putty-download.png)
-
-Open putty.exe from your downloads, and fill in these settings:
-- Session: Host Name `172.104.132.97`, Port `12345`, Connection Type "Raw"
-
-![Settings of Session tab](putty1.png)
-
-- Terminal: Local echo "Force off", Local line editing "Force off"
-
-![Settings of Terminal tab](putty2.png)
-
-Then click the "Open" button to play.
-
-</details>
-
-<details>
-<summary>MacOS/Linux instructions</summary>
-
-To play on Mac or Linux, run on terminal:
+If you aren't using Windows,
+you can play on my server by running this command on a terminal:
 
 ```
 stty raw; nc 172.104.132.97 12345; stty cooked
 ```
 
-The `stty raw` in front is needed to send key presses to the server
-as you press the keys, not when you press Enter.
+<details>
+<summary>Explanation of what the command does</summary>
+
+The `stty raw` is needed to send key presses to the server
+as you press the keys, without first waiting for you to press Enter.
 If you forget it, you will get an error message that tells you to use it.
+
+Here `nc`, short for netcat, opens a TCP connection to my server.
+It sends its input (your key presses) to the server
+and displays what it receives on the terminal.
+
 On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
 instead of entering them separately.
 
 </details>
+
+There's also a web UI, which is useful especially for windows users.
+[Click here](http://172.104.132.97) to play.
+
+My server is in Europe, so the game may be very laggy if you're not in Europe.
+Please create an issue if this is a problem for you.
 
 
 ## How to play
@@ -79,27 +65,28 @@ to get your waiting time before other players.
 
 If you're on Windows, use `py` instead of `python3` and `env\Scripts\activate` instead of `source env/bin/activate` below.
 
-Running catris:
-
 ```
 git clone https://github.com/Akuli/catris
 cd catris
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python3 -m catris
 ```
 
-That's it.
-Catris has no dependencies execpt Python itself,
-so you don't even need a virtualenv to run it.
-You can now connect to catris running on your computer
-just like you would connect to my catris server,
-but using `localhost` instead of `172.104.132.97` in the above instructions.
-
-I recommend using a virtualenv for installing and running development tools:
+When `python3 -m catris` is running, you can connect to catris with netcat:
 
 ```
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements-dev.txt
+stty raw; nc localhost 12345; stty cooked
+```
+
+If you want to develop the web UI, you need to run `python3 -m http.server` in a separate terminal,
+and then open `http://localhost:8000/` in your web browser.
+
+Linters and formatters:
+
+```
 black catris        # Formats the code
 isort catris        # Formats and sorts imports
 mypy catris         # Type checker, detects common mistakes
