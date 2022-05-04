@@ -322,6 +322,7 @@ def create_moving_squares(score: int) -> set[Square]:
     drill_probability_as_percents = score / 2000
     # Extra squares appear only with score>500
     extra_square_probability_as_percents = (score - 500) / 200
+    drill_probability_as_percents = 100
 
     if random.uniform(0, 100) < bomb_probability_as_percents:
         center_square: Square = BombSquare()
