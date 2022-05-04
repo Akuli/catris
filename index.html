@@ -321,24 +321,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // For some reason, the .text() method on Blob is asynchronous.
   // We need to make sure they run in the correct order, and not at the same time.
 
-  let receivedBlobs = [];
+  let receivedTextPromises = [];
   let handleBlobsRunning = false;
 
   async function handleBlobs() {
-    while (receivedBlobs.length !== 0) {
-      const blobs = receivedBlobs;
-      receivedBlobs = [];
-      const texts = await Promise.all(blobs.map(b => b.text()));
-
+    while (receivedTextPromises.length !== 0) {
+      const promises = receivedTextPromises;
+      receivedTextPromises = [];
+      const text = (await Promise.all(promises)).join("");
       if (ws.readyState === WebSocket.OPEN) {
-        terminal.addTextWithEscapeSequences(texts.join(""));
+        terminal.addTextWithEscapeSequences(text);
       }
     }
     handleBlobsRunning = false;
   }
 
   ws.onmessage = (msg) => {
-    receivedBlobs.push(msg.data);
+    receivedTextPromises.push(msg.data.text());
     if (!handleBlobsRunning) {
       handleBlobsRunning = true;
       handleBlobs();
