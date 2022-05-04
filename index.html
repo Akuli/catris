@@ -208,7 +208,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const lineEnd = lineStart + WIDTH;
       const terminalEnd = i < (WIDTH + 1)*HEIGHT;
 
-      const lines = [" ".repeat(lineEnd - this._cursorPos) + "\n"];
+      const lines = [" ".repeat(WIDTH - lineStartToCursor) + "\n"];
       for (let i = lineEnd + 1; i < (WIDTH + 1)*HEIGHT; i += WIDTH+1) {
         lines.push(" ".repeat(WIDTH) + "\n");
       }
