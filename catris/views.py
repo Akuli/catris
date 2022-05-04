@@ -15,6 +15,7 @@ from catris.ansi import (
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
 )
+from catris.connections import WebSocketConnection
 from catris.games import GAME_CLASSES, Game, RingGame
 from catris.player import Player
 from catris.squares import Square
@@ -362,11 +363,12 @@ class ChooseGameView(MenuView):
 
         if not self._should_show_cannot_join_error():
             game_class = GAME_CLASSES[self.selected_index]
-            if self._client.user_can_resize_terminal:
-                self._client.view = CheckTerminalSizeView(self._client, game_class)
-            else:
+            if isinstance(self._client.connection, WebSocketConnection):
+                # Skip adjusting terminal size. Isn't adjustable in web ui
                 assert self._client.lobby is not None
                 self._client.lobby.start_game(self._client, game_class)
+            else:
+                self._client.view = CheckTerminalSizeView(self._client, game_class)
         return False
 
 
