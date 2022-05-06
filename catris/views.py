@@ -436,7 +436,10 @@ class GameOverView(View):
         lines.append(b"")
         lines.append(b"=== HIGH SCORES ".ljust(80, b"="))
         lines.append(b"")
-        lines.append(b"| Score | Duration | Players")
+        if len(self.new_high_score.players) >= 2:
+            lines.append(b"| Score | Duration | Players")
+        else:
+            lines.append(b"| Score | Duration | Player")
         lines.append(b"|-------|----------|-------".ljust(80, b"-"))
 
         for hs in self._high_scores:
