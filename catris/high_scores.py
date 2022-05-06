@@ -62,7 +62,15 @@ def _add_high_score_sync(
             for line in file:
                 parts = line.strip("\n").split("\t")
                 game_class_id, lobby_id, score, duration, *players = parts
-                if game_class_id == game_class.ID:
+                old_high_score_is_multiplayer = len(players) >= 2
+                new_high_score_is_multiplayer = len(hs.players) >= 2
+
+                # If new high score is from a multiplayer game, return multiplayer high scores.
+                # If not, return single player high scores.
+                if (
+                    game_class_id == game_class.ID
+                    and old_high_score_is_multiplayer == new_high_score_is_multiplayer
+                ):
                     high_scores.append(
                         HighScore(
                             score=int(score),
