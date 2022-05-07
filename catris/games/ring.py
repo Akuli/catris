@@ -140,77 +140,23 @@ class RingGame(Game):
 
         full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
             max(abs(x), abs(y))
-            for x, y in self.valid_landed_coordinates
-            - landed_squares_by_location.keys()
+            for x, y in (
+                self.valid_landed_coordinates - landed_squares_by_location.keys()
+            )
         }
 
-        # Lines represented as (dir_x, dir_y, list_of_points) tuples.
-        # Direction vector is how other landed blocks will be moved.
-        lines = []
+        yield {
+            square
+            for square in self.landed_squares
+            if max(abs(square.x), abs(square.y)) in full_radiuses
+        }
 
-        for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
-            dir_x = 0
-            dir_y = -1 if y > 0 else 1
-            map_row = MAP[y + GAME_RADIUS + 1]
-            for match in re.finditer(rb"(xx)+", map_row):
-                first_x = match.start() // 2 - GAME_RADIUS
-                last_x = match.end() // 2 - GAME_RADIUS
-                points = [(x, y) for x in range(first_x, last_x + 1)]
+        self.score += 100 * len(full_radiuses)
 
-                # We have figured out where to put horizontal lines, but we can
-                # just rotate 90deg to get vertical lines too.
-                #
-                # FIXME: horizontal clearing appears not work
-                lines.append((dir_x, dir_y, points))
-                lines.append((dir_y, -dir_x, [(y, -x) for x, y in points]))
-
-        full_lines = []
-        for dir_x, dir_y, points in lines:
-            if all(p in landed_squares_by_location for p in points):
-                squares = [landed_squares_by_location[p] for p in points]
-                full_lines.append((dir_x, dir_y, squares))
-
-        yield (
-            {square for dx, dy, squares in full_lines for square in squares}
-            | {
-                square
-                for square in self.landed_squares
-                if max(abs(square.x), abs(square.y)) in full_radiuses
-            }
-        )
-
-        self.score += 10 * len(full_lines) + 100 * len(full_radiuses)
-
-        # Remove lines in order where removing first line doesn't mess up
-        # coordinates of second, etc
-        def sorting_key(line: tuple[int, int, list[Square]]) -> int:
-            dir_x, dir_y, points = line
-            square = squares[0]  # any square would do
-            return dir_x * square.x + dir_y * square.y
-
-        for dir_x, dir_y, squares in sorted(full_lines, key=sorting_key):
-            self._delete_line(dir_x, dir_y, squares)
         for r in full_radiuses:  # must be in the correct order!
             self._delete_ring(r)
 
         self.finish_wiping_full_lines()
-
-    def _delete_line(self, dir_x: int, dir_y: int, squares: list[Square]) -> None:
-        # dot product describes where it is along the direction, and is same for all points
-        # determinant describes where it is in the opposite direction
-        point_and_dir_dot_product = dir_x * squares[0].x + dir_y * squares[0].y
-        point_and_dir_determinants = [dir_y * s.x - dir_x * s.y for s in squares]
-
-        self.landed_squares -= set(squares)
-        for square in self.landed_squares:
-            # If square aligns with the line and the direction points towards
-            # the line, then move it
-            if (
-                dir_y * square.x - dir_x * square.y in point_and_dir_determinants
-                and square.x * dir_x + square.y * dir_y < point_and_dir_dot_product
-            ):
-                square.x += dir_x
-                square.y += dir_y
 
     def _delete_ring(self, r: int) -> None:
         for square in self.landed_squares.copy():
