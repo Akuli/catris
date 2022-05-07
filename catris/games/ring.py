@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import textwrap
 from typing import Iterator
 
@@ -55,11 +54,12 @@ oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo
            'o------------------------------------------------------o'
 """.splitlines()
 
-# Game size is actually 2*GAME_RADIUS + 1 in each direction.
-GAME_RADIUS = 19
-assert len(MAP) == 2 * GAME_RADIUS + 3  # 1 for middle, 2 for ends
-
 MIDDLE_AREA_RADIUS = 3
+GAME_RADIUS = (len(MAP) - 2) // 2
+
+# Playing area is actually 2*GAME_RADIUS + 1 in each direction.
+assert max(line.count(b"xx") for line in MAP) == 2 * GAME_RADIUS + 1
+assert len([line for line in MAP if b"xx" in line]) == 2 * GAME_RADIUS + 1
 
 
 def wrap_names(players_by_letter: dict[str, Player]) -> dict[str, list[str]]:
@@ -105,7 +105,7 @@ class RingGame(Game):
     ID = "ring"
 
     TERMINAL_WIDTH_NEEDED = max(len(row) for row in MAP) + 22
-    TERMINAL_HEIGHT_NEEDED = len(MAP)
+    TERMINAL_HEIGHT_NEEDED = len(MAP) + 1
 
     MAX_PLAYERS = 4
 
@@ -134,15 +134,10 @@ class RingGame(Game):
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
-        landed_squares_by_location = {
-            (square.x, square.y): square for square in self.landed_squares
-        }
-
+        landed_locations = {(s.x, s.y) for s in self.landed_squares}
         full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
             max(abs(x), abs(y))
-            for x, y in (
-                self.valid_landed_coordinates - landed_squares_by_location.keys()
-            )
+            for x, y in (self.valid_landed_coordinates - landed_locations)
         }
 
         yield {
@@ -153,7 +148,8 @@ class RingGame(Game):
 
         self.score += 100 * len(full_radiuses)
 
-        for r in full_radiuses:  # must be in the correct order!
+        # TODO: not sure about the order here?
+        for r in sorted(full_radiuses, reverse=True):
             self._delete_ring(r)
 
         self.finish_wiping_full_lines()
