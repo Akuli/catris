@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import textwrap
 from typing import Iterator
 
@@ -10,24 +11,101 @@ from catris.squares import Square
 from .game_base_class import Game
 
 
+MAP = b"""\
+           .o------------------------------------------------------o.
+         .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+       .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+     .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+   .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+ .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
+oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo============oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|wwwwwwwwwwww|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|ssssssssssss|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo------------oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo
+ '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'
+   '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'
+     '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'
+       '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'
+         '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'
+           'o------------------------------------------------------o'
+""".splitlines()
+
+# Game size is actually 2*GAME_RADIUS + 1 in each direction.
+GAME_RADIUS = 19
+assert len(MAP) == 2 * GAME_RADIUS + 3  # 1 for middle, 2 for ends
+
+MIDDLE_AREA_RADIUS = 3
+
+
+def wrap_names(players_by_letter: dict[str, Player]) -> dict[str, list[str]]:
+    wrapped_names = {}
+
+    for letter in "wasd":
+        widths = [line.count(ord(letter)) for line in MAP if ord(letter) in line]
+        if letter in players_by_letter:
+            text = players_by_letter[letter].get_name_string(max_length=sum(widths))
+        else:
+            text = ""
+
+        wrapped = textwrap.wrap(text, min(widths))
+        if len(wrapped) > len(widths):
+            # We must ignore word boundaries to make it fit
+            wrapped = []
+            for w in widths:
+                wrapped.append(text[:w])
+                text = text[w:]
+                if not text:
+                    break
+            assert not text
+
+        lines_to_add = len(widths) - len(wrapped)
+        prepend_count = lines_to_add // 2
+        append_count = lines_to_add - prepend_count
+        wrapped = [""] * prepend_count + wrapped + [""] * append_count
+
+        if letter == "a":
+            wrapped = [line.ljust(width) for width, line in zip(widths, wrapped)]
+        elif letter == "d":
+            wrapped = [line.rjust(width) for width, line in zip(widths, wrapped)]
+        else:
+            wrapped = [line.center(width) for width, line in zip(widths, wrapped)]
+
+        wrapped_names[letter] = wrapped
+
+    return wrapped_names
+
+
 class RingGame(Game):
     NAME = "Ring game"
     ID = "ring"
 
-    # Game size is actually 2*GAME_RADIUS + 1 in each direction.
-    GAME_RADIUS = 14  # chosen to fit 80 column terminal (windows)
-    TERMINAL_HEIGHT_NEEDED = 2 * GAME_RADIUS + 4
-
-    MIDDLE_AREA_RADIUS = 3
-    MIDDLE_AREA = [
-        "o============o",
-        "|wwwwwwwwwwww|",
-        "|aaaaaadddddd|",
-        "|aaaaaadddddd|",
-        "|aaaaaadddddd|",
-        "|ssssssssssss|",
-        "o------------o",
-    ]
+    TERMINAL_WIDTH_NEEDED = max(len(row) for row in MAP) + 22
+    TERMINAL_HEIGHT_NEEDED = len(MAP)
 
     MAX_PLAYERS = 4
 
@@ -35,91 +113,10 @@ class RingGame(Game):
         super().__init__()
         self.valid_landed_coordinates = {
             (x, y)
-            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-            for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-            if max(abs(x), abs(y)) > self.MIDDLE_AREA_RADIUS
+            for x in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
+            if MAP[y + GAME_RADIUS + 1][2 * (x + GAME_RADIUS) + 1 :].startswith(b"xx")
         }
-
-    @classmethod
-    def _get_middle_area_content(
-        cls, players_by_letter: dict[str, Player]
-    ) -> list[bytes]:
-        wrapped_names = {}
-        colors = {}
-
-        for letter in "wasd":
-            widths = [line.count(letter) for line in cls.MIDDLE_AREA if letter in line]
-
-            if letter in players_by_letter:
-                colors[letter] = players_by_letter[letter].color
-                text = players_by_letter[letter].get_name_string(max_length=sum(widths))
-            else:
-                colors[letter] = 0
-                text = ""
-
-            wrapped = textwrap.wrap(text, min(widths))
-            if len(wrapped) > len(widths):
-                # We must ignore word boundaries to make it fit
-                wrapped = []
-                for w in widths:
-                    wrapped.append(text[:w])
-                    text = text[w:]
-                    if not text:
-                        break
-                assert not text
-
-            lines_to_add = len(widths) - len(wrapped)
-            prepend_count = lines_to_add // 2
-            append_count = lines_to_add - prepend_count
-            wrapped = [""] * prepend_count + wrapped + [""] * append_count
-
-            if letter == "a":
-                wrapped = [line.ljust(width) for width, line in zip(widths, wrapped)]
-            elif letter == "d":
-                wrapped = [line.rjust(width) for width, line in zip(widths, wrapped)]
-            else:
-                wrapped = [line.center(width) for width, line in zip(widths, wrapped)]
-
-            wrapped_names[letter] = wrapped
-
-        result = []
-        for template_line_string in cls.MIDDLE_AREA:
-            template_line = template_line_string.encode("ascii")
-
-            # Apply colors to lines surrounding the middle area
-            template_line = template_line.replace(
-                b"o==", b"o" + (COLOR % colors["w"]) + b"=="
-            )
-            template_line = template_line.replace(b"==o", b"==" + (COLOR % 0) + b"o")
-            template_line = template_line.replace(
-                b"o--", b"o" + (COLOR % colors["s"]) + b"--"
-            )
-            template_line = template_line.replace(b"--o", b"--" + (COLOR % 0) + b"o")
-            if template_line.startswith(b"|"):
-                template_line = (
-                    (COLOR % colors["a"]) + b"|" + (COLOR % 0) + template_line[1:]
-                )
-            if template_line.endswith(b"|"):
-                template_line = (
-                    template_line[:-1] + (COLOR % colors["d"]) + b"|" + (COLOR % 0)
-                )
-
-            result_line = b""
-            while template_line:
-                if template_line[0] in b"wasd":
-                    letter = template_line[:1].decode("ascii")
-                    result_line += (
-                        (COLOR % colors[letter])
-                        + wrapped_names[letter].pop(0).encode("utf-8")
-                        + (COLOR % 0)
-                    )
-                    template_line = template_line.replace(template_line[:1], b"")
-                else:
-                    result_line += template_line[:1]
-                    template_line = template_line[1:]
-            result.append(result_line)
-
-        return result
 
     def is_valid(self) -> bool:
         if not super().is_valid():
@@ -127,77 +124,46 @@ class RingGame(Game):
 
         for player, block in self._get_moving_blocks().items():
             for square in block.squares:
-                if max(abs(square.x), abs(square.y)) <= self.MIDDLE_AREA_RADIUS:
-                    # print("Invalid state: moving block inside middle area")
-                    return False
                 player_x, player_y = player.world_to_player(square.x, square.y)
-                if player_x < -self.GAME_RADIUS or player_x > self.GAME_RADIUS:
-                    # print("Invalid state: moving block out of horizontal bounds")
+                if player_y < -GAME_RADIUS:
+                    # Square above game. Treat it like the first row of map
+                    player_y = -GAME_RADIUS
+                if (player_x, player_y) not in self.valid_landed_coordinates:
                     return False
         return True
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
-        all_radiuses_with_duplicates = [
-            max(abs(square.x), abs(square.y)) for square in self.landed_squares
-        ]
-        full_radiuses = [
-            r
-            for r in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
-            if all_radiuses_with_duplicates.count(r) == 8 * r
-        ]
+        landed_squares_by_location = {
+            (square.x, square.y): square for square in self.landed_squares
+        }
+
+        full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
+            max(abs(x), abs(y))
+            for x, y in self.valid_landed_coordinates
+            - landed_squares_by_location.keys()
+        }
 
         # Lines represented as (dir_x, dir_y, list_of_points) tuples.
         # Direction vector is how other landed blocks will be moved.
         lines = []
 
-        # Horizontal lines
-        for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
+        for y in range(-GAME_RADIUS, GAME_RADIUS + 1):
             dir_x = 0
             dir_y = -1 if y > 0 else 1
-            if abs(y) > self.MIDDLE_AREA_RADIUS:
-                points = [
-                    (x, y) for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-                ]
-                lines.append((dir_x, dir_y, points))
-            else:
-                # left side
-                points = [
-                    (x, y) for x in range(-self.GAME_RADIUS, -self.MIDDLE_AREA_RADIUS)
-                ]
-                lines.append((dir_x, dir_y, points))
-                # right side
-                points = [
-                    (x, y)
-                    for x in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
-                ]
-                lines.append((dir_x, dir_y, points))
+            map_row = MAP[y + GAME_RADIUS + 1]
+            for match in re.finditer(rb"(xx)+", map_row):
+                first_x = match.start() // 2 - GAME_RADIUS
+                last_x = match.end() // 2 - GAME_RADIUS
+                points = [(x, y) for x in range(first_x, last_x + 1)]
 
-        # Vertical lines
-        for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
-            dir_x = -1 if x > 0 else 1
-            dir_y = 0
-            if abs(x) > self.MIDDLE_AREA_RADIUS:
-                points = [
-                    (x, y) for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1)
-                ]
+                # We have figured out where to put horizontal lines, but we can
+                # just rotate 90deg to get vertical lines too.
+                #
+                # FIXME: horizontal clearing appears not work
                 lines.append((dir_x, dir_y, points))
-            else:
-                # top side
-                points = [
-                    (x, y) for y in range(-self.GAME_RADIUS, -self.MIDDLE_AREA_RADIUS)
-                ]
-                lines.append((dir_x, dir_y, points))
-                # bottom side
-                points = [
-                    (x, y)
-                    for y in range(self.MIDDLE_AREA_RADIUS + 1, self.GAME_RADIUS + 1)
-                ]
-                lines.append((dir_x, dir_y, points))
+                lines.append((dir_y, -dir_x, [(y, -x) for x, y in points]))
 
-        landed_squares_by_location = {
-            (square.x, square.y): square for square in self.landed_squares
-        }
         full_lines = []
         for dir_x, dir_y, points in lines:
             if all(p in landed_squares_by_location for p in points):
@@ -287,9 +253,9 @@ class RingGame(Game):
             square.wrap_around_end = True
 
         if square.wrap_around_end:
-            y += self.GAME_RADIUS
-            y %= 2 * self.GAME_RADIUS + 1
-            y -= self.GAME_RADIUS
+            y += GAME_RADIUS
+            y %= 2 * GAME_RADIUS + 1
+            y -= GAME_RADIUS
             square.x, square.y = player.player_to_world(x, y)
 
     def add_player(self, name: str, color: int) -> Player:
@@ -309,17 +275,16 @@ class RingGame(Game):
             color,
             up_x,
             up_y,
-            moving_block_start_x=(self.GAME_RADIUS + 1) * up_x,
-            moving_block_start_y=(self.GAME_RADIUS + 1) * up_y,
+            moving_block_start_x=(GAME_RADIUS + 1) * up_x,
+            moving_block_start_y=(GAME_RADIUS + 1) * up_y,
         )
         self.players.append(player)
         return player
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
-        lines = []
-        lines.append(b"o" + b"--" * (2 * self.GAME_RADIUS + 1) + b"o")
-
         players_by_letter = {}
+        colors_by_letter = {"w": 0, "a": 0, "s": 0, "d": 0}
+
         for player in self.players:
             relative_direction = rendering_for_this_player.world_to_player(
                 player.up_x, player.up_y
@@ -328,31 +293,55 @@ class RingGame(Game):
                 relative_direction
             ]
             players_by_letter[letter] = player
+            colors_by_letter[letter] = player.color
 
-        middle_area_content = self._get_middle_area_content(players_by_letter)
         square_texts = self.get_square_texts(rendering_for_this_player)
+        wrapped_names = wrap_names(players_by_letter)
 
-        for y in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
-            insert_middle_area_here = None
-            line = b"|"
-            for x in range(-self.GAME_RADIUS, self.GAME_RADIUS + 1):
-                if max(abs(x), abs(y)) <= self.MIDDLE_AREA_RADIUS:
-                    insert_middle_area_here = len(line)
-                    continue
-                line += square_texts.get(
-                    rendering_for_this_player.player_to_world(x, y), b"  "
-                )
+        lines = []
 
-            line += b"|"
+        for y, map_row in enumerate(MAP, start=-GAME_RADIUS - 1):
+            result_line = b""
+            map_x = 0
+            while map_x < len(map_row):
+                x = map_x // 2 - GAME_RADIUS
+                if map_row.startswith(b"xx", map_x):
+                    result_line += square_texts.get(
+                        rendering_for_this_player.player_to_world(x, y), b"  "
+                    )
+                    map_x += 2
+                elif map_row.startswith(b"=", map_x):
+                    n = map_row.count(b"=")
+                    result_line += (
+                        (COLOR % colors_by_letter["w"]) + b"=" * n + (COLOR % 0)
+                    )
+                    map_x += n
+                elif map_row.startswith(b"-", map_x) and 0 < y < 10:
+                    n = map_row.count(b"-")
+                    result_line += (
+                        (COLOR % colors_by_letter["s"]) + b"-" * n + (COLOR % 0)
+                    )
+                    map_x += n
+                elif abs(x) < 10 and map_row.startswith(b"|", map_x):
+                    if x < 0:
+                        result_line += (
+                            (COLOR % colors_by_letter["a"]) + b"|" + (COLOR % 0)
+                        )
+                    else:
+                        result_line += (
+                            (COLOR % colors_by_letter["d"]) + b"|" + (COLOR % 0)
+                        )
+                    map_x += 1
+                elif map_row.startswith((b"w", b"a", b"s", b"d"), map_x):
+                    letter = chr(map_row[map_x])
+                    result_line += COLOR % colors_by_letter[letter]
+                    result_line += wrapped_names[letter].pop(0).encode("utf-8")
+                    result_line += COLOR % 0
+                    map_x += map_row.count(letter.encode("ascii"))
+                else:
+                    result_line += map_row[map_x : map_x + 1]
+                    map_x += 1
 
-            if insert_middle_area_here is not None:
-                line = (
-                    line[:insert_middle_area_here]
-                    + middle_area_content[y + self.MIDDLE_AREA_RADIUS]
-                    + line[insert_middle_area_here:]
-                )
+            lines.append(result_line)
 
-            lines.append(line)
-
-        lines.append(b"o" + b"--" * (2 * self.GAME_RADIUS + 1) + b"o")
         return lines

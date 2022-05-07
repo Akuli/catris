@@ -378,7 +378,7 @@ class CheckTerminalSizeView(View):
         self._game_class = game_class
 
     def get_lines_to_render(self) -> list[bytes]:
-        width = 80
+        width = self._game_class.TERMINAL_WIDTH_NEEDED
         height = self._game_class.TERMINAL_HEIGHT_NEEDED
 
         text_lines = [
