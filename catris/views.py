@@ -365,6 +365,8 @@ class ChooseGameView(MenuView):
             game_class = GAME_CLASSES[self.selected_index]
             if isinstance(self._client.connection, WebSocketConnection):
                 # Skip adjusting terminal size. Isn't adjustable in web ui
+                # TODO: most things look best in 80x24, web ui should adjust automagically?
+                # TODO: https://stackoverflow.com/a/35688423
                 assert self._client.lobby is not None
                 self._client.lobby.start_game(self._client, game_class)
             else:
