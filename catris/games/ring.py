@@ -241,6 +241,8 @@ class RingGame(Game):
         lines = []
 
         for y, map_row in enumerate(MAP, start=-GAME_RADIUS - 1):
+            map_row = map_row.ljust(max(map(len, MAP)))
+
             result_line = b""
             map_x = 0
             while map_x < len(map_row):
