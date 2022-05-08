@@ -365,6 +365,8 @@ class ChooseGameView(MenuView):
             game_class = GAME_CLASSES[self.selected_index]
             if isinstance(self._client.connection, WebSocketConnection):
                 # Skip adjusting terminal size. Isn't adjustable in web ui
+                # TODO: most things look best in 80x24, web ui should adjust automagically?
+                # TODO: https://stackoverflow.com/a/35688423
                 assert self._client.lobby is not None
                 self._client.lobby.start_game(self._client, game_class)
             else:
@@ -378,7 +380,7 @@ class CheckTerminalSizeView(View):
         self._game_class = game_class
 
     def get_lines_to_render(self) -> list[bytes]:
-        width = 80
+        width = self._game_class.TERMINAL_WIDTH_NEEDED
         height = self._game_class.TERMINAL_HEIGHT_NEEDED
 
         text_lines = [

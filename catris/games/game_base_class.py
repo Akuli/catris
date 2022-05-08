@@ -14,6 +14,7 @@ from catris.squares import BombSquare, DrillSquare, Square, create_moving_square
 class Game:
     NAME: ClassVar[str]
     ID: ClassVar[str]
+    TERMINAL_WIDTH_NEEDED: ClassVar[int] = 80
     TERMINAL_HEIGHT_NEEDED: ClassVar[int]
     MAX_PLAYERS: ClassVar[int]
 
