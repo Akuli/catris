@@ -43,7 +43,7 @@ class HighScore:
         hours = minutes // 60
 
         if hours:
-            return f"{hours}h"
+            return f"{hours}h {minutes - 60*hours}min"
         if minutes:
             return f"{minutes}min"
         return f"{seconds}sec"
