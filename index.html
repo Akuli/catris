@@ -354,8 +354,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
-    document.body.innerHTML = "Disconnected.";
+    terminal.clear();
+    terminal.moveCursor(0, 0);
+    terminal.addText("Disconnected.");
   };
+
+  if (!navigator.userAgent.includes("Windows")) {
+    document.getElementById("netcat-instructions").innerHTML =
+      "<p>You can also play this game on a terminal:</p><pre></pre>";
+    document.querySelector("#netcat-instructions > pre").textContent =
+      `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+  }
 });
     </script>
     <style>
@@ -365,11 +374,11 @@ body {
 }
 
 #terminal-container {
-  position: relative;
+  display: grid;
 }
 
 #terminal, #cursor-overlay {
-  position: absolute;
+  grid-area: 1 / 1;  /* https://stackoverflow.com/a/55475793 */
   padding: 0.2em;
   border-radius: 0.5em;
   color: white;
@@ -404,5 +413,6 @@ body {
       <pre id="terminal"><span></span></pre>
       <pre id="cursor-overlay"></pre>
     </div>
+    <div id="netcat-instructions"></div>
   </body>
 </html>
