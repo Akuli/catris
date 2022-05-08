@@ -48,27 +48,24 @@ document.addEventListener("DOMContentLoaded", () => {
     '107': {bg: '#EEEEEC'},
   };
 
-  // these should be enough for ring game
-  WIDTH = 98;
-  HEIGHT = 40;
-
   const terminal = new class {
     constructor() {
       this._pre = document.getElementById("terminal");
-      this._pre.style.width = WIDTH + "ch";
 
       this._cursorPos = 0;  // index into the text as a string including \n chars
       this._cursorIsShowing = true;
 
       this.fgColor = COLORS['0'].fg;
       this.bgColor = COLORS['0'].bg;
+      this.width = 80;
+      this.height = 24;
       this.clear();
     }
 
     clear() {
       this._pre.innerHTML = "<span></span>";
       const span = this._pre.querySelector("span");
-      span.textContent = (" ".repeat(WIDTH) + "\n").repeat(HEIGHT);
+      span.textContent = (" ".repeat(this.width) + "\n").repeat(this.height);
       this._applyStyle(span);
     }
 
@@ -78,18 +75,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     moveCursor(x, y) {
-      this._cursorPos = y*(WIDTH + 1) + x;
+      if(x<0) x=0;
+      if(y<0) y=0;
+      if (x >= this.width) x = this.width-1;
+      if (y >= this.height) y = this.height-1;
+
+      this._cursorPos = y*(this.width + 1) + x;
     }
 
     moveCursorToStartOfLine() {
-      const lineStartToCursor = this._cursorPos % (WIDTH + 1);
+      const lineStartToCursor = this._cursorPos % (this.width + 1);
       this._cursorPos -= lineStartToCursor;
     }
 
     moveCursorDown() {
-      this._cursorPos += WIDTH + 1;
+      this._cursorPos += this.width + 1;
 
-      const end = (WIDTH + 1)*HEIGHT;
+      const end = (this.width + 1)*this.height;
       if (this._cursorPos > end) {
         this._cursorPos = end;
       }
@@ -198,35 +200,73 @@ document.addEventListener("DOMContentLoaded", () => {
       this._insertText(startIndex, text);
     }
 
+    resize(newWidth, newHeight) {
+      const cursorX = this._cursorPos % (this.width + 1);
+      const cursorY = Math.floor(this._cursorPos / (this.width + 1));
+
+      if (newHeight > this.height) {
+        const oldEnd = (this.width + 1)*this.height;
+        const blankLine = " ".repeat(this.width) + "\n";
+        this._insertText(oldEnd, blankLine.repeat(newHeight - this.height));
+      }
+      if (newHeight < this.height) {
+        const newEnd = (this.width + 1)*newHeight;
+        const oldEnd = (this.width + 1)*this.height;
+        this._deleteText(newEnd, oldEnd);
+      }
+      this.height = newHeight;
+
+      if (newWidth > this.width) {
+        const extraBlanks = " ".repeat(newWidth - this.width);
+        for (let i = this.height - 1; i >= 0; i--) {
+          const lineStart = (this.width + 1)*i;
+          const lineEnd = lineStart + this.width;
+          this._insertText(lineEnd, extraBlanks);
+        }
+      }
+      if (newWidth < this.width) {
+        for (let i = this.height - 1; i >= 0; i--) {
+          const lineStart = (this.width + 1)*i;
+          const oldLineEnd = lineStart + this.width;
+          const newLineEnd = lineStart + newWidth;
+          this._deleteText(newLineEnd, oldLineEnd);
+        }
+      }
+      this.width = newWidth;
+
+      this._pre.style.width = newWidth + "ch";
+      this.moveCursor(cursorX, cursorY);
+    }
+
     clearFromCursorToEndOfLine() {
-      const lineStartToCursor = this._cursorPos % (WIDTH + 1)
-      this._replaceText(this._cursorPos, " ".repeat(WIDTH - lineStartToCursor) + '\n');
+      const lineStartToCursor = this._cursorPos % (this.width + 1)
+      this._replaceText(this._cursorPos, " ".repeat(this.width - lineStartToCursor) + '\n');
     }
 
     clearFromCursorToEndOfScreen() {
-      const lineStartToCursor = this._cursorPos % (WIDTH + 1)
+      const lineStartToCursor = this._cursorPos % (this.width + 1)
       const lineStart = this._cursorPos - lineStartToCursor;
-      const lineEnd = lineStart + WIDTH;
-      const terminalEnd = i < (WIDTH + 1)*HEIGHT;
+      const lineEnd = lineStart + this.width;
+      const terminalEnd = i < (this.width + 1)*this.height;
 
-      const lines = [" ".repeat(WIDTH - lineStartToCursor) + "\n"];
-      for (let i = lineEnd + 1; i < (WIDTH + 1)*HEIGHT; i += WIDTH+1) {
-        lines.push(" ".repeat(WIDTH) + "\n");
+      const lines = [" ".repeat(this.width - lineStartToCursor) + "\n"];
+      for (let i = lineEnd + 1; i < (this.width + 1)*this.height; i += this.width+1) {
+        lines.push(" ".repeat(this.width) + "\n");
       }
 
       this._replaceText(this._cursorPos, lines.join(""));
     }
 
     addText(text) {
-      const lineStartToCursor = this._cursorPos % (WIDTH + 1);
-      const firstLineLength = WIDTH - lineStartToCursor;
+      const lineStartToCursor = this._cursorPos % (this.width + 1);
+      const firstLineLength = this.width - lineStartToCursor;
 
       const lines = [text.slice(0, firstLineLength)];
-      for (let i = firstLineLength; i < text.length; i += WIDTH) {
-        lines.push(text.slice(i, i+WIDTH));
+      for (let i = firstLineLength; i < text.length; i += this.width) {
+        lines.push(text.slice(i, i+this.width));
       }
 
-      const end = (WIDTH + 1)*HEIGHT;
+      const end = (this.width + 1)*this.height;
       const howMuchFits = end - this._cursorPos;
       const toInsert = lines.join("\n").slice(0, howMuchFits);
       this._replaceText(this._cursorPos, toInsert);
@@ -235,8 +275,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _updateCursor() {
       if (this._cursorIsShowing) {
-        const x = this._cursorPos % (WIDTH + 1);
-        const y = Math.floor(this._cursorPos / (WIDTH + 1));
+        const x = this._cursorPos % (this.width + 1);
+        const y = Math.floor(this._cursorPos / (this.width + 1));
         document.getElementById("cursor-overlay").textContent = "\n".repeat(y) + " ".repeat(x) + "█";
       } else {
         document.getElementById("cursor-overlay").textContent = "";
@@ -261,6 +301,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const colorInfo = COLORS[ansiCode.slice(4, -1)];
         if (colorInfo.fg) this.fgColor = colorInfo.fg;
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
+      } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
+        const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
+        this.resize(width, height);
       } else {
         console.warn("Unknown ANSI escape sequence: " + ansiCode);
       }
