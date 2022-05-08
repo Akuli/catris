@@ -368,6 +368,11 @@ body {
   text-align: left;
 }
 
+#terminal > span::selection {
+  color: black;
+  background-color: white;
+}
+
 #terminal {
   background-color: black;
 }
@@ -375,6 +380,7 @@ body {
 #cursor-overlay {
   background: transparent;
   animation: blinking_cursor 1s step-start infinite;
+  pointer-events: none;  /* allow selecting text */
 }
 
 /* https://stackoverflow.com/a/48320520 */
