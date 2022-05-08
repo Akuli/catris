@@ -354,8 +354,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
-    document.body.innerHTML = "Disconnected.";
+    document.getElementById("terminal").innerHTML = "Disconnected.";
   };
+
+  if (!navigator.platform.startsWith("Win")) {
+    document.getElementById("netcat-instructions").innerHTML = `
+    <p>You can also play this game on a terminal:</p>
+    <pre>$ stty raw; nc ${window.location.hostname} 12345; stty cooked</pre>
+    `
+  }
 });
     </script>
     <style>
@@ -400,9 +407,12 @@ body {
     </style>
   </head>
   <body>
-    <div id="terminal-container">
-      <pre id="terminal"><span></span></pre>
-      <pre id="cursor-overlay"></pre>
+    <div>
+      <div id="terminal-container">
+        <pre id="terminal"><span></span></pre>
+        <pre id="cursor-overlay"></pre>
+      </div>
     </div>
+    <div id="netcat-instructions"></div>
   </body>
 </html>
