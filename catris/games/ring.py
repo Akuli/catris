@@ -145,7 +145,6 @@ class RingGame(Game):
 
         self.score += 100 * len(full_radiuses)
 
-        # TODO: not sure about the order here?
         for r in sorted(full_radiuses, reverse=True):
             self._delete_ring(r)
 
