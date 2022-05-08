@@ -188,8 +188,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // New span is not at the start of any span and not inside any span.
       // It must be after all other spans.
       console.assert(index === spanStart);
-      this._div.appendChild(span);
-      this._mergeWithPreviousSpanIfPossible(span);
+      this._pre.appendChild(newSpan);
+      this._mergeWithPreviousSpanIfPossible(newSpan);
     }
 
     _replaceText(startIndex, text) {
