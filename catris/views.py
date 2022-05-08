@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from catris.ansi import (
     BACKSPACE,
-    CLEAR_SCREEN,
     COLOR,
     CSI,
     DOWN_ARROW_KEY,
@@ -15,7 +14,6 @@ from catris.ansi import (
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
 )
-from catris.connections import WebSocketConnection
 from catris.games import GAME_CLASSES, Game, RingGame
 from catris.player import Player
 from catris.squares import Square
@@ -363,49 +361,9 @@ class ChooseGameView(MenuView):
 
         if not self._should_show_cannot_join_error():
             game_class = GAME_CLASSES[self.selected_index]
-            if isinstance(self._client.connection, WebSocketConnection):
-                # Skip adjusting terminal size. Isn't adjustable in web ui
-                # TODO: most things look best in 80x24, web ui should adjust automagically?
-                # TODO: https://stackoverflow.com/a/35688423
-                assert self._client.lobby is not None
-                self._client.lobby.start_game(self._client, game_class)
-            else:
-                self._client.view = CheckTerminalSizeView(self._client, game_class)
-        return False
-
-
-class CheckTerminalSizeView(View):
-    def __init__(self, client: Client, game_class: type[Game]):
-        self._client = client
-        self._game_class = game_class
-
-    def get_lines_to_render(self) -> list[bytes]:
-        width = self._game_class.TERMINAL_WIDTH_NEEDED
-        height = self._game_class.TERMINAL_HEIGHT_NEEDED
-
-        text_lines = [
-            b"Please resize this window so that you can see",
-            b"the entire rectangle. Press Enter when done.",
-        ]
-
-        lines = [b"|" + b" " * (width - 2) + b"|"] * height
-        lines[0] = lines[-1] = b"o" + b"-" * (width - 2) + b"o"
-        for index, line in enumerate(text_lines):
-            lines[2 + index] = b"|" + line.center(width - 2) + b"|"
-            lines[-2 - len(text_lines) + index] = b"|" + line.center(width - 2) + b"|"
-
-        return lines
-
-    def handle_key_press(self, received: bytes) -> None:
-        if received == b"\r":
-            # rendering this view is a bit special :)
-            #
-            # Make sure screen clears before changing view, even if the next
-            # view isn't actually as tall as this view. This can happen if a
-            # game was full and you're thrown back to main menu.
-            self._client._send_bytes(CLEAR_SCREEN)
             assert self._client.lobby is not None
-            self._client.lobby.start_game(self._client, self._game_class)
+            self._client.lobby.start_game(self._client, game_class)
+        return False
 
 
 class GameOverView(View):

@@ -9,6 +9,9 @@ HIDE_CURSOR = CSI + b"?25l"
 COLOR = CSI + b"1;%dm"  # "COLOR % 0" resets to default colors
 CLEAR_TO_END_OF_LINE = CSI + b"0K"
 
+# https://apple.stackexchange.com/a/47841
+RESIZE = CSI + b"8;%d;%dt"
+
 # figured out with prints
 CONTROL_C = b"\x03"
 CONTROL_D = b"\x04"
