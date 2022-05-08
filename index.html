@@ -360,10 +360,10 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   if (!navigator.platform.startsWith("Win")) {
-    document.getElementById("netcat-instructions").innerHTML = `
-    <p>You can also play this game on a terminal:</p>
-    <pre>$ stty raw; nc ${window.location.hostname} 12345; stty cooked</pre>
-    `
+    document.getElementById("netcat-instructions").innerHTML =
+      "<p>You can also play this game on a terminal:</p><pre></pre>";
+    document.querySelector("#netcat-instructions > pre").textContent =
+      `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
   }
 });
     </script>
