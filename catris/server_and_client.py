@@ -23,11 +23,12 @@ from catris.ansi import (
     ESC,
     HIDE_CURSOR,
     MOVE_CURSOR,
+    RESIZE,
     SHOW_CURSOR,
 )
 from catris.connections import RawTCPConnection, WebSocketConnection
 from catris.lobby import Lobby
-from catris.views import AskNameView, CheckTerminalSizeView, TextEntryView, View
+from catris.views import AskNameView, PlayingView, TextEntryView, View
 
 
 class Server:
@@ -105,16 +106,6 @@ class Client:
         logging.log(level, f"(client {self._client_id}) {msg}")
 
     def render(self, *, force_redraw: bool = False) -> None:
-        if isinstance(self.view, CheckTerminalSizeView):
-            # Very different from other views
-            self._last_displayed_lines.clear()
-            self._send_bytes(
-                CLEAR_SCREEN
-                + (MOVE_CURSOR % (1, 1))
-                + b"\r\n".join(self.view.get_lines_to_render())
-            )
-            return
-
         lines = self.view.get_lines_to_render()
         if isinstance(lines, tuple):
             lines, cursor_pos = lines
@@ -129,6 +120,15 @@ class Client:
 
         if self._last_rendered_view != self.view or force_redraw:
             self._last_displayed_lines.clear()
+            if isinstance(self.view, PlayingView):
+                width = self.view.game.TERMINAL_WIDTH_NEEDED
+                height = self.view.game.TERMINAL_HEIGHT_NEEDED
+            else:
+                width = 80
+                height = 24
+
+            # TODO: don't resize if already big enough? https://stackoverflow.com/a/35688423
+            to_send += RESIZE % (height, width)
             to_send += CLEAR_SCREEN
 
         while len(lines) < len(self._last_displayed_lines):
