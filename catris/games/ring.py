@@ -9,7 +9,6 @@ from catris.squares import Square
 
 from .game_base_class import Game
 
-
 MAP = b"""\
            .o--------------------------------------------------o.
          .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.
