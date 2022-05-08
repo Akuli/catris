@@ -287,33 +287,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
 
-  document.onkeydown = event => {
-    if (event.ctrlKey || event.altKey || ws.readyState !== WebSocket.OPEN) {
-      return;
+  function sendText(text) {
+    const utf8 = new TextEncoder().encode(text);
+    if(ws.readyState === WebSocket.OPEN) {
+      ws.send(utf8);
     }
+  }
 
-    let textToSend;
-    if (event.key.length === 1) {
-      textToSend = event.key;
-    } else if (event.key === "ArrowUp") {
-      textToSend = "\x1b[A";
-    } else if (event.key === "ArrowDown") {
-      textToSend = "\x1b[B";
-    } else if (event.key === "ArrowRight") {
-      textToSend = "\x1b[C";
-    } else if (event.key === "ArrowLeft") {
-      textToSend = "\x1b[D";
-    } else if (event.key === "Backspace") {
-      textToSend = "\x7f";
-    } else if (event.key === "Enter") {
-      textToSend = "\r";
+  document.onkeydown = (event) => {
+    if (event.ctrlKey && !event.altKey && event.key === 'v') {
+      (async() => {
+        const pastedText = await navigator.clipboard.readText();
+        sendText(pastedText.replace(/\n|\r|\x1b/g, ""));
+      })();
+    } else if (!event.ctrlKey && !event.altKey) {
+      if (event.key.length === 1) {
+        sendText(event.key);
+      } else if (event.key === "ArrowUp") {
+        sendText("\x1b[A");
+      } else if (event.key === "ArrowDown") {
+        sendText("\x1b[B");
+      } else if (event.key === "ArrowRight") {
+        sendText("\x1b[C");
+      } else if (event.key === "ArrowLeft") {
+        sendText("\x1b[D");
+      } else if (event.key === "Backspace") {
+        sendText("\x7f");
+      } else if (event.key === "Enter") {
+        sendText("\r");
+      } else {
+        console.log("Unrecognized key:", event.key);
+        return;
+      }
     } else {
-      console.log("Unrecognized key:", event.key);
       return;
     }
-
-    const utf8 = new TextEncoder().encode(textToSend);
-    ws.send(utf8);
 
     event.preventDefault();
   };
