@@ -359,7 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
     terminal.addText("Disconnected.");
   };
 
-  if (!navigator.platform.startsWith("Win")) {
+  if (!navigator.userAgent.includes("Windows")) {
     document.getElementById("netcat-instructions").innerHTML =
       "<p>You can also play this game on a terminal:</p><pre></pre>";
     document.querySelector("#netcat-instructions > pre").textContent =
