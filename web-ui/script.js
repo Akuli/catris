@@ -383,9 +383,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   if (!navigator.userAgent.includes("Windows")) {
-    document.querySelector("#netcat-instructions").innerHTML =
-      "<p>You can also play this game on a terminal:</p><pre></pre>";
-    document.querySelector("#netcat-instructions > pre").textContent =
-      `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    const nc = document.getElementById("netcat-instructions");
+    nc.innerHTML = "<p>You can also play this game on a terminal:</p><pre></pre>";
+    nc.querySelector("pre").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
   }
 });
