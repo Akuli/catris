@@ -10,18 +10,21 @@ body {
 #terminal, #cursor-overlay {
   grid-area: 1 / 1;  /* https://stackoverflow.com/a/55475793 */
   padding: 0.2em;
+  border: 0px;
   border-radius: 0.5em;
+  margin: 0px;
   color: white;
   text-align: left;
 }
 
-#terminal > span::selection {
-  color: black;
-  background-color: white;
-}
-
 #terminal {
   background-color: black;
+}
+
+#terminal > pre {
+  padding: 0px;
+  border: 0px;
+  margin: 0px;
 }
 
 #cursor-overlay {
@@ -35,4 +38,9 @@ body {
   50% {
     color: transparent;
   }
+}
+
+#terminal > pre > span::selection {
+  color: black;
+  background-color: white;
 }
