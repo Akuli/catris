@@ -306,7 +306,6 @@ document.addEventListener("DOMContentLoaded", () => {
       this._updateCursor();
     }
   };
-  t=terminal;
 
   const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
 
