@@ -52,13 +52,14 @@ document.addEventListener("DOMContentLoaded", () => {
     constructor() {
       this._pre = document.getElementById("terminal");
 
-      this._cursorPos = 0;  // index into the text as a string including \n chars
+      this.width = 80;
+      this.height = 24;
+      this._cursorX = 0;  // 0 <= _cursorX < width
+      this._cursorY = 0;  // 0 <= _cursorY < height
       this._cursorIsShowing = true;
 
       this.fgColor = COLORS['0'].fg;
       this.bgColor = COLORS['0'].bg;
-      this.width = 80;
-      this.height = 24;
       this.clear();
     }
 
@@ -74,27 +75,16 @@ document.addEventListener("DOMContentLoaded", () => {
       span.style.backgroundColor = this.bgColor;
     }
 
-    moveCursor(x, y) {
-      if(x<0) x=0;
-      if(y<0) y=0;
-      if (x >= this.width) x = this.width-1;
-      if (y >= this.height) y = this.height-1;
-
-      this._cursorPos = y*(this.width + 1) + x;
-    }
-
-    moveCursorToStartOfLine() {
-      const lineStartToCursor = this._cursorPos % (this.width + 1);
-      this._cursorPos -= lineStartToCursor;
+    _fixCursorPos() {
+      if (this._cursorX < 0) this._cursorX = 0;
+      if (this._cursorY < 0) this._cursorY = 0;
+      if (this._cursorX >= this.width) this._cursorX = this.width-1;
+      if (this._cursorY >= this.height) this._cursorY = this.height-1;
     }
 
     moveCursorDown() {
-      this._cursorPos += this.width + 1;
-
-      const end = (this.width + 1)*this.height;
-      if (this._cursorPos > end) {
-        this._cursorPos = end;
-      }
+      this._cursorY++;
+      this._fixCursorPos();
     }
 
     // Can be called in a loop, but calls must be in the same order as spans appear in the terminal.
@@ -195,15 +185,13 @@ document.addEventListener("DOMContentLoaded", () => {
       this._mergeWithPreviousSpanIfPossible(newSpan);
     }
 
-    _replaceText(startIndex, text) {
+    _replaceTextAfterCursor(text) {
+      const startIndex = this._cursorY*(this.width + 1) + this._cursorX;
       this._deleteText(startIndex, startIndex + text.length);
       this._insertText(startIndex, text);
     }
 
     resize(newWidth, newHeight) {
-      const cursorX = this._cursorPos % (this.width + 1);
-      const cursorY = Math.floor(this._cursorPos / (this.width + 1));
-
       if (newHeight > this.height) {
         const oldEnd = (this.width + 1)*this.height;
         const blankLine = " ".repeat(this.width) + "\n";
@@ -235,49 +223,43 @@ document.addEventListener("DOMContentLoaded", () => {
       this.width = newWidth;
 
       this._pre.style.width = newWidth + "ch";
-      this.moveCursor(cursorX, cursorY);
+      this._fixCursorPos();
     }
 
     clearFromCursorToEndOfLine() {
-      const lineStartToCursor = this._cursorPos % (this.width + 1)
-      this._replaceText(this._cursorPos, " ".repeat(this.width - lineStartToCursor) + '\n');
+      this._replaceTextAfterCursor(" ".repeat(this.width - this._cursorX) + '\n');
     }
 
     clearFromCursorToEndOfScreen() {
-      const lineStartToCursor = this._cursorPos % (this.width + 1)
-      const lineStart = this._cursorPos - lineStartToCursor;
-      const lineEnd = lineStart + this.width;
-      const terminalEnd = i < (this.width + 1)*this.height;
-
-      const lines = [" ".repeat(this.width - lineStartToCursor) + "\n"];
-      for (let i = lineEnd + 1; i < (this.width + 1)*this.height; i += this.width+1) {
+      const lines = [" ".repeat(this.width - this._cursorX) + "\n"];
+      for (let y = this._cursorY + 1; y < this.height; y++)
+      {
         lines.push(" ".repeat(this.width) + "\n");
       }
-
-      this._replaceText(this._cursorPos, lines.join(""));
+      this._replaceTextAfterCursor(lines.join(""));
     }
 
-    addText(text) {
-      const lineStartToCursor = this._cursorPos % (this.width + 1);
-      const firstLineLength = this.width - lineStartToCursor;
-
+    _addTextRaw(text) {
+      const firstLineLength = this.width - this._cursorX;
       const lines = [text.slice(0, firstLineLength)];
       for (let i = firstLineLength; i < text.length; i += this.width) {
         lines.push(text.slice(i, i+this.width));
       }
 
       const end = (this.width + 1)*this.height;
-      const howMuchFits = end - this._cursorPos;
-      const toInsert = lines.join("\n").slice(0, howMuchFits);
-      this._replaceText(this._cursorPos, toInsert);
-      this._cursorPos += toInsert.length;
+      const cursor = (this.width + 1)*this._cursorY + this._cursorX;
+      const howMuchFits = end - cursor;
+      this._replaceTextAfterCursor(lines.join("\n").slice(0, howMuchFits));
+
+      const x = this._cursorX + text.length;
+      this._cursorY += Math.floor(x / this.width);
+      this._cursorX = x % this.width;
     }
 
     _updateCursor() {
       if (this._cursorIsShowing) {
-        const x = this._cursorPos % (this.width + 1);
-        const y = Math.floor(this._cursorPos / (this.width + 1));
-        document.getElementById("cursor-overlay").textContent = "\n".repeat(y) + " ".repeat(x) + "█";
+        document.getElementById("cursor-overlay").textContent =
+          "\n".repeat(this._cursorY) + " ".repeat(this._cursorX) + "█";
       } else {
         document.getElementById("cursor-overlay").textContent = "";
       }
@@ -296,7 +278,9 @@ document.addEventListener("DOMContentLoaded", () => {
         this._cursorIsShowing = false;
       } else if (ansiCode.endsWith("H")) {
         const [line, column] = ansiCode.slice(2, -1).split(';').map(x => +x);
-        this.moveCursor(column-1, line-1);
+        this._cursorX = column-1;
+        this._cursorY = line-1;
+        this._fixCursorPos();
       } else if (ansiCode.startsWith("\x1b[1;") && ansiCode.endsWith("m") && COLORS[ansiCode.slice(4, -1)]) {
         const colorInfo = COLORS[ansiCode.slice(4, -1)];
         if (colorInfo.fg) this.fgColor = colorInfo.fg;
@@ -315,13 +299,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const chunks = text.match(/\x1b\[[^A-Za-z]+[A-Za-z]|\r|\n|[^\x1b\r\n]+/g);
       for (const chunk of chunks) {
         if (chunk === "\r") {
-          this.moveCursorToStartOfLine();
+          this._cursorX = 0;
         } else if (chunk === "\n") {
           this.moveCursorDown();
         } else if (chunk.startsWith("\x1b[")) {
           this._handleAnsiCode(chunk);
         } else {
-          this.addText(chunk);
+          this._addTextRaw(chunk);
         }
       }
 
@@ -399,8 +383,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
     terminal.clear();
-    terminal.moveCursor(0, 0);
-    terminal.addText("Disconnected.");
+    terminal.addTextWithEscapeSequences(
+      "\x1b[1;0m"    // reset color
+      + "\x1b[2J"    // clear terminal
+      + "\x1b[1;1H"  // move cursor to top left corner
+      + "Disconnected."
+    );
   };
 
   if (!navigator.userAgent.includes("Windows")) {
