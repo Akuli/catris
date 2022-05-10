@@ -33,32 +33,9 @@ There's also a web UI, which is useful especially for windows users.
 My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
 
-
-## How to play
-
 Before a game starts, you need to make a lobby.
 If you want, you can share the lobby ID with your friends
 so that they can join the lobby and play with you.
-
-Keys:
-- Ctrl+C, Ctrl+D or Ctrl+Q: quit
-- Ctrl+R: redraw the whole screen (may be needed after resizing the window)
-- WASD or arrow keys: move and rotate
-- h: hold (aka "save") block for later, switch to previously held block if any
-- r: change rotating direction
-- p: pause/unpause (affects all players)
-- f: flip the game upside down (only available in ring mode with 1 player)
-
-There's only one score; you play together, not against other players.
-Try to collaborate and make the best use of everyone's blocks.
-
-With multiple players, if your playing area
-fills up all the way to the top of the game,
-you will have to wait 30 seconds.
-Then your playing area will be erased and you can continue playing.
-The game ends if all players are simultaneously on their 30 seconds waiting time.
-This means that you can intentionally fill your area with blocks
-to get your waiting time before other players.
 
 
 ## Development

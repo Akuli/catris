@@ -14,6 +14,7 @@ from catris.ansi import (
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
 )
+from catris.connections import WebSocketConnection
 from catris.games import GAME_CLASSES, Game, RingGame
 from catris.player import Player
 from catris.squares import Square
@@ -159,13 +160,17 @@ class AskNameView(TextEntryView):
 
 class MenuView(View):
     def __init__(self) -> None:
-        self.menu_items: list[str] = []
+        self.menu_items: list[str | None] = []  # None means blank line
         self.selected_index = 0
 
     def get_lines_to_render(self) -> list[bytes]:
         item_width = 35
         result = [b"", b""]
         for index, item in enumerate(self.menu_items):
+            if item is None:
+                result.append(b"")
+                continue
+
             display_text = item.center(item_width).encode("utf-8")
             if index == self.selected_index:
                 display_text = (COLOR % 47) + display_text  # white background
@@ -182,9 +187,14 @@ class MenuView(View):
         if received == UP_ARROW_KEY:
             if self.selected_index > 0:
                 self.selected_index -= 1
+                while self.menu_items[self.selected_index] is None:
+                    self.selected_index -= 1
+                    assert self.selected_index >= 0
         elif received == DOWN_ARROW_KEY:
             if self.selected_index + 1 < len(self.menu_items):
                 self.selected_index += 1
+                while self.menu_items[self.selected_index] is None:
+                    self.selected_index += 1
         elif received == b"\r":
             return bool(self.on_enter_pressed())
         else:
@@ -196,7 +206,9 @@ class MenuView(View):
                 pass
             else:
                 for index, text in enumerate(self.menu_items):
-                    if text.lower().startswith(received_text.lower()):
+                    if text is not None and text.lower().startswith(
+                        received_text.lower()
+                    ):
                         self.selected_index = index
                         break
         return False  # do not quit yet
@@ -274,13 +286,16 @@ class AskLobbyIDView(TextEntryView):
 
 
 class ChooseGameView(MenuView):
-    def __init__(
-        self, client: Client, previous_game_class: type[Game] = GAME_CLASSES[0]
-    ):
+    def __init__(self, client: Client, selection: str | type[Game] = GAME_CLASSES[0]):
         super().__init__()
         self._client = client
-        self.selected_index = GAME_CLASSES.index(previous_game_class)
         self._fill_menu()
+
+        # TODO: this sucks lol?
+        if isinstance(selection, str):
+            self.selected_index = self.menu_items.index(selection)
+        else:
+            self.selected_index = GAME_CLASSES.index(selection)
 
     def _should_show_cannot_join_error(self) -> bool:
         assert self._client.name is not None
@@ -301,6 +316,8 @@ class ChooseGameView(MenuView):
                 f"{game_class.NAME} ({n}/{game_class.MAX_PLAYERS} players)"
             )
 
+        self.menu_items.append(None)
+        self.menu_items.append("Gameplay tips")
         self.menu_items.append("Quit")
 
     def get_lines_to_render(self) -> list[bytes]:
@@ -358,12 +375,65 @@ class ChooseGameView(MenuView):
     def on_enter_pressed(self) -> bool:
         if self.menu_items[self.selected_index] == "Quit":
             return True
+        if self.menu_items[self.selected_index] == "Gameplay tips":
+            self._client.view = TipsView(self._client)
+            return False
 
         if not self._should_show_cannot_join_error():
             game_class = GAME_CLASSES[self.selected_index]
             assert self._client.lobby is not None
             self._client.lobby.start_game(self._client, game_class)
         return False
+
+
+_GAMEPLAY_TIPS = """
+Keys:
+  <Ctrl+C>, <Ctrl+D> or <Ctrl+Q>: quit
+  <Ctrl+R>: redraw the whole screen (may be needed after resizing the window)
+  <W>/<A>/<S>/<D> or <↑>/<←>/<↓>/<→>: move and rotate (don't hold down <S> or <↓>)
+  <H>: hold (aka save) block for later, switch to previously held block if any
+  <R>: change rotating direction
+  <P>: pause/unpause (affects all players)
+  <F>: flip the game upside down (only available in ring mode with 1 player)
+
+There's [only one score]. You play together, not against other players. Try to
+work together and make good use of everyone's blocks.
+
+With multiple players, when your playing area fills all the way to the top,
+you need to wait 30 seconds before you can continue playing. The game ends
+when all players are simultaneously on their 30 seconds waiting time. This
+means that if other players are doing well, you can [intentionally fill your
+playing area] to do your waiting time before others mess up."""
+
+
+class TipsView(MenuView):
+    def __init__(self, client: Client) -> None:
+        super().__init__()
+        self._client = client
+        self.menu_items = ["Back to menu"]
+
+    def get_lines_to_render(self) -> list[bytes]:
+        lines = (
+            _GAMEPLAY_TIPS.encode("utf-8")
+            .replace(b"\n", b"\n  ")
+            .replace(b"[", COLOR % 36)  # must be first because COLOR contains "["
+            .replace(b"]", COLOR % 0)
+            .replace(b"<", COLOR % 35)
+            .replace(b">", COLOR % 0)
+            .splitlines()
+        )
+
+        if isinstance(self._client.connection, WebSocketConnection):
+            # Ctrl keys e.g. Ctrl+C not supported or needed in web ui
+            old_length = len(lines)
+            lines = [line for line in lines if b"Ctrl+" not in line]
+            assert len(lines) == old_length - 2
+
+        lines.extend(super().get_lines_to_render())
+        return lines
+
+    def on_enter_pressed(self) -> None:
+        self._client.view = ChooseGameView(self._client, "Gameplay tips")
 
 
 class GameOverView(View):
