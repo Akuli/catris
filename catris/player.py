@@ -72,3 +72,5 @@ class Player:
                 square.y *= -1
                 square.offset_x *= -1
                 square.offset_y *= -1
+                square.moving_dir_x *= -1
+                square.moving_dir_y *= -1
