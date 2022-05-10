@@ -81,8 +81,14 @@ When `python3 -m catris` is running, you can connect to it with netcat:
 stty raw; nc localhost 12345; stty cooked
 ```
 
-If you want to develop the web UI, you need to run `python3 -m http.server` in a separate terminal,
-and then open `http://localhost:8000/` in your web browser.
+If you want to develop the web UI, you need to run a web server in a separate terminal:
+
+```
+cd catris/web-ui
+python3 -m http.server
+```
+
+You can then open `http://localhost:8000/` in your web browser.
 
 Linters and formatters:
 
