@@ -66,22 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
       this.fgColor = COLORS['0'].fg;
       this.bgColor = COLORS['0'].bg;
 
-      this.resize(80, 24);
-    }
-
-    clear() {
-      this._el.innerHTML = "";
-      for (let i = 0; i < this.height; i++) {
-        this._el.appendChild(this._makeBlankRow());
-      }
-    }
-
-    _makeBlankRow() {
-      const row = document.createElement("pre");
-      row.innerHTML = "<span></span>";
-      row.querySelector("span").textContent = " ".repeat(this.width);
-      this._applyStyle(row);
-      return row;
+      this._resize(80, 24);
     }
 
     _applyStyle(span) {
@@ -94,11 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (this._cursorY < 0) this._cursorY = 0;
       if (this._cursorX >= this.width) this._cursorX = this.width-1;
       if (this._cursorY >= this.height) this._cursorY = this.height-1;
-    }
-
-    moveCursorDown() {
-      this._cursorY++;
-      this._fixCursorPos();
     }
 
     // Can be called in a loop, but calls must be in the same order as spans appear in the terminal.
@@ -198,7 +178,15 @@ document.addEventListener("DOMContentLoaded", () => {
       this._mergeWithPreviousSpanIfPossible(newSpan);
     }
 
-    resize(newWidth, newHeight) {
+    _makeBlankRow() {
+      const row = document.createElement("pre");
+      row.innerHTML = "<span></span>";
+      row.querySelector("span").textContent = " ".repeat(this.width);
+      this._applyStyle(row);
+      return row;
+    }
+
+    _resize(newWidth, newHeight) {
       for (let y = this.height; y < newHeight; y++) {
         this._el.appendChild(this._makeBlankRow());
       }
@@ -223,14 +211,21 @@ document.addEventListener("DOMContentLoaded", () => {
       this._fixCursorPos();
     }
 
-    clearFromCursorToEndOfLine() {
+    _clear() {
+      this._el.innerHTML = "";
+      for (let i = 0; i < this.height; i++) {
+        this._el.appendChild(this._makeBlankRow());
+      }
+    }
+
+    _clearFromCursorToEndOfLine() {
       const n = this.width - this._cursorX;
       this._deleteText(this._cursorX, this._cursorY, n);
       this._insertText(this._cursorX, this._cursorY, " ".repeat(n));
     }
 
     clearFromCursorToEndOfScreen() {
-      this.clearFromCursorToEndOfLine();
+      this._clearFromCursorToEndOfLine();
       for (let y = this._cursorY + 1; y < this.height; y++) {
         this._deleteText(0, y, this.width);
         this._insertText(0, y, " ".repeat(this.width));
@@ -258,11 +253,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _handleAnsiCode(ansiCode) {
       if (ansiCode === "\x1b[2J") {
-        this.clear();
+        this._clear();
       } else if (ansiCode === "\x1b[0J") {
         this.clearFromCursorToEndOfScreen();
       } else if (ansiCode === "\x1b[0K") {
-        this.clearFromCursorToEndOfLine();
+        this._clearFromCursorToEndOfLine();
       } else if (ansiCode === "\x1b[?25h") {
         this._cursorIsShowing = true;
       } else if (ansiCode === "\x1b[?25l") {
@@ -278,7 +273,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
       } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
         const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
-        this.resize(width, height);
+        this._resize(width, height);
       } else {
         console.warn("Unknown ANSI escape sequence: " + ansiCode);
       }
@@ -292,7 +287,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chunk === "\r") {
           this._cursorX = 0;
         } else if (chunk === "\n") {
-          this.moveCursorDown();
+          this._cursorY++;
+          this._fixCursorPos();
         } else if (chunk.startsWith("\x1b[")) {
           this._handleAnsiCode(chunk);
         } else {
@@ -376,7 +372,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
-    terminal.clear();
     terminal.addTextWithEscapeSequences(
       "\x1b[1;0m"    // reset color
       + "\x1b[2J"    // clear terminal
