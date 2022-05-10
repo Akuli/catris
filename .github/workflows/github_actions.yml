@@ -52,5 +52,5 @@ jobs:
     - uses: actions/setup-node@v2
       with:
         node-version: '18'
-    - run: cd web-ui && npm install
-    - run: cd web-ui && npx eslint *.js
+    - run: npm install
+    - run: npx eslint web-ui/*.js
