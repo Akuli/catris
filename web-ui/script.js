@@ -237,8 +237,10 @@ document.addEventListener("DOMContentLoaded", () => {
       this._deleteText(this._cursorX, this._cursorY, text.length);
       this._insertText(this._cursorX, this._cursorY, text);
       this._cursorX += text.length;
-      this._cursorY += Math.floor(this._cursorX / this.width);
-      this._cursorX %= this.width;
+      if (this._cursorX === this.width) {
+        this._cursorX = 0;
+        this._cursorY++;
+      }
       this._fixCursorPos();
     }
 
