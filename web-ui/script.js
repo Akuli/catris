@@ -58,15 +58,15 @@ document.addEventListener("DOMContentLoaded", () => {
     constructor() {
       this._el = document.getElementById("terminal");
 
-      this.width = 80;
-      this.height = 24;
-      this._cursorX = 0;  // 0 <= _cursorX < width
-      this._cursorY = 0;  // 0 <= _cursorY < height
+      this.width = 0;
+      this.height = 0;
+      this._cursorX = 0;  // after initial resize: 0 <= _cursorX < width
+      this._cursorY = 0;  // after initial resize: 0 <= _cursorY < height
       this._cursorIsShowing = true;
-
       this.fgColor = COLORS['0'].fg;
       this.bgColor = COLORS['0'].bg;
-      this.clear();
+
+      this.resize(80, 24);
     }
 
     clear() {
