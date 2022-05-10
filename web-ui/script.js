@@ -1,8 +1,3 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <script>
 document.addEventListener("DOMContentLoaded", () => {
   const COLORS = {
     // taken from mate-terminal with a color picker program
@@ -398,53 +393,3 @@ document.addEventListener("DOMContentLoaded", () => {
       `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
   }
 });
-    </script>
-    <style>
-body {
-  background-color: #333;
-  color: white;  /* Used when displaying the disconnected message after quitting */
-}
-
-#terminal-container {
-  display: grid;
-}
-
-#terminal, #cursor-overlay {
-  grid-area: 1 / 1;  /* https://stackoverflow.com/a/55475793 */
-  padding: 0.2em;
-  border-radius: 0.5em;
-  color: white;
-  text-align: left;
-}
-
-#terminal > span::selection {
-  color: black;
-  background-color: white;
-}
-
-#terminal {
-  background-color: black;
-}
-
-#cursor-overlay {
-  background: transparent;
-  animation: blinking_cursor 1s step-start infinite;
-  pointer-events: none;  /* allow selecting text */
-}
-
-/* https://stackoverflow.com/a/48320520 */
-@keyframes blinking_cursor {
-  50% {
-    color: transparent;
-  }
-}
-    </style>
-  </head>
-  <body>
-    <div id="terminal-container">
-      <pre id="terminal"><span></span></pre>
-      <pre id="cursor-overlay"></pre>
-    </div>
-    <div id="netcat-instructions"></div>
-  </body>
-</html>

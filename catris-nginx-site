@@ -9,7 +9,7 @@
 # sudo rm /etc/nginx/modules-enabled/*
 # sudo rm /etc/nginx/sites-enabled/default
 # sudo rm /var/www/html/index.nginx-debian.html
-# sudo cp index.html /var/www/html/
+# sudo cp web-ui/* /var/www/html/
 # sudo cp catris-nginx-site /etc/nginx/sites-available/
 # sudo ln -s /etc/nginx/sites-{available,enabled}/catris-nginx-site
 # sudo systemctl restart nginx

@@ -1,0 +1,38 @@
+body {
+  background-color: #333;
+  color: white;  /* Used when displaying the disconnected message after quitting */
+}
+
+#terminal-container {
+  display: grid;
+}
+
+#terminal, #cursor-overlay {
+  grid-area: 1 / 1;  /* https://stackoverflow.com/a/55475793 */
+  padding: 0.2em;
+  border-radius: 0.5em;
+  color: white;
+  text-align: left;
+}
+
+#terminal > span::selection {
+  color: black;
+  background-color: white;
+}
+
+#terminal {
+  background-color: black;
+}
+
+#cursor-overlay {
+  background: transparent;
+  animation: blinking_cursor 1s step-start infinite;
+  pointer-events: none;  /* allow selecting text */
+}
+
+/* https://stackoverflow.com/a/48320520 */
+@keyframes blinking_cursor {
+  50% {
+    color: transparent;
+  }
+}

@@ -22,7 +22,7 @@ cd catris
 Or you can [download a zip file by clicking here](https://github.com/Akuli/catris/archive/refs/heads/main.zip),
 extract it and `cd` into it.
 Either way, if you run `dir` or `ls`,
-you should see files named `index.html` and `README.md` among other things.
+you should see files named `local-playing.md` and `README.md` among other things.
 If you see a file named `__init__.py`, you have `cd`'d too deep
 and you need to go back up with `cd ..`.
 
@@ -42,10 +42,11 @@ We are now ready to run the server:
 python3 -m catris
 ```
 
-If you want to use the web UI, you also need to start a web server in a second terminal:
+If you want to use the web UI, you also need to start a web server in a second terminal.
+The server must be started from the `web-ui` directory.
 
 ```
-cd catris
+cd web-ui
 python3 -m http.server
 ```
 
@@ -103,4 +104,10 @@ just like any other computer in the network.
 - If the server computer has a firewall, you may need to tell it to allow listening on port 12345.
     For example, on Windows you can click a button that appears when you run the server for the first time,
     and if you use UFW (quite common on Linux),
-    you need to run `sudo ufw allow in 12345 comment 'catris'`.
+    you need to run:
+    ```
+    sudo ufw allow in 8000 comment 'catris http'
+    sudo ufw allow in 54321 comment 'catris websocket'
+    sudo ufw allow in 12345 comment 'catris raw tcp'
+    ```
+    If you don't want to use the web UI, you only need to allow port 12345.
