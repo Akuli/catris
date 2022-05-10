@@ -130,5 +130,6 @@ dmypy.json
 
 /catris_high_scores.txt
 
-/web-ui/node_modules/
-/web-ui/package-lock.json
+# web-ui stuff
+/node_modules/
+/package-lock.json
