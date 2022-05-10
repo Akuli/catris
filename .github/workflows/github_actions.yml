@@ -53,4 +53,4 @@ jobs:
       with:
         node-version: '18'
     - run: cd web-ui && npm install
-    - run: cd web-ui && npx eslint web-ui/*.js
+    - run: cd web-ui && npx eslint *.js
