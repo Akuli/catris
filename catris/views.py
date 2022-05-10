@@ -227,11 +227,8 @@ class ChooseIfNewLobbyView(MenuView):
         result = _ASCII_ART.split(b"\n") + super().get_lines_to_render()
 
         # Bring text to roughly same place as in previous view
-        result.append(b"")
-        result.append(b"")
-        result.append(b"")
-        result.append(b"")
-        result.append(b"")
+        while len(result) < 17:
+            result.append(b"")
 
         texts = [
             b"If you want to play alone, just make a new lobby.",
