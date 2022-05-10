@@ -238,7 +238,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const firstLineLength = this.width - this._cursorX;
       const lines = [text.slice(0, firstLineLength)];
       for (let i = firstLineLength; i < text.length; i += this.width) {
-        linez.push(text.slice(i, i+this.width));
+        lines.push(text.slice(i, i+this.width));
       }
 
       const end = (this.width + 1)*this.height;
