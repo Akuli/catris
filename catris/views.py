@@ -169,13 +169,14 @@ class MenuView(View):
         for index, item in enumerate(self.menu_items):
             if item is None:
                 result.append(b"")
-            else:
-                display_text = item.center(item_width).encode("utf-8")
-                if index == self.selected_index:
-                    display_text = (COLOR % 47) + display_text  # white background
-                    display_text = (COLOR % 30) + display_text  # black foreground
-                    display_text += COLOR % 0
-                result.append(b" " * ((80 - item_width) // 2) + display_text)
+                continue
+
+            display_text = item.center(item_width).encode("utf-8")
+            if index == self.selected_index:
+                display_text = (COLOR % 47) + display_text  # white background
+                display_text = (COLOR % 30) + display_text  # black foreground
+                display_text += COLOR % 0
+            result.append(b" " * ((80 - item_width) // 2) + display_text)
         return result
 
     @abstractmethod
