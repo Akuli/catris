@@ -33,10 +33,6 @@ There's also a web UI, which is useful especially for windows users.
 My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
 
-Before a game starts, you need to make a lobby.
-If you want, you can share the lobby ID with your friends
-so that they can join the lobby and play with you.
-
 
 ## Development
 
