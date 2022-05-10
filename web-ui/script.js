@@ -43,26 +43,30 @@ document.addEventListener("DOMContentLoaded", () => {
     '107': {bg: '#EEEEEC'},
   };
 
+  function splitToLines(text, firstLineLen, consecutiveLinesLen) {
+    const result = [text.slice(0, firstLineLen)];
+    let start = firstLineLen;
+    while (start < text.length) {
+      const end = start + consecutiveLinesLen;
+      result.push(text.slice(start, end));
+      start = end;
+    }
+    return result;
+  }
+
   const terminal = new class {
     constructor() {
-      this._pre = document.getElementById("terminal");
+      this._el = document.getElementById("terminal");
 
-      this.width = 80;
-      this.height = 24;
-      this._cursorX = 0;  // 0 <= _cursorX < width
-      this._cursorY = 0;  // 0 <= _cursorY < height
+      this.width = 0;
+      this.height = 0;
+      this._cursorX = 0;  // after initial resize: 0 <= _cursorX < width
+      this._cursorY = 0;  // after initial resize: 0 <= _cursorY < height
       this._cursorIsShowing = true;
-
       this.fgColor = COLORS['0'].fg;
       this.bgColor = COLORS['0'].bg;
-      this.clear();
-    }
 
-    clear() {
-      this._pre.innerHTML = "<span></span>";
-      const span = this._pre.querySelector("span");
-      span.textContent = (" ".repeat(this.width) + "\n").repeat(this.height);
-      this._applyStyle(span);
+      this._resize(80, 24);
     }
 
     _applyStyle(span) {
@@ -75,11 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (this._cursorY < 0) this._cursorY = 0;
       if (this._cursorX >= this.width) this._cursorX = this.width-1;
       if (this._cursorY >= this.height) this._cursorY = this.height-1;
-    }
-
-    moveCursorDown() {
-      this._cursorY++;
-      this._fixCursorPos();
     }
 
     // Can be called in a loop, but calls must be in the same order as spans appear in the terminal.
@@ -95,14 +94,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    _deleteText(delStart, delEnd) {
+    _deleteText(x, y, deleteCount) {
       const spansToRemove = [];
       let spanStart = 0;
-      for (const span of this._pre.children) {
+      for (const span of this._el.children[y].children) {
         const spanEnd = spanStart + span.textContent.length;
 
-        const overlapStart = Math.max(spanStart, delStart);
-        const overlapEnd = Math.min(spanEnd, delEnd);
+        const overlapStart = Math.max(spanStart, x);
+        const overlapEnd = Math.min(spanEnd, x + deleteCount);
         if (overlapStart < overlapEnd) {
           // Delete overlapping part
           const relativeOverlapStart = overlapStart - spanStart;
@@ -130,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    _insertText(index, text) {
+    _insertText(x, y, text) {
       if (text === "") {
         return;
       }
@@ -139,30 +138,29 @@ document.addEventListener("DOMContentLoaded", () => {
       newSpan.textContent = text;
       this._applyStyle(newSpan);
 
+      const row = this._el.children[y];
+
       let spanStart = 0;
-      for (const span of this._pre.children) {
-        if (index === spanStart) {
+      for (const span of row.children) {
+        if (x === spanStart) {
           // New span goes just before start of an existing span
-          this._pre.insertBefore(newSpan, span);
+          row.insertBefore(newSpan, span);
           this._mergeWithPreviousSpanIfPossible(newSpan);
           this._mergeWithPreviousSpanIfPossible(span);
           return;
         }
 
         const spanEnd = spanStart + span.textContent.length;
-        if (spanStart < index && index < spanEnd) {
+        if (spanStart < x && x < spanEnd) {
           // Split span into two, add in middle
-          const leftLen = index - spanStart;
-          console.assert(leftLen >= 0);
-
           const leftSide = span.cloneNode();
           const rightSide = span.cloneNode();
-          leftSide.textContent = span.textContent.slice(0, leftLen);
-          rightSide.textContent = span.textContent.slice(leftLen);
+          leftSide.textContent = span.textContent.slice(0, x - spanStart);
+          rightSide.textContent = span.textContent.slice(x - spanStart);
 
-          this._pre.insertBefore(leftSide, span);
-          this._pre.insertBefore(newSpan, span);
-          this._pre.insertBefore(rightSide, span);
+          row.insertBefore(leftSide, span);
+          row.insertBefore(newSpan, span);
+          row.insertBefore(rightSide, span);
           span.remove();
 
           this._mergeWithPreviousSpanIfPossible(newSpan);
@@ -175,80 +173,75 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // New span is not at the start of any span and not inside any span.
       // It must be after all other spans.
-      console.assert(index === spanStart);
-      this._pre.appendChild(newSpan);
+      console.assert(x === spanStart);
+      row.appendChild(newSpan);
       this._mergeWithPreviousSpanIfPossible(newSpan);
     }
 
-    _replaceTextAfterCursor(text) {
-      const startIndex = this._cursorY*(this.width + 1) + this._cursorX;
-      this._deleteText(startIndex, startIndex + text.length);
-      this._insertText(startIndex, text);
+    _makeBlankRow() {
+      const row = document.createElement("pre");
+      row.innerHTML = "<span></span>";
+      row.querySelector("span").textContent = " ".repeat(this.width);
+      this._applyStyle(row);
+      return row;
     }
 
-    resize(newWidth, newHeight) {
-      if (newHeight > this.height) {
-        const oldEnd = (this.width + 1)*this.height;
-        const blankLine = " ".repeat(this.width) + "\n";
-        this._insertText(oldEnd, blankLine.repeat(newHeight - this.height));
+    _resize(newWidth, newHeight) {
+      for (let y = this.height; y < newHeight; y++) {
+        this._el.appendChild(this._makeBlankRow());
       }
-      if (newHeight < this.height) {
-        const newEnd = (this.width + 1)*newHeight;
-        const oldEnd = (this.width + 1)*this.height;
-        this._deleteText(newEnd, oldEnd);
+      for (let y = this.height-1; y >= newHeight; y--) {
+        this._el.children[y].remove();
       }
       this.height = newHeight;
 
       if (newWidth > this.width) {
-        const extraBlanks = " ".repeat(newWidth - this.width);
-        for (let i = this.height - 1; i >= 0; i--) {
-          const lineStart = (this.width + 1)*i;
-          const lineEnd = lineStart + this.width;
-          this._insertText(lineEnd, extraBlanks);
+        for (let y = 0; y < this.height; y++) {
+          this._insertText(this.width, y, " ".repeat(newWidth - this.width));
         }
       }
       if (newWidth < this.width) {
-        for (let i = this.height - 1; i >= 0; i--) {
-          const lineStart = (this.width + 1)*i;
-          const oldLineEnd = lineStart + this.width;
-          const newLineEnd = lineStart + newWidth;
-          this._deleteText(newLineEnd, oldLineEnd);
+        for (let y = 0; y < this.height; y++) {
+          this._deleteText(newWidth, y, this.width - newWidth);
         }
       }
       this.width = newWidth;
 
-      this._pre.style.width = newWidth + "ch";
+      this._el.style.width = newWidth + "ch";
       this._fixCursorPos();
     }
 
-    clearFromCursorToEndOfLine() {
-      this._replaceTextAfterCursor(" ".repeat(this.width - this._cursorX) + '\n');
+    _clear() {
+      this._el.innerHTML = "";
+      for (let i = 0; i < this.height; i++) {
+        this._el.appendChild(this._makeBlankRow());
+      }
+    }
+
+    _clearFromCursorToEndOfLine() {
+      const n = this.width - this._cursorX;
+      this._deleteText(this._cursorX, this._cursorY, n);
+      this._insertText(this._cursorX, this._cursorY, " ".repeat(n));
     }
 
     clearFromCursorToEndOfScreen() {
-      const lines = [" ".repeat(this.width - this._cursorX) + "\n"];
-      for (let y = this._cursorY + 1; y < this.height; y++)
-      {
-        lines.push(" ".repeat(this.width) + "\n");
+      this._clearFromCursorToEndOfLine();
+      for (let y = this._cursorY + 1; y < this.height; y++) {
+        this._deleteText(0, y, this.width);
+        this._insertText(0, y, " ".repeat(this.width));
       }
-      this._replaceTextAfterCursor(lines.join(""));
     }
 
     _addTextRaw(text) {
-      const firstLineLength = this.width - this._cursorX;
-      const lines = [text.slice(0, firstLineLength)];
-      for (let i = firstLineLength; i < text.length; i += this.width) {
-        lines.push(text.slice(i, i+this.width));
+      console.assert(this._cursorX + text.length <= this.width);
+      this._deleteText(this._cursorX, this._cursorY, text.length);
+      this._insertText(this._cursorX, this._cursorY, text);
+      this._cursorX += text.length;
+      if (this._cursorX === this.width) {
+        this._cursorX = 0;
+        this._cursorY++;
       }
-
-      const end = (this.width + 1)*this.height;
-      const cursor = (this.width + 1)*this._cursorY + this._cursorX;
-      const howMuchFits = end - cursor;
-      this._replaceTextAfterCursor(lines.join("\n").slice(0, howMuchFits));
-
-      const x = this._cursorX + text.length;
-      this._cursorY += Math.floor(x / this.width);
-      this._cursorX = x % this.width;
+      this._fixCursorPos();
     }
 
     _updateCursor() {
@@ -262,11 +255,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     _handleAnsiCode(ansiCode) {
       if (ansiCode === "\x1b[2J") {
-        this.clear();
+        this._clear();
       } else if (ansiCode === "\x1b[0J") {
         this.clearFromCursorToEndOfScreen();
       } else if (ansiCode === "\x1b[0K") {
-        this.clearFromCursorToEndOfLine();
+        this._clearFromCursorToEndOfLine();
       } else if (ansiCode === "\x1b[?25h") {
         this._cursorIsShowing = true;
       } else if (ansiCode === "\x1b[?25l") {
@@ -282,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
       } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
         const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
-        this.resize(width, height);
+        this._resize(width, height);
       } else {
         console.warn("Unknown ANSI escape sequence: " + ansiCode);
       }
@@ -296,11 +289,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chunk === "\r") {
           this._cursorX = 0;
         } else if (chunk === "\n") {
-          this.moveCursorDown();
+          this._cursorY++;
+          this._fixCursorPos();
         } else if (chunk.startsWith("\x1b[")) {
           this._handleAnsiCode(chunk);
         } else {
-          this._addTextRaw(chunk);
+          const lines = splitToLines(chunk, this.width - this._cursorX, this.width);
+          for (const line of lines) {
+            this._addTextRaw(line);
+          }
         }
       }
 
@@ -377,7 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // no need for onerror(), because onclose() will run on errors too
   ws.onclose = () => {
-    terminal.clear();
     terminal.addTextWithEscapeSequences(
       "\x1b[1;0m"    // reset color
       + "\x1b[2J"    // clear terminal
@@ -387,9 +383,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   if (!navigator.userAgent.includes("Windows")) {
-    document.getElementById("netcat-instructions").innerHTML =
-      "<p>You can also play this game on a terminal:</p><pre></pre>";
-    document.querySelector("#netcat-instructions > pre").textContent =
-      `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    const nc = document.getElementById("netcat-instructions");
+    nc.innerHTML = "<p>You can also play this game on a terminal:</p><pre></pre>";
+    nc.querySelector("pre").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
   }
 });
