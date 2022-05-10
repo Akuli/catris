@@ -385,11 +385,11 @@ class ChooseGameView(MenuView):
         return False
 
 
-_GAMEPLAY_TIPS = b"""
+_GAMEPLAY_TIPS = """
 Keys:
   <Ctrl+C>, <Ctrl+D> or <Ctrl+Q>: quit
   <Ctrl+R>: redraw the whole screen (may be needed after resizing the window)
-  <W>/<A>/<S>/<D> or <arrow keys>: move and rotate
+  <W>/<A>/<S>/<D> or <↑>/<←>/<↓>/<→>: move and rotate (don't hold down <S> or <↓>)
   <H>: hold (aka save) block for later, switch to previously held block if any
   <R>: change rotating direction
   <P>: pause/unpause (affects all players)
@@ -413,7 +413,8 @@ class TipsView(MenuView):
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = (
-            _GAMEPLAY_TIPS.replace(b"\n", b"\n  ")
+            _GAMEPLAY_TIPS.encode("utf-8")
+            .replace(b"\n", b"\n  ")
             .replace(b"[", COLOR % 36)  # must be first because COLOR contains "["
             .replace(b"]", COLOR % 0)
             .replace(b"<", COLOR % 35)
