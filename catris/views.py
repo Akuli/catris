@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from catris.server_and_client import Client
 
 
-ASCII_ART = r"""
+_ASCII_ART = rb"""
                    __     ___    _____   _____   _____   ___
                   / _)   / _ \  |_   _| |  __ \ |_   _| / __)
                  | (_   / /_\ \   | |   |  _  /  _| |_  \__ \
@@ -55,7 +55,7 @@ class TextEntryView(View):
         self.error = ""
 
     def get_lines_to_render(self) -> tuple[list[bytes], tuple[int, int]]:
-        result = ASCII_ART.encode("ascii").splitlines()
+        result = _ASCII_ART.splitlines()
         while len(result) < 10:
             result.append(b"")
 
@@ -224,8 +224,21 @@ class ChooseIfNewLobbyView(MenuView):
         self.menu_items.append("Quit")
 
     def get_lines_to_render(self) -> list[bytes]:
-        # TODO: display some server stats? number of connected users, etc
-        return ASCII_ART.encode("ascii").split(b"\n") + super().get_lines_to_render()
+        result = _ASCII_ART.split(b"\n") + super().get_lines_to_render()
+
+        # Bring text to roughly same place as in previous view
+        while len(result) < 17:
+            result.append(b"")
+
+        texts = [
+            b"If you want to play alone, just make a new lobby.",
+            b"",
+            b"For multiplayer, one player makes a lobby and others join it.",
+        ]
+        for text in texts:
+            result.append(text.center(80).rstrip())
+
+        return result
 
     def on_enter_pressed(self) -> bool:
         text = self.menu_items[self.selected_index]
