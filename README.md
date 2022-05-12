@@ -29,6 +29,7 @@ instead of entering them separately.
 
 There's also a web UI, which is useful especially for windows users.
 [Click here](http://172.104.132.97) to play.
+You can also type `akuli.github.io/catris` to your browser's address bar.
 
 My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
