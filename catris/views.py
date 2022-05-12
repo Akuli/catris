@@ -99,6 +99,17 @@ class TextEntryView(View):
             self._text += received
 
 
+# latin-1 chars, aka bytes(range(256)).decode("latin-1"), with some removed
+# It's important to ban characters that are more than 1 unit wide on terminal.
+VALID_NAME_CHARS = (
+    " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789"
+    "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ"
+)
+
+
 class AskNameView(TextEntryView):
     PROMPT = "Name: "
 
@@ -107,11 +118,11 @@ class AskNameView(TextEntryView):
         if not name:
             self.error = "Please write a name before pressing Enter."
             return
-        if any(c.isspace() and c != " " for c in name):
-            self.error = (
-                "The name can contain spaces, but not other whitespace characters."
-            )
-            return
+
+        for char in name:
+            if char not in VALID_NAME_CHARS:
+                self.error = f"The name can't contain a '{char}' character."
+                return
 
         # Prevent two simultaneous clients with the same name.
         # But it's fine if you leave and then join back with the same name.
