@@ -479,11 +479,16 @@ class GameOverView(View):
             return [b"", b"", b"Loading...".center(80).rstrip()]
 
         lines = [b"", b""]
-        lines.append(b"Game Over :(".center(80).rstrip())
+
+        if self.new_high_score in self._high_scores:
+            lines.append(b"Game Over :)".center(80).rstrip())
+        else:
+            lines.append(b"Game Over :(".center(80).rstrip())
+
+        padding = (80 - len(b"Your score was %d." % self.new_high_score.score)) // 2
         lines.append(
-            f"Your score was {self.new_high_score.score}.".encode("ascii")
-            .center(80)
-            .rstrip()
+            b"%sYour score was %s%d%s."
+            % (b" " * padding, COLOR % 36, self.new_high_score.score, COLOR % 0)
         )
 
         lines.append(b"")
