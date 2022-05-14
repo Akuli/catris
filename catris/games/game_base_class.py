@@ -507,6 +507,6 @@ class Game:
             else:
                 # I tried blocks_per_second = ax+b, where x is duration.
                 # Games ended slowly, blocks coming fast and not much happening.
-                blocks_per_second = 2 * 1.07**(self.get_duration_sec() / 60)
+                blocks_per_second = 2 * 1.07 ** (self.get_duration_sec() / 60)
                 await self.pause_aware_sleep(1 / blocks_per_second)
             await self._move_blocks_down_once(fast)
