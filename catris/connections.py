@@ -4,9 +4,10 @@ import asyncio
 import logging
 
 try:
-    from websockets.exceptions import WebSocketException
+    from websockets.exceptions import ConnectionClosedOK, WebSocketException
     from websockets.server import WebSocketServerProtocol
 except ImportError:
+    ConnectionClosedOK = None  # type: ignore
     WebSocketException = None  # type: ignore
     WebSocketServerProtocol = None  # type: ignore
 
@@ -77,6 +78,8 @@ class WebSocketConnection:
     async def receive_bytes(self) -> bytes:
         try:
             result = await self._ws.recv()
+#        except ConnectionClosedOK:
+#            return b""
         except WebSocketException as e:
             raise OSError(str(e)) from e
 
