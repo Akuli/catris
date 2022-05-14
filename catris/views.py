@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from abc import abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Callable, Sequence
+from typing import TYPE_CHECKING, Callable, ClassVar, Sequence
 
 from catris.ansi import (
     BACKSPACE,
