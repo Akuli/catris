@@ -42,7 +42,7 @@ class View:
     def get_lines_to_render(self) -> list[bytes] | tuple[list[bytes], tuple[int, int]]:
         pass
 
-    # Return True to quit the game
+    # Return True to quit the game. False and None do nothing.
     @abstractmethod
     def handle_key_press(self, received: bytes) -> bool | None:
         pass
