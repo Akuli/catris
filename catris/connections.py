@@ -78,8 +78,8 @@ class WebSocketConnection:
     async def receive_bytes(self) -> bytes:
         try:
             result = await self._ws.recv()
-#        except ConnectionClosedOK:
-#            return b""
+        except ConnectionClosedOK:
+            return b""
         except WebSocketException as e:
             raise OSError(str(e)) from e
 
