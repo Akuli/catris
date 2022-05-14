@@ -482,7 +482,6 @@ class Game:
                     player, dx=0, dy=1, in_player_coords=True, can_drill=True
                 )
                 if moved:
-                    self.need_render_event.set()
                     something_moved = True
                     todo.remove(player)
             if not something_moved:
