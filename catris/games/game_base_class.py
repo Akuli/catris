@@ -11,6 +11,13 @@ from catris.player import MovingBlock, Player
 from catris.squares import BombSquare, DrillSquare, Square, create_moving_squares
 
 
+def _player_has_a_drill(player: Player) -> bool:
+    return isinstance(player.moving_block_or_wait_counter, MovingBlock) and any(
+        isinstance(square, DrillSquare)
+        for square in player.moving_block_or_wait_counter.squares
+    )
+
+
 class Game:
     NAME: ClassVar[str]
     ID: ClassVar[str]
@@ -201,27 +208,35 @@ class Game:
             dx, dy = player.player_to_world(dx, dy)
 
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            drilled = set()
+            drilled = []
+
             for square in player.moving_block_or_wait_counter.squares:
                 square.x += dx
                 square.y += dy
                 self.fix_moving_square(player, square)
 
                 if can_drill and isinstance(square, DrillSquare):
-                    for other_square in self.landed_squares.copy():
-                        if (
-                            other_square.x == square.x
-                            and other_square.y == square.y
-                            and not isinstance(other_square, DrillSquare)
-                        ):
-                            self.landed_squares.remove(other_square)
-                            drilled.add(other_square)
+                    square_sets = [self.landed_squares]
+                    for block in self._get_moving_blocks().values():
+                        square_sets.append(block.squares)
+
+                    for square_set in square_sets:
+                        for other_square in square_set.copy():
+                            if (
+                                other_square.x == square.x
+                                and other_square.y == square.y
+                                and not isinstance(other_square, DrillSquare)
+                            ):
+                                square_set.remove(other_square)
+                                drilled.append((square_set, other_square))
 
             if self.is_valid():
                 self.need_render_event.set()
                 return True
 
-            self.landed_squares |= drilled
+            for square_set, removed_square in drilled:
+                square_set.add(removed_square)
+
             for square in player.moving_block_or_wait_counter.squares:
                 square.x -= dx
                 square.y -= dy
@@ -282,13 +297,13 @@ class Game:
 
     # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
-        block = player.moving_block_or_wait_counter
-        if not isinstance(block, MovingBlock):
-            return set()
-
         # Drill squares land differently and I don't want to duplicate their
         # landing logic here
-        if any(isinstance(square, DrillSquare) for square in block.squares):
+        if _player_has_a_drill(player):
+            return set()
+
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
             return set()
 
         # Temporarily changing squares feels a bit hacky, but it's simple and it works
@@ -362,8 +377,6 @@ class Game:
                     for square in block.squares.copy():
                         if (square.x, square.y) in exploding_points:
                             block.squares.remove(square)
-                    if not block.squares:
-                        self.new_block(player)
 
         return explode_next
 
@@ -446,6 +459,11 @@ class Game:
         self.need_render_event.set()
 
     async def _move_blocks_down_once(self, fast: bool) -> None:
+        # All moving squares can be drilled or bombed away
+        for player, moving_block in self._get_moving_blocks().items():
+            if not moving_block.squares:
+                self.new_block(player)
+
         # Blocks of different users can be on each other's way, but should
         # still be moved if the bottommost block will move.
         #
@@ -458,12 +476,12 @@ class Game:
         }
         while True:
             something_moved = False
-            for player in todo.copy():
+            # Move drills last, makes them consistently drill other moving blocks
+            for player in sorted(todo, key=_player_has_a_drill):
                 moved = self.move_if_possible(
                     player, dx=0, dy=1, in_player_coords=True, can_drill=True
                 )
                 if moved:
-                    self.need_render_event.set()
                     something_moved = True
                     todo.remove(player)
             if not something_moved:
