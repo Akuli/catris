@@ -402,11 +402,15 @@ class Game:
     async def _please_wait_countdown(self, player: Player) -> None:
         assert isinstance(player.moving_block_or_wait_counter, int)
 
-        while player.moving_block_or_wait_counter > 0:
+        while player.moving_block_or_wait_counter > 0 and player in self.players:
             await self.pause_aware_sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
             player.moving_block_or_wait_counter -= 1
             self.need_render_event.set()
+
+        if player not in self.players:
+            # player quit
+            return
 
         for square in self.landed_squares.copy():
             if self.square_belongs_to_player(player, square.x, square.y):
