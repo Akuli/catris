@@ -58,7 +58,7 @@ def _add_high_score_sync(
         with open("catris_high_scores.txt", "r+", encoding="utf-8") as file:
             first_line = file.readline(100)
             if first_line == "catris high scores file v1\n":
-                _logger.info("Changing highscores file from v1 to v2 format")
+                _logger.info("Changing catris_high_scores.txt from v1 to v2 format")
                 file.seek(len("catris high scores file v"))
                 file.write("2")
                 file.seek(0, io.SEEK_END)
@@ -70,7 +70,7 @@ def _add_high_score_sync(
                 raise ValueError(f"unrecognized first line: {repr(first_line)}")
 
             for line in file:
-                if line.startswith('#'):
+                if line.startswith("#"):
                     continue
 
                 parts = line.strip("\n").split("\t")
@@ -95,7 +95,7 @@ def _add_high_score_sync(
     except FileNotFoundError:
         _logger.info("Creating catris_high_scores.txt")
         with open("catris_high_scores.txt", "x", encoding="utf-8") as file:
-            file.write("catris high scores file v1\n")
+            file.write("catris high scores file v2\n")
     except (ValueError, OSError):
         _logger.exception("Reading catris_high_scores.txt failed")
         return [hs]  # do not write to file
