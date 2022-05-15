@@ -130,14 +130,12 @@ class BottleGame(Game):
                     self.valid_landed_coordinates.add((x, y))
 
     def add_player(self, name: str, color: int) -> Player:
-        x_offset = self.BOTTLE_OUTER_WIDTH * len(self.players)
-
         if self.players:
             # Not the first player. Add squares to boundary.
             for y, row in enumerate(self.BOTTLE):
                 if row.startswith(b"|") and row.endswith(b"|"):
                     sep = BottleSeparatorSquare(self.players[-1].color, color)
-                    sep.x = x_offset - 1
+                    sep.x = self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
                     sep.y = y
                     self.landed_squares.add(sep)
 
