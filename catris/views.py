@@ -592,29 +592,24 @@ class PlayingView(View):
 
         if self.game.is_paused:
             width = self._paused_menu.width
-            paused_lines = (
-                [
-                    b"o%so" % (b"=" * width),
-                    b"|%s|" % (b" " * width),
-                    b"|%s|" % (b" " * width),
-                    b"|%s|" % b" Game paused ".center(width),
-                    b"|%s|" % b"^^^^^^^^^^^^^".center(width),
-                ]
-                + [
+            paused_lines = [
+                b"o%so" % (b"=" * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % b" Game paused ".center(width),
+                b"|%s|" % b"^^^^^^^^^^^^^".center(width),
+                *[
                     b"|" + (COLOR % 0) + line + (COLOR % 92) + b"|"
                     for line in self._paused_menu.get_lines_to_render(fill=True)
-                ]
-                + [
-                    b"|%s|" % (b" " * width),
-                    b"|%s|" % (b" " * width),
-                    b"|%s|"
-                    % b"You will be disconnected automatically if".center(width),
-                    b"|%s|" % b"you don't press any keys for 10 minutes.".center(width),
-                    b"|%s|" % (b" " * width),
-                    b"|%s|" % (b" " * width),
-                    b"o%so" % (b"=" * width),
-                ]
-            )
+                ],
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % b"You will be disconnected automatically if".center(width),
+                b"|%s|" % b"you don't press any keys for 10 minutes.".center(width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"o%so" % (b"=" * width),
+            ]
 
             terminal_width = self.game.TERMINAL_WIDTH_NEEDED
             terminal_height = self.game.TERMINAL_HEIGHT_NEEDED
@@ -630,6 +625,8 @@ class PlayingView(View):
                     + (COLOR % 0)
                     + (MOVE_CURSOR_TO_COLUMN % terminal_width)
                 )
+        else:
+            self._paused_menu.selected_index = 0
 
         return lines
 
