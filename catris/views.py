@@ -588,28 +588,26 @@ class PlayingView(View):
                     lines[index] += b"   " + row
 
         if self.game.is_paused:
-            inner_width = 60
+            width = 60
             paused_lines = [
-                b"o%so" % (b"=" * inner_width),
-                b"|%s|" % (b" " * inner_width),
-                b"|%s|" % (b" " * inner_width),
-                b"|%s|" % b" Game paused ".center(inner_width),
-                b"|%s|" % b"^^^^^^^^^^^^^".center(inner_width),
+                b"o%so" % (b"=" * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % b" Game paused ".center(width),
+                b"|%s|" % b"^^^^^^^^^^^^^".center(width),
                 *[
                     b"|" + (COLOR % 0) + line + (COLOR % 92) + b"|"
                     for line in self._paused_menu.get_lines_to_render(
-                        width=inner_width, fill=True
+                        width=width, fill=True
                     )
                 ],
-                b"|%s|" % (b" " * inner_width),
-                b"|%s|" % (b" " * inner_width),
-                b"|%s|"
-                % b"You will be disconnected automatically if".center(inner_width),
-                b"|%s|"
-                % b"you don't press any keys for 10 minutes.".center(inner_width),
-                b"|%s|" % (b" " * inner_width),
-                b"|%s|" % (b" " * inner_width),
-                b"o%so" % (b"=" * inner_width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % b"You will be disconnected automatically if".center(width),
+                b"|%s|" % b"you don't press any keys for 10 minutes.".center(width),
+                b"|%s|" % (b" " * width),
+                b"|%s|" % (b" " * width),
+                b"o%so" % (b"=" * width),
             ]
 
             terminal_width = self.game.TERMINAL_WIDTH_NEEDED
@@ -618,7 +616,7 @@ class PlayingView(View):
             for index, line in enumerate(
                 paused_lines, start=(terminal_height - len(paused_lines)) // 2
             ):
-                left = (terminal_width - inner_width - 2) // 2
+                left = (terminal_width - width - 2) // 2
                 lines[index] += (
                     (MOVE_CURSOR_TO_COLUMN % (left + 1))
                     + (COLOR % 92)
