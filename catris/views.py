@@ -176,18 +176,15 @@ class AskNameView(TextEntryView):
 class _Menu:
     def __init__(
         self,
-        items: Sequence[tuple[str, Callable[[], bool | None]] | None] = (),
-        *,
-        width: int = 80,
+        items: Sequence[tuple[str, Callable[[], bool | None]] | None] = ()
     ) -> None:
         self.items = list(items)
         self.selected_index = 0
-        self.width = width
 
-    def get_lines_to_render(self, *, fill: bool = False) -> list[bytes]:
+    def get_lines_to_render(self, *, width: int = 80, fill: bool = False) -> list[bytes]:
         item_width = 35
         if fill:
-            result = [b" " * self.width] * 2
+            result = [b" " * width] * 2
         else:
             result = [b""] * 2
         for index, item in enumerate(self.items):
@@ -200,9 +197,9 @@ class _Menu:
                     display_text = (COLOR % 47) + display_text  # white background
                     display_text = (COLOR % 30) + display_text  # black foreground
                     display_text += COLOR % 0
-                left_fill = (self.width - item_width) // 2
+                left_fill = (width - item_width) // 2
                 if fill:
-                    right_fill = self.width - item_width - left_fill
+                    right_fill = width - item_width - left_fill
                 else:
                     right_fill = 0
                 result.append(b" " * left_fill + display_text + b" " * right_fill)
@@ -554,8 +551,7 @@ class PlayingView(View):
         self.game: Game = game
         self.player: Player = player
         self._paused_menu = _Menu(
-            [("Continue playing", game.toggle_pause), ("Quit game", self._quit_game)],
-            width=60,
+            [("Continue playing", game.toggle_pause), ("Quit game", self._quit_game)]
         )
 
     def _quit_game(self) -> None:
@@ -591,24 +587,24 @@ class PlayingView(View):
                     lines[index] += b"   " + row
 
         if self.game.is_paused:
-            width = self._paused_menu.width
+            inner_width = 60
             paused_lines = [
-                b"o%so" % (b"=" * width),
-                b"|%s|" % (b" " * width),
-                b"|%s|" % (b" " * width),
-                b"|%s|" % b" Game paused ".center(width),
-                b"|%s|" % b"^^^^^^^^^^^^^".center(width),
+                b"o%so" % (b"=" * inner_width),
+                b"|%s|" % (b" " * inner_width),
+                b"|%s|" % (b" " * inner_width),
+                b"|%s|" % b" Game paused ".center(inner_width),
+                b"|%s|" % b"^^^^^^^^^^^^^".center(inner_width),
                 *[
                     b"|" + (COLOR % 0) + line + (COLOR % 92) + b"|"
-                    for line in self._paused_menu.get_lines_to_render(fill=True)
+                    for line in self._paused_menu.get_lines_to_render(width=inner_width, fill=True)
                 ],
-                b"|%s|" % (b" " * width),
-                b"|%s|" % (b" " * width),
-                b"|%s|" % b"You will be disconnected automatically if".center(width),
-                b"|%s|" % b"you don't press any keys for 10 minutes.".center(width),
-                b"|%s|" % (b" " * width),
-                b"|%s|" % (b" " * width),
-                b"o%so" % (b"=" * width),
+                b"|%s|" % (b" " * inner_width),
+                b"|%s|" % (b" " * inner_width),
+                b"|%s|" % b"You will be disconnected automatically if".center(inner_width),
+                b"|%s|" % b"you don't press any keys for 10 minutes.".center(inner_width),
+                b"|%s|" % (b" " * inner_width),
+                b"|%s|" % (b" " * inner_width),
+                b"o%so" % (b"=" * inner_width),
             ]
 
             terminal_width = self.game.TERMINAL_WIDTH_NEEDED
@@ -617,7 +613,7 @@ class PlayingView(View):
             for index, line in enumerate(
                 paused_lines, start=(terminal_height - len(paused_lines)) // 2
             ):
-                left = (terminal_width - self._paused_menu.width - 2) // 2
+                left = (terminal_width - inner_width - 2) // 2
                 lines[index] += (
                     (MOVE_CURSOR_TO_COLUMN % (left + 1))
                     + (COLOR % 92)
