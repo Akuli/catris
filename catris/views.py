@@ -9,9 +9,9 @@ from catris.ansi import (
     BACKSPACE,
     COLOR,
     CSI,
-    MOVE_CURSOR_TO_COLUMN,
     DOWN_ARROW_KEY,
     LEFT_ARROW_KEY,
+    MOVE_CURSOR_TO_COLUMN,
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
 )
