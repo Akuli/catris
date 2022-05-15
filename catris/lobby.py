@@ -39,7 +39,7 @@ class Lobby:
 
     # ChooseGameViews display a list of all players and how many are playing each game.
     # Call this method when any of that info changes.
-    def _update_choose_game_views(self) -> None:
+    def update_choose_game_views(self) -> None:
         for client in self.clients:
             if isinstance(client.view, ChooseGameView):
                 client.render()
@@ -58,20 +58,18 @@ class Lobby:
         client.color = min(_CLIENT_COLORS - {c.color for c in self.clients})
         self.clients.append(client)
         client.lobby = self
-        self._update_choose_game_views()
+        self.update_choose_game_views()
 
     def remove_client(self, client: Client) -> None:
         client.log(f"Leaving lobby: {self.lobby_id}")
 
         if isinstance(client.view, PlayingView):
-            assert client.view.game in self.games.values()
-            client.view.game.remove_player(client.view.player)
-            client.view.game.need_render_event.set()
+            client.view.quit_game()
 
         assert client.lobby is self
         self.clients.remove(client)
         client.lobby = None
-        self._update_choose_game_views()
+        self.update_choose_game_views()
 
     def _player_has_a_connected_client(self, player: Player) -> bool:
         return any(
@@ -91,12 +89,9 @@ class Lobby:
         assert client.name is not None
         assert client.color is not None
         client.log(f"Joining a game with {len(game.players)} existing players: {game}")
-        player = game.get_existing_player_or_add_new_player(client.name, client.color)
-        if player is None:
-            client.view = ChooseGameView(client, game_class)
-        else:
-            client.view = PlayingView(client, game, player)
-        self._update_choose_game_views()
+        player = game.add_player(client.name, client.color)
+        client.view = PlayingView(client, game, player)
+        self.update_choose_game_views()
 
     async def _render_task(self, game: Game) -> None:
         while True:
@@ -118,4 +113,4 @@ class Lobby:
         for task in game.tasks:
             task.cancel()
         asyncio.create_task(save_and_display_high_scores(self, game))
-        self._update_choose_game_views()
+        self.update_choose_game_views()

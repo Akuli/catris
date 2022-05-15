@@ -113,7 +113,7 @@ class Game:
         return True
 
     def game_is_over(self) -> bool:
-        return bool(self.players) and not any(
+        return not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
             for p in self.players
         )
@@ -266,35 +266,6 @@ class Game:
     @abstractmethod
     def remove_player(self, player: Player) -> None:
         pass
-
-    # Name can exist already, if player quits and comes back
-    def get_existing_player_or_add_new_player(
-        self, name: str, color: int
-    ) -> Player | None:
-        if not self.player_can_join(name):
-            return None
-
-        game_over = self.game_is_over()
-
-        for player in self.players:
-            if player.name.lower() == name.lower():
-                # Let's say your caps lock was on accidentally and you type
-                # "aKULI" as name when you intended to type "Akuli".
-                # If that happens, you can leave the game and join back.
-                player.name = name
-                player.color = color
-                break
-        else:
-            player = self.add_player(name, color)
-
-        if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            self.new_block(player)
-        return player
-
-    def player_can_join(self, name: str) -> bool:
-        return len(self.players) < self.MAX_PLAYERS or name.lower() in (
-            p.name.lower() for p in self.players
-        )
 
     # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
