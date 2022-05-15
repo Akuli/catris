@@ -99,28 +99,32 @@ class TraditionalGame(Game):
 
         self.finish_wiping_full_lines()
 
-    def add_player(self, name: str, color: int) -> Player:
-        self.players.append(
-            Player(
-                name,
-                color,
-                up_x=0,
-                up_y=-1,
-                moving_block_start_x=123,  # changed below
-                moving_block_start_y=-1,
-            )
-        )
-
-        # width per player might have changed, adjust spawning locations
+    def _update_spawn_places_and_landed_coords(self) -> None:
         w = self._get_width_per_player()
         for i, player in enumerate(self.players):
             player.moving_block_start_x = (i * w) + (w // 2)
 
-        for y in range(self.HEIGHT):
-            for x in range(self._get_width()):
-                self.valid_landed_coordinates.add((x, y))
+        self.valid_landed_coordinates = {
+            (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+        }
 
+    def add_player(self, name: str, color: int) -> Player:
+        player = Player(
+            name,
+            color,
+            up_x=0,
+            up_y=-1,
+            moving_block_start_x=123,  # changed soon
+            moving_block_start_y=-1,
+        )
+        self.players.append(player)
+        self._update_spawn_places_and_landed_coords()
+        self.new_block(player)
         return player
+
+    def remove_player(self, player: Player) -> None:
+        self.players.remove(player)
+        self._update_spawn_places_and_landed_coords()
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         header_line = b"o"

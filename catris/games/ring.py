@@ -217,7 +217,11 @@ class RingGame(Game):
             moving_block_start_y=(GAME_RADIUS + 1) * up_y,
         )
         self.players.append(player)
+        self.new_block(player)
         return player
+
+    def remove_player(self, player: Player) -> None:
+        self.players.remove(player)
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         players_by_letter = {}

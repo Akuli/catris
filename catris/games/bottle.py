@@ -135,7 +135,11 @@ class BottleGame(Game):
             moving_block_start_y=-1,
         )
         self.players.append(player)
+        self.new_block(player)
         return player
+
+    def remove_player(self, player: Player) -> None:
+        raise NotImplementedError
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         square_texts = self.get_square_texts(rendering_for_this_player)

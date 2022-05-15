@@ -62,15 +62,15 @@ class Lobby:
 
     def remove_client(self, client: Client) -> None:
         client.log(f"Leaving lobby: {self.lobby_id}")
+
+        if isinstance(client.view, PlayingView):
+            assert client.view.game in self.games.values()
+            client.view.game.remove_player(client.view.player)
+            client.view.game.need_render_event.set()
+
         assert client.lobby is self
         self.clients.remove(client)
         client.lobby = None
-
-        if isinstance(client.view, PlayingView) and isinstance(
-            client.view.player.moving_block_or_wait_counter, MovingBlock
-        ):
-            client.view.player.moving_block_or_wait_counter = None
-            client.view.game.need_render_event.set()
         self._update_choose_game_views()
 
     def _player_has_a_connected_client(self, player: Player) -> bool:
@@ -85,7 +85,6 @@ class Lobby:
         game = self.games.get(game_class)
         if game is None:
             game = game_class()
-            game.player_has_a_connected_client = self._player_has_a_connected_client
             game.tasks.append(asyncio.create_task(self._render_task(game)))
             self.games[game_class] = game
 
@@ -103,20 +102,20 @@ class Lobby:
         while True:
             await game.need_render_event.wait()
             game.need_render_event.clear()
-            self.render_game(game)
 
-    def render_game(self, game: Game) -> None:
-        assert game.is_valid()
-        assert self.games[type(game)] == game
-        game.tasks = [t for t in game.tasks if not t.done()]
+            assert game.is_valid()
+            assert self.games[type(game)] == game
+            game.tasks = [t for t in game.tasks if not t.done()]
 
-        if game.game_is_over():
-            del self.games[type(game)]
-            for task in game.tasks:
-                task.cancel()
-            asyncio.create_task(save_and_display_high_scores(self, game))
-        else:
+            if game.game_is_over():
+                break
+
             for client in self.clients:
                 if isinstance(client.view, PlayingView) and client.view.game == game:
                     client.render()
+
+        del self.games[type(game)]
+        for task in game.tasks:
+            task.cancel()
+        asyncio.create_task(save_and_display_high_scores(self, game))
         self._update_choose_game_views()

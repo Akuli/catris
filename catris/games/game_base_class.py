@@ -1,10 +1,11 @@
+# TODO: prevent joining game if already quit twice? so that you can't "cheat" that way
 from __future__ import annotations
 
 import asyncio
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -43,10 +44,6 @@ class Game:
         self._start_time = time.monotonic_ns()
         self._time_spent_in_pause = 0
         self._last_pause_start = 0
-
-        # This is assigned elsewhere after instantiating the game.
-        # TODO: refactor?
-        self.player_has_a_connected_client: Callable[[Player], bool]
 
         # Hold this when wiping full lines or exploding a bomb or similar.
         # Prevents moving blocks down and causing weird bugs.
@@ -266,6 +263,10 @@ class Game:
     def add_player(self, name: str, color: int) -> Player:
         pass
 
+    @abstractmethod
+    def remove_player(self, player: Player) -> None:
+        pass
+
     # Name can exist already, if player quits and comes back
     def get_existing_player_or_add_new_player(
         self, name: str, color: int
@@ -424,13 +425,10 @@ class Game:
             player.moving_block_or_wait_counter -= 1
             self.need_render_event.set()
 
-        if self.player_has_a_connected_client(player):
-            for square in self.landed_squares.copy():
-                if self.square_belongs_to_player(player, square.x, square.y):
-                    self.landed_squares.remove(square)
-            self.new_block(player)
-        else:
-            player.moving_block_or_wait_counter = None
+        for square in self.landed_squares.copy():
+            if self.square_belongs_to_player(player, square.x, square.y):
+                self.landed_squares.remove(square)
+        self.new_block(player)
 
         self.need_render_event.set()
 
