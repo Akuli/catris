@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import io
 import logging
 import sys
 from typing import TYPE_CHECKING
@@ -54,12 +55,24 @@ def _add_high_score_sync(
 ) -> list[HighScore]:
     high_scores = []
     try:
-        with open("catris_high_scores.txt", "r", encoding="utf-8") as file:
+        with open("catris_high_scores.txt", "r+", encoding="utf-8") as file:
             first_line = file.readline(100)
-            if first_line != "catris high scores file v1\n":
+            if first_line == "catris high scores file v1\n":
+                _logger.info("Changing catris_high_scores.txt from v1 to v2 format")
+                file.seek(len("catris high scores file v"))
+                file.write("2")
+                file.seek(0, io.SEEK_END)
+                file.write("# --- upgraded from v1 to v2 ---\n")
+                file.seek(0)
+                first_line = file.readline(100)
+
+            if first_line != "catris high scores file v2\n":
                 raise ValueError(f"unrecognized first line: {repr(first_line)}")
 
             for line in file:
+                if line.startswith("#"):
+                    continue
+
                 parts = line.strip("\n").split("\t")
                 game_class_id, lobby_id, score, duration, *players = parts
                 old_high_score_is_multiplayer = len(players) >= 2
@@ -78,10 +91,11 @@ def _add_high_score_sync(
                             players=players,
                         )
                     )
+
     except FileNotFoundError:
         _logger.info("Creating catris_high_scores.txt")
         with open("catris_high_scores.txt", "x", encoding="utf-8") as file:
-            file.write("catris high scores file v1\n")
+            file.write("catris high scores file v2\n")
     except (ValueError, OSError):
         _logger.exception("Reading catris_high_scores.txt failed")
         return [hs]  # do not write to file
