@@ -4,6 +4,7 @@ CSI = ESC + b"["
 CLEAR_SCREEN = CSI + b"2J"
 CLEAR_FROM_CURSOR_TO_END_OF_SCREEN = CSI + b"0J"
 MOVE_CURSOR = CSI + b"%d;%dH"
+MOVE_CURSOR_TO_COLUMN = CSI + b"%dG"
 SHOW_CURSOR = CSI + b"?25h"
 HIDE_CURSOR = CSI + b"?25l"
 COLOR = CSI + b"1;%dm"  # "COLOR % 0" resets to default colors

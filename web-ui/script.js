@@ -269,6 +269,9 @@ document.addEventListener("DOMContentLoaded", () => {
         this._cursorX = column-1;
         this._cursorY = line-1;
         this._fixCursorPos();
+      } else if (ansiCode.endsWith("G")) {
+        this._cursorX = (+ansiCode.slice(2, -1)) - 1;
+        this._fixCursorPos();
       } else if (ansiCode.startsWith("\x1b[1;") && ansiCode.endsWith("m") && COLORS[ansiCode.slice(4, -1)]) {
         const colorInfo = COLORS[ansiCode.slice(4, -1)];
         if (colorInfo.fg) this.fgColor = colorInfo.fg;
