@@ -139,14 +139,14 @@ class BombSquare(Square):
 class BottleSeparatorSquare(Square):
     def __init__(self, left_color: int, right_color: int) -> None:
         super().__init__(_RotateMode.NO_ROTATING)
-        self._left_color = left_color
-        self._right_color = right_color
+        self.left_color = left_color
+        self.right_color = right_color
 
     def get_text(self, player: Player | None, landed: bool) -> bytes:
         return (
-            (COLOR % self._left_color)
+            (COLOR % self.left_color)
             + b"|"
-            + (COLOR % self._right_color)
+            + (COLOR % self.right_color)
             + b"|"
             + (COLOR % 0)
         )

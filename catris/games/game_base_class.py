@@ -1,10 +1,11 @@
+# TODO: prevent joining game if already quit twice? so that you can't "cheat" that way
 from __future__ import annotations
 
 import asyncio
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -43,10 +44,6 @@ class Game:
         self._start_time = time.monotonic_ns()
         self._time_spent_in_pause = 0
         self._last_pause_start = 0
-
-        # This is assigned elsewhere after instantiating the game.
-        # TODO: refactor?
-        self.player_has_a_connected_client: Callable[[Player], bool]
 
         # Hold this when wiping full lines or exploding a bomb or similar.
         # Prevents moving blocks down and causing weird bugs.
@@ -116,7 +113,7 @@ class Game:
         return True
 
     def game_is_over(self) -> bool:
-        return bool(self.players) and not any(
+        return not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
             for p in self.players
         )
@@ -266,34 +263,21 @@ class Game:
     def add_player(self, name: str, color: int) -> Player:
         pass
 
-    # Name can exist already, if player quits and comes back
-    def get_existing_player_or_add_new_player(
-        self, name: str, color: int
-    ) -> Player | None:
-        if not self.player_can_join(name):
-            return None
+    @abstractmethod
+    def remove_player(self, player: Player) -> None:
+        pass
 
-        game_over = self.game_is_over()
+    def wipe_vertical_slice(self, first_column: int, width: int) -> None:
+        square_sets = [self.landed_squares]
+        for block in self._get_moving_blocks().values():
+            square_sets.append(block.squares)
 
-        for player in self.players:
-            if player.name.lower() == name.lower():
-                # Let's say your caps lock was on accidentally and you type
-                # "aKULI" as name when you intended to type "Akuli".
-                # If that happens, you can leave the game and join back.
-                player.name = name
-                player.color = color
-                break
-        else:
-            player = self.add_player(name, color)
-
-        if not game_over and not isinstance(player.moving_block_or_wait_counter, int):
-            self.new_block(player)
-        return player
-
-    def player_can_join(self, name: str) -> bool:
-        return len(self.players) < self.MAX_PLAYERS or name.lower() in (
-            p.name.lower() for p in self.players
-        )
+        for square_set in square_sets:
+            for square in square_set.copy():
+                if first_column <= square.x < first_column + width:
+                    square_set.remove(square)
+                elif square.x >= first_column + width:
+                    square.x -= width
 
     # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
@@ -418,21 +402,20 @@ class Game:
     async def _please_wait_countdown(self, player: Player) -> None:
         assert isinstance(player.moving_block_or_wait_counter, int)
 
-        while player.moving_block_or_wait_counter > 0:
+        while player.moving_block_or_wait_counter > 0 and player in self.players:
             await self.pause_aware_sleep(1)
             assert isinstance(player.moving_block_or_wait_counter, int)
             player.moving_block_or_wait_counter -= 1
             self.need_render_event.set()
 
-        if self.player_has_a_connected_client(player):
-            for square in self.landed_squares.copy():
-                if self.square_belongs_to_player(player, square.x, square.y):
-                    self.landed_squares.remove(square)
-            self.new_block(player)
-        else:
-            player.moving_block_or_wait_counter = None
+        if player not in self.players:
+            # player quit
+            return
 
-        self.need_render_event.set()
+        for square in self.landed_squares.copy():
+            if self.square_belongs_to_player(player, square.x, square.y):
+                self.landed_squares.remove(square)
+        self.new_block(player)
 
     def start_please_wait_countdown(self, player: Player) -> None:
         # Get rid of moving block immediately to prevent invalid state after

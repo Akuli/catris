@@ -23,7 +23,7 @@ class Player:
     # For example, in traditional tetris, that means moving_block_start_y = -1.
     moving_block_start_x: int
     moving_block_start_y: int
-    moving_block_or_wait_counter: MovingBlock | int | None = None
+    moving_block_or_wait_counter: MovingBlock | int = 0
     held_squares: set[Square] | None = None
 
     def __post_init__(self) -> None:

@@ -338,7 +338,7 @@ class ChooseGameView(View):
         if self._menu.selected_index >= len(GAME_CLASSES):
             return False
         game = self.client.lobby.games.get(GAME_CLASSES[self._menu.selected_index])
-        return game is not None and not game.player_can_join(self.client.name)
+        return game is not None and len(game.players) == type(game).MAX_PLAYERS
 
     def _fill_menu(self) -> None:
         assert self.client.lobby is not None
@@ -552,11 +552,16 @@ class PlayingView(View):
         self.game: Game = game
         self.player: Player = player
         self._paused_menu = _Menu(
-            [("Continue playing", game.toggle_pause), ("Quit game", self._quit_game)]
+            [("Continue playing", game.toggle_pause), ("Quit game", self.quit_game)]
         )
 
-    def _quit_game(self) -> None:
+    def quit_game(self) -> None:
+        assert self.client.lobby is not None
+        assert self.client.lobby.games[type(self.game)] == self.game
+        self.game.remove_player(self.player)
+        self.game.need_render_event.set()
         self.client.view = ChooseGameView(self.client, type(self.game))
+        self.client.lobby.update_choose_game_views()
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
