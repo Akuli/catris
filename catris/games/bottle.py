@@ -171,7 +171,7 @@ class BottleGame(Game):
 
             new_wall_squares = {}  # only one square for each y
             for square in self.landed_squares.copy():
-                if isinstance(square, BottleSeparatorSquare) and square.x in (left_wall_x, right_wall_x):
+                if square.x == left_wall_x or square.x == right_wall_x:
                     self.landed_squares.remove(square)
                     square.x = left_wall_x
                     if isinstance(square, BottleSeparatorSquare):

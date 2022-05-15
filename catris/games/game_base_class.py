@@ -417,8 +417,6 @@ class Game:
                 self.landed_squares.remove(square)
         self.new_block(player)
 
-        self.need_render_event.set()
-
     def start_please_wait_countdown(self, player: Player) -> None:
         # Get rid of moving block immediately to prevent invalid state after
         # adding a moving block that overlaps someone else's moving block.
