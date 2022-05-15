@@ -175,13 +175,14 @@ class AskNameView(TextEntryView):
 
 class _Menu:
     def __init__(
-        self,
-        items: Sequence[tuple[str, Callable[[], bool | None]] | None] = ()
+        self, items: Sequence[tuple[str, Callable[[], bool | None]] | None] = ()
     ) -> None:
         self.items = list(items)
         self.selected_index = 0
 
-    def get_lines_to_render(self, *, width: int = 80, fill: bool = False) -> list[bytes]:
+    def get_lines_to_render(
+        self, *, width: int = 80, fill: bool = False
+    ) -> list[bytes]:
         item_width = 35
         if fill:
             result = [b" " * width] * 2
@@ -596,12 +597,16 @@ class PlayingView(View):
                 b"|%s|" % b"^^^^^^^^^^^^^".center(inner_width),
                 *[
                     b"|" + (COLOR % 0) + line + (COLOR % 92) + b"|"
-                    for line in self._paused_menu.get_lines_to_render(width=inner_width, fill=True)
+                    for line in self._paused_menu.get_lines_to_render(
+                        width=inner_width, fill=True
+                    )
                 ],
                 b"|%s|" % (b" " * inner_width),
                 b"|%s|" % (b" " * inner_width),
-                b"|%s|" % b"You will be disconnected automatically if".center(inner_width),
-                b"|%s|" % b"you don't press any keys for 10 minutes.".center(inner_width),
+                b"|%s|"
+                % b"You will be disconnected automatically if".center(inner_width),
+                b"|%s|"
+                % b"you don't press any keys for 10 minutes.".center(inner_width),
                 b"|%s|" % (b" " * inner_width),
                 b"|%s|" % (b" " * inner_width),
                 b"o%so" % (b"=" * inner_width),
