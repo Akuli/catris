@@ -418,7 +418,7 @@ Keys:
   <P>: pause/unpause (affects all players)
   <F>: flip the game upside down (only available in ring mode with 1 player)
 
-There's [only one score]. You play together, not against other players. Try to
+There's only one score. [You play together], not against other players. Try to
 work together and make good use of everyone's blocks.
 
 With multiple players, when your playing area fills all the way to the top,
