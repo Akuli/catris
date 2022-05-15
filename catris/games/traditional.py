@@ -128,19 +128,7 @@ class TraditionalGame(Game):
         self.players.remove(player)
         new_width = self._get_width()
         slice_width = old_width - new_width
-        assert slice_width > 0
-
-        # Remove a vertical slice from the playing area, starting at slice_x
-        square_sets = [self.landed_squares]
-        for block in self._get_moving_blocks().values():
-            square_sets.append(block.squares)
-        for square_set in square_sets:
-            for square in square_set.copy():
-                if square.x >= slice_x + slice_width:
-                    square.x -= slice_width
-                elif square.x >= slice_x:
-                    square_set.remove(square)
-
+        self.wipe_vertical_slice(slice_x, slice_width)
         self._update_spawn_places_and_landed_coords()
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:

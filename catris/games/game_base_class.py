@@ -267,6 +267,18 @@ class Game:
     def remove_player(self, player: Player) -> None:
         pass
 
+    def wipe_vertical_slice(self, first_column: int, width: int) -> None:
+        square_sets = [self.landed_squares]
+        for block in self._get_moving_blocks().values():
+            square_sets.append(block.squares)
+
+        for square_set in square_sets:
+            for square in square_set.copy():
+                if first_column <= square.x < first_column + width:
+                    square_set.remove(square)
+                elif square.x >= first_column + width:
+                    square.x -= width
+
     # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
         # Drill squares land differently and I don't want to duplicate their

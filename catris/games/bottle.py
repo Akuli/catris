@@ -105,13 +105,32 @@ class BottleGame(Game):
 
         self.finish_wiping_full_lines()
 
+    def _update_spawn_places_and_landed_coords(self) -> None:
+        for i, player in enumerate(self.players):
+            player.moving_block_start_x = (i * self.BOTTLE_OUTER_WIDTH) + (
+                self.BOTTLE_INNER_WIDTH // 2
+            )
+
+        self.valid_landed_coordinates = set()
+
+        # Insides of bottles
+        for i in range(len(self.players)):
+            x_offset = self.BOTTLE_OUTER_WIDTH * i
+            for y, row in enumerate(self.BOTTLE):
+                for x in range(self.BOTTLE_INNER_WIDTH):
+                    if row[2 * x + 1 : 2 * x + 3] == b"xx":
+                        assert (x + x_offset, y) not in self.valid_landed_coordinates
+                        self.valid_landed_coordinates.add((x + x_offset, y))
+
+        # Walls between bottles
+        for i in range(1, len(self.players)):
+            x = (self.BOTTLE_OUTER_WIDTH * i) - 1
+            for y, row in enumerate(self.BOTTLE):
+                if row.startswith(b"|") and row.endswith(b"|"):
+                    self.valid_landed_coordinates.add((x, y))
+
     def add_player(self, name: str, color: int) -> Player:
         x_offset = self.BOTTLE_OUTER_WIDTH * len(self.players)
-        for y, row in enumerate(self.BOTTLE):
-            for x in range(self.BOTTLE_INNER_WIDTH):
-                if row[2 * x + 1 : 2 * x + 3] == b"xx":
-                    assert (x + x_offset, y) not in self.valid_landed_coordinates
-                    self.valid_landed_coordinates.add((x + x_offset, y))
 
         if self.players:
             # Not the first player. Add squares to boundary.
@@ -121,25 +140,53 @@ class BottleGame(Game):
                     sep.x = x_offset - 1
                     sep.y = y
                     self.landed_squares.add(sep)
-                    self.valid_landed_coordinates.add((sep.x, sep.y))
 
         player = Player(
             name,
             color,
             up_x=0,
             up_y=-1,
-            moving_block_start_x=(
-                len(self.players) * self.BOTTLE_OUTER_WIDTH
-                + (self.BOTTLE_INNER_WIDTH // 2)
-            ),
+            moving_block_start_x=123,  # changed soon
             moving_block_start_y=-1,
         )
         self.players.append(player)
+        self._update_spawn_places_and_landed_coords()
         self.new_block(player)
         return player
 
     def remove_player(self, player: Player) -> None:
-        raise NotImplementedError
+        assert self.is_valid()
+
+        left_wall_x = self.players.index(player) * self.BOTTLE_OUTER_WIDTH - 1
+        right_wall_x = left_wall_x + self.BOTTLE_OUTER_WIDTH
+
+        if player == self.players[0]:
+            # Wipe wall on right side
+            self.wipe_vertical_slice(0, self.BOTTLE_OUTER_WIDTH)
+        elif player == self.players[-1]:
+            # Wipe wall on left side
+            self.wipe_vertical_slice(left_wall_x, self.BOTTLE_OUTER_WIDTH)
+        else:
+            # There's a wall on both sides of player. Combine the walls.
+            left_neighbor = self.players[self.players.index(player) - 1]
+            right_neighbor = self.players[self.players.index(player) + 1]
+
+            new_wall_squares = {}  # only one square for each y
+            for square in self.landed_squares.copy():
+                if isinstance(square, BottleSeparatorSquare) and square.x in (left_wall_x, right_wall_x):
+                    self.landed_squares.remove(square)
+                    square.x = left_wall_x
+                    if isinstance(square, BottleSeparatorSquare):
+                        square.left_color = left_neighbor.color
+                        square.right_color = right_neighbor.color
+                    new_wall_squares[square.y] = square
+
+            self.wipe_vertical_slice(left_wall_x, self.BOTTLE_OUTER_WIDTH)
+            self.landed_squares.update(new_wall_squares.values())
+
+        self.players.remove(player)
+        self._update_spawn_places_and_landed_coords()
+        assert self.is_valid()
 
     def get_lines_to_render(self, rendering_for_this_player: Player) -> list[bytes]:
         square_texts = self.get_square_texts(rendering_for_this_player)
