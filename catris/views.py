@@ -9,6 +9,7 @@ from catris.ansi import (
     BACKSPACE,
     COLOR,
     CSI,
+    MOVE_CURSOR_TO_COLUMN,
     DOWN_ARROW_KEY,
     LEFT_ARROW_KEY,
     RIGHT_ARROW_KEY,
@@ -174,14 +175,21 @@ class AskNameView(TextEntryView):
 
 class _Menu:
     def __init__(
-        self, items: Sequence[tuple[str, Callable[[], bool | None]] | None] = ()
+        self,
+        items: Sequence[tuple[str, Callable[[], bool | None]] | None] = (),
+        *,
+        width: int = 80,
     ) -> None:
         self.items = list(items)
         self.selected_index = 0
+        self.width = width
 
-    def get_lines_to_render(self) -> list[bytes]:
+    def get_lines_to_render(self, *, fill: bool = False) -> list[bytes]:
         item_width = 35
-        result = [b"", b""]
+        if fill:
+            result = [b" " * self.width] * 2
+        else:
+            result = [b""] * 2
         for index, item in enumerate(self.items):
             if item is None:
                 result.append(b"")
@@ -192,7 +200,12 @@ class _Menu:
                     display_text = (COLOR % 47) + display_text  # white background
                     display_text = (COLOR % 30) + display_text  # black foreground
                     display_text += COLOR % 0
-                result.append(b" " * ((80 - item_width) // 2) + display_text)
+                left_fill = (self.width - item_width) // 2
+                if fill:
+                    right_fill = self.width - item_width - left_fill
+                else:
+                    right_fill = 0
+                result.append(b" " * left_fill + display_text + b" " * right_fill)
         return result
 
     def handle_key_press(self, received: bytes) -> bool:
@@ -520,7 +533,7 @@ class GameOverView(View):
         return lines
 
 
-def get_block_preview(squares: set[Square]) -> list[bytes]:
+def _get_block_preview(squares: set[Square]) -> list[bytes]:
     min_x = min(square.x for square in squares)
     min_y = min(square.y for square in squares)
     width = max(square.x - min_x for square in squares) + 1
@@ -540,6 +553,13 @@ class PlayingView(View):
         # no idea why these need explicit type annotations
         self.game: Game = game
         self.player: Player = player
+        self._paused_menu = _Menu(
+            [("Continue playing", game.toggle_pause), ("Quit game", self._quit_game)],
+            width=60,
+        )
+
+    def _quit_game(self) -> None:
+        self.client.view = ChooseGameView(self.client, type(self.game))
 
     def get_lines_to_render(self) -> list[bytes]:
         lines = self.game.get_lines_to_render(self.player)
@@ -550,8 +570,6 @@ class PlayingView(View):
         )
         if self.client.rotate_counter_clockwise:
             lines[6] += b"  Counter-clockwise"
-        if self.game.is_paused:
-            lines[7] += b"  Paused"
 
         if isinstance(self.player.moving_block_or_wait_counter, int):
             n = self.player.moving_block_or_wait_counter
@@ -559,7 +577,7 @@ class PlayingView(View):
         else:
             lines[8] += b"  Next:"
             for index, row in enumerate(
-                get_block_preview(self.player.next_moving_squares), start=10
+                _get_block_preview(self.player.next_moving_squares), start=10
             ):
                 lines[index] += b"   " + row
             if self.player.held_squares is None:
@@ -568,28 +586,67 @@ class PlayingView(View):
             else:
                 lines[16] += b"  Holding:"
                 for index, row in enumerate(
-                    get_block_preview(self.player.held_squares), start=18
+                    _get_block_preview(self.player.held_squares), start=18
                 ):
                     lines[index] += b"   " + row
 
+        if self.game.is_paused:
+            width = self._paused_menu.width
+            paused_lines = (
+                [
+                    b"o%so" % (b"=" * width),
+                    b"|%s|" % (b" " * width),
+                    b"|%s|" % (b" " * width),
+                    b"|%s|" % b" Game paused ".center(width),
+                    b"|%s|" % b"^^^^^^^^^^^^^".center(width),
+                ]
+                + [
+                    b"|" + (COLOR % 0) + line + (COLOR % 92) + b"|"
+                    for line in self._paused_menu.get_lines_to_render(fill=True)
+                ]
+                + [
+                    b"|%s|" % (b" " * width),
+                    b"|%s|" % (b" " * width),
+                    b"|%s|"
+                    % b"You will be disconnected automatically if".center(width),
+                    b"|%s|" % b"you don't press any keys for 10 minutes.".center(width),
+                    b"|%s|" % (b" " * width),
+                    b"|%s|" % (b" " * width),
+                    b"o%so" % (b"=" * width),
+                ]
+            )
+
+            terminal_width = self.game.TERMINAL_WIDTH_NEEDED
+            terminal_height = self.game.TERMINAL_HEIGHT_NEEDED
+
+            for index, line in enumerate(
+                paused_lines, start=(terminal_height - len(paused_lines)) // 2
+            ):
+                left = (terminal_width - self._paused_menu.width - 6) // 2
+                lines[index] += (
+                    (MOVE_CURSOR_TO_COLUMN % (left + 1))
+                    + (COLOR % 92)
+                    + line
+                    + (COLOR % 0)
+                    + (MOVE_CURSOR_TO_COLUMN % terminal_width)
+                )
+
         return lines
 
-    def handle_key_press(self, received: bytes) -> None:
+    def handle_key_press(self, received: bytes) -> bool | None:
+        if received in (b"P", b"p"):
+            self.game.toggle_pause()
+            return None
+
+        if self.game.is_paused:
+            return self._paused_menu.handle_key_press(received)
+
         if received in (b"R", b"r"):
             self.client.rotate_counter_clockwise = (
                 not self.client.rotate_counter_clockwise
             )
             self.client.render()
-            return
-
-        if received in (b"P", b"p"):
-            self.game.toggle_pause()
-            return
-
-        if self.game.is_paused:
-            return
-
-        if received in (b"A", b"a", LEFT_ARROW_KEY):
+        elif received in (b"A", b"a", LEFT_ARROW_KEY):
             self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
             self.player.set_fast_down(False)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
@@ -614,3 +671,4 @@ class PlayingView(View):
             else:
                 # Can't flip, blocks are on top of each other. Flip again to undo.
                 self.game.players[0].flip_view()
+        return None
