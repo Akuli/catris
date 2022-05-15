@@ -622,7 +622,7 @@ class PlayingView(View):
             for index, line in enumerate(
                 paused_lines, start=(terminal_height - len(paused_lines)) // 2
             ):
-                left = (terminal_width - self._paused_menu.width - 6) // 2
+                left = (terminal_width - self._paused_menu.width - 2) // 2
                 lines[index] += (
                     (MOVE_CURSOR_TO_COLUMN % (left + 1))
                     + (COLOR % 92)
