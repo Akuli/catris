@@ -537,7 +537,6 @@ def get_block_preview(squares: set[Square]) -> list[bytes]:
 class PlayingView(View):
     def __init__(self, client: Client, game: Game, player: Player):
         super().__init__(client)
-        self._server = client.server
         # no idea why these need explicit type annotations
         self.game: Game = game
         self.player: Player = player
