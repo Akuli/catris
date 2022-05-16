@@ -5,7 +5,7 @@ import asyncio
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator, TypeVar
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -17,6 +17,9 @@ def _player_has_a_drill(player: Player) -> bool:
         isinstance(square, DrillSquare)
         for square in player.moving_block_or_wait_counter.squares
     )
+
+
+GameT = TypeVar("GameT", bound='Game')
 
 
 class Game:
@@ -49,6 +52,31 @@ class Game:
         # Prevents moving blocks down and causing weird bugs.
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
+
+    def create_temporary_copy(self: GameT) -> GameT:
+        result = copy.copy(self)
+
+        # asyncio tasks, events and locks aren't copyable
+        result.tasks = []
+        result._pause_event = None  # type: ignore
+        result._unpause_event = None  # type: ignore
+        result.need_render_event = None  # type: ignore
+        result.flashing_lock = None  # type: ignore
+
+        result = copy.deepcopy(result)
+
+        result._pause_event = asyncio.Event()
+        result._unpause_event = asyncio.Event()
+        result.need_render_event = asyncio.Event()
+        if self._pause_event.is_set():
+            result._pause_event.set()
+        if self._unpause_event.is_set():
+            result._unpause_event.set()
+        if self.need_render_event.is_set():
+            result.need_render_event.set()
+
+        result.flashing_lock = asyncio.Lock()
+        return result
 
     @property
     def is_paused(self) -> bool:
@@ -279,37 +307,22 @@ class Game:
                 elif square.x >= first_column + width:
                     square.x -= width
 
-    # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
-        # Drill squares land differently and I don't want to duplicate their
-        # landing logic here
-        if _player_has_a_drill(player):
-            return set()
+        temp_game = self.create_temporary_copy()
+        player = temp_game.players[self.players.index(player)]
 
-        block = player.moving_block_or_wait_counter
-        if not isinstance(block, MovingBlock):
-            return set()
-
-        # Temporarily changing squares feels a bit hacky, but it's simple and it works
-        old_squares = block.squares
-        block.squares = {copy.copy(square) for square in block.squares}
-        assert self.is_valid()
-
-        try:
-            for offset in range(1, 100):
-                previous_squares = {copy.copy(square) for square in block.squares}
-                for square in block.squares:
-                    square.x -= player.up_x
-                    square.y -= player.up_y
-                    self.fix_moving_square(player, square)
-                if not self.is_valid():
-                    return {(s.x, s.y) for s in previous_squares}
-
+        for i in range(100):
+            if not temp_game.move_if_possible(
+                player, dx=0, dy=1, in_player_coords=True, can_drill=True
+            ):
+                break
+        else:
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
 
-        finally:
-            block.squares = old_squares
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return {(s.x, s.y) for s in player.moving_block_or_wait_counter.squares}
+        return set()
 
     def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
