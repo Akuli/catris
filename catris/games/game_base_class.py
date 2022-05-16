@@ -328,13 +328,16 @@ class Game:
         assert self.is_valid()
 
         result = {}
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(player, landed=True)
         for point in self._predict_landing_places(player):
-            result[point] = b"::"
+            if point in result:
+                result[point] = result[point].replace(b"  ", b"::")
+            else:
+                result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(player, landed=False)
-        for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(player, landed=True)
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 
