@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Iterator
+from typing import Any, Callable, ClassVar, Iterator, Generator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -49,44 +50,6 @@ class Game:
         # Prevents moving blocks down and causing weird bugs.
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
-
-    def create_temporary_copy(self) -> Game:
-        result = copy.copy(self)
-
-        # asyncio tasks, events and locks aren't copyable
-        result.tasks = []
-        result._pause_event = None  # type: ignore
-        result._unpause_event = None  # type: ignore
-        result.need_render_event = None  # type: ignore
-        result.flashing_lock = None  # type: ignore
-
-        result = copy.deepcopy(result)
-
-        result._pause_event = asyncio.Event()
-        result._unpause_event = asyncio.Event()
-        result.need_render_event = asyncio.Event()
-        if self._pause_event.is_set():
-            result._pause_event.set()
-        if self._unpause_event.is_set():
-            result._unpause_event.set()
-        if self.need_render_event.is_set():
-            result.need_render_event.set()
-
-        result.flashing_lock = asyncio.Lock()
-        return result
-
-    def _apply_change_if_possible(
-        self, callback: Callable[[Game, Player], None], player: Player
-    ) -> bool:
-        assert self.is_valid()
-        temp_copy = self.create_temporary_copy()
-        callback(temp_copy, temp_copy.players[self.players.index(player)])
-        if temp_copy.is_valid():
-            callback(self, player)
-            assert self.is_valid()
-            self.need_render_event.set()
-            return True
-        return False
 
     @property
     def is_paused(self) -> bool:
@@ -149,6 +112,40 @@ class Game:
             # print("Invalid state: landed squares outside valid area")
             return False
         return True
+
+    # Inside this context manager, you can get the game to invalid state if you want.
+    # All changes to blocks will be erased when you exit the context manager.
+    @contextlib.contextmanager
+    def temporary_state(self) -> Generator[None, None, None]:
+        old_landed = self.landed_squares
+        self.landed_squares = {copy.copy(s) for s in self.landed_squares}
+        old_need_render = self.need_render_event.is_set()
+
+        old_moving = []
+        for block in self._get_moving_blocks().values():
+            old_moving.append((block, block.squares))
+            block.squares = {copy.copy(s) for s in block.squares}
+
+        try:
+            yield
+        finally:
+            self.landed_squares = old_landed
+            for block, squares in old_moving:
+                block.squares = squares
+            if old_need_render:
+                self.need_render_event.set()
+            else:
+                self.need_render_event.clear()
+
+    def _apply_change_if_possible(self, callback: Callable[[], None]) -> bool:
+        assert self.is_valid()
+        with self.temporary_state():
+            callback()
+            stayed_valid = self.is_valid()
+        if stayed_valid:
+            callback()
+            return True
+        return False
 
     def game_is_over(self) -> bool:
         return not any(
@@ -232,6 +229,9 @@ class Game:
     def _move(
         self, player: Player, dx: int, dy: int, in_player_coords: bool, can_drill: bool
     ) -> None:
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return
+
         if in_player_coords:
             dx, dy = player.player_to_world(dx, dy)
 
@@ -255,6 +255,8 @@ class Game:
                         ):
                             square_set.remove(other_square)
 
+        self.need_render_event.set()
+
     def move_if_possible(
         self,
         player: Player,
@@ -264,11 +266,8 @@ class Game:
         *,
         can_drill: bool = False,
     ) -> bool:
-        assert self.is_valid()
-        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            return False
         return self._apply_change_if_possible(
-            (lambda g, p: g._move(p, dx, dy, in_player_coords, can_drill)), player
+            lambda: self._move(player, dx, dy, in_player_coords, can_drill)
         )
 
     # RingGame overrides this to get blocks to wrap back to top
@@ -276,16 +275,15 @@ class Game:
         pass
 
     def _rotate(self, player: Player, counter_clockwise: bool) -> None:
-        assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
-        for square in player.moving_block_or_wait_counter.squares:
-            square.rotate(counter_clockwise)
-            self.fix_moving_square(player, square)
+        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            for square in player.moving_block_or_wait_counter.squares:
+                square.rotate(counter_clockwise)
+                self.fix_moving_square(player, square)
+            self.need_render_event.set()
 
     def rotate_if_possible(self, player: Player, counter_clockwise: bool) -> bool:
-        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            return False
         return self._apply_change_if_possible(
-            (lambda g, p: g._rotate(p, counter_clockwise)), player
+            lambda: self._rotate(player, counter_clockwise)
         )
 
     @abstractmethod
@@ -309,21 +307,20 @@ class Game:
                     square.x -= width
 
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
-        temp_game = self.create_temporary_copy()
-        player = temp_game.players[self.players.index(player)]
-
-        for i in range(100):
-            if not temp_game.move_if_possible(
-                player, dx=0, dy=1, in_player_coords=True, can_drill=True
-            ):
-                break
-        else:
-            # Block won't land if you press down arrow. Happens a lot in ring mode.
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
             return set()
 
-        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            return {(s.x, s.y) for s in player.moving_block_or_wait_counter.squares}
-        return set()
+        with self.temporary_state():
+            for i in range(100):
+                if not self.move_if_possible(
+                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
+                ):
+                    # Can't move down anymore. This is where it will land
+                    return {
+                        (s.x, s.y) for s in player.moving_block_or_wait_counter.squares
+                    }
+            # Block won't land if you press down arrow. Happens a lot in ring mode.
+            return set()
 
     def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
