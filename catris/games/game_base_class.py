@@ -5,7 +5,7 @@ import asyncio
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, ClassVar, Iterator, TypeVar
+from typing import Any, Callable, ClassVar, Iterator, TypeVar
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -77,6 +77,18 @@ class Game:
 
         result.flashing_lock = asyncio.Lock()
         return result
+
+    def apply_state_change(
+        self, callback: Callable[[Game, Player], None], player: Player
+    ) -> bool:
+        assert self.is_valid()
+        temp_copy = self.create_temporary_copy()
+        callback(temp_copy, temp_copy.players[self.players.index(player)])
+        if temp_copy.is_valid():
+            callback(self, player)
+            self.need_render_event.set()
+            return True
+        return False
 
     @property
     def is_paused(self) -> bool:
@@ -220,13 +232,7 @@ class Game:
         assert self.is_valid()
 
     def _move(
-        self,
-        player: Player,
-        dx: int,
-        dy: int,
-        *,
-        in_player_coords: bool,
-        can_drill: bool,
+        self, player: Player, dx: int, dy: int, in_player_coords: bool, can_drill: bool
     ) -> None:
         if in_player_coords:
             dx, dy = player.player_to_world(dx, dy)
@@ -263,19 +269,9 @@ class Game:
         assert self.is_valid()
         if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
             return False
-
-        temp_copy = self.create_temporary_copy()
-        temp_player = temp_copy.players[self.players.index(player)]
-        temp_copy._move(
-            temp_player, dx, dy, in_player_coords=in_player_coords, can_drill=can_drill
+        return self.apply_state_change(
+            (lambda g, p: g._move(p, dx, dy, in_player_coords, can_drill)), player
         )
-        if temp_copy.is_valid():
-            self._move(
-                player, dx, dy, in_player_coords=in_player_coords, can_drill=can_drill
-            )
-            self.need_render_event.set()
-            return True
-        return False
 
     # RingGame overrides this to get blocks to wrap back to top
     def fix_moving_square(self, player: Player, square: Square) -> None:
@@ -287,15 +283,12 @@ class Game:
             square.rotate(counter_clockwise)
             self.fix_moving_square(player, square)
 
-    def rotate(self, player: Player, counter_clockwise: bool) -> None:
+    def rotate_if_possible(self, player: Player, counter_clockwise: bool) -> bool:
         if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            return
-
-        temp_copy = self.create_temporary_copy()
-        temp_player = temp_copy.players[self.players.index(player)]
-        temp_copy._rotate(temp_player, counter_clockwise)
-        if temp_copy.is_valid():
-            self._rotate(player, counter_clockwise)
+            return False
+        return self.apply_state_change(
+            (lambda g, p: g._rotate(p, counter_clockwise)), player
+        )
 
     @abstractmethod
     def add_player(self, name: str, color: int) -> Player:
