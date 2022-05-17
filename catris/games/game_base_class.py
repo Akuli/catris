@@ -5,7 +5,7 @@ import asyncio
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Iterator, TypeVar
+from typing import Any, Callable, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -17,9 +17,6 @@ def _player_has_a_drill(player: Player) -> bool:
         isinstance(square, DrillSquare)
         for square in player.moving_block_or_wait_counter.squares
     )
-
-
-GameT = TypeVar("GameT", bound="Game")
 
 
 class Game:
@@ -53,7 +50,7 @@ class Game:
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
 
-    def create_temporary_copy(self: GameT) -> GameT:
+    def create_temporary_copy(self) -> Game:
         result = copy.copy(self)
 
         # asyncio tasks, events and locks aren't copyable
@@ -78,7 +75,7 @@ class Game:
         result.flashing_lock = asyncio.Lock()
         return result
 
-    def apply_state_change(
+    def _apply_change_if_possible(
         self, callback: Callable[[Game, Player], None], player: Player
     ) -> bool:
         assert self.is_valid()
@@ -86,6 +83,7 @@ class Game:
         callback(temp_copy, temp_copy.players[self.players.index(player)])
         if temp_copy.is_valid():
             callback(self, player)
+            assert self.is_valid()
             self.need_render_event.set()
             return True
         return False
@@ -269,7 +267,7 @@ class Game:
         assert self.is_valid()
         if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
             return False
-        return self.apply_state_change(
+        return self._apply_change_if_possible(
             (lambda g, p: g._move(p, dx, dy, in_player_coords, can_drill)), player
         )
 
@@ -286,7 +284,7 @@ class Game:
     def rotate_if_possible(self, player: Player, counter_clockwise: bool) -> bool:
         if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
             return False
-        return self.apply_state_change(
+        return self._apply_change_if_possible(
             (lambda g, p: g._rotate(p, counter_clockwise)), player
         )
 
