@@ -19,7 +19,7 @@ def _player_has_a_drill(player: Player) -> bool:
     )
 
 
-GameT = TypeVar("GameT", bound='Game')
+GameT = TypeVar("GameT", bound="Game")
 
 
 class Game:
@@ -219,6 +219,38 @@ class Game:
 
         assert self.is_valid()
 
+    def _move(
+        self,
+        player: Player,
+        dx: int,
+        dy: int,
+        *,
+        in_player_coords: bool,
+        can_drill: bool,
+    ) -> None:
+        if in_player_coords:
+            dx, dy = player.player_to_world(dx, dy)
+
+        assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        for square in player.moving_block_or_wait_counter.squares:
+            square.x += dx
+            square.y += dy
+            self.fix_moving_square(player, square)
+
+            if can_drill and isinstance(square, DrillSquare):
+                square_sets = [self.landed_squares]
+                for block in self._get_moving_blocks().values():
+                    square_sets.append(block.squares)
+
+                for square_set in square_sets:
+                    for other_square in square_set.copy():
+                        if (
+                            other_square.x == square.x
+                            and other_square.y == square.y
+                            and not isinstance(other_square, DrillSquare)
+                        ):
+                            square_set.remove(other_square)
+
     def move_if_possible(
         self,
         player: Player,
@@ -229,63 +261,41 @@ class Game:
         can_drill: bool = False,
     ) -> bool:
         assert self.is_valid()
-        if in_player_coords:
-            dx, dy = player.player_to_world(dx, dy)
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return False
 
-        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            drilled = []
-
-            for square in player.moving_block_or_wait_counter.squares:
-                square.x += dx
-                square.y += dy
-                self.fix_moving_square(player, square)
-
-                if can_drill and isinstance(square, DrillSquare):
-                    square_sets = [self.landed_squares]
-                    for block in self._get_moving_blocks().values():
-                        square_sets.append(block.squares)
-
-                    for square_set in square_sets:
-                        for other_square in square_set.copy():
-                            if (
-                                other_square.x == square.x
-                                and other_square.y == square.y
-                                and not isinstance(other_square, DrillSquare)
-                            ):
-                                square_set.remove(other_square)
-                                drilled.append((square_set, other_square))
-
-            if self.is_valid():
-                self.need_render_event.set()
-                return True
-
-            for square_set, removed_square in drilled:
-                square_set.add(removed_square)
-
-            for square in player.moving_block_or_wait_counter.squares:
-                square.x -= dx
-                square.y -= dy
-                self.fix_moving_square(player, square)
-            assert self.is_valid()
-
+        temp_copy = self.create_temporary_copy()
+        temp_player = temp_copy.players[self.players.index(player)]
+        temp_copy._move(
+            temp_player, dx, dy, in_player_coords=in_player_coords, can_drill=can_drill
+        )
+        if temp_copy.is_valid():
+            self._move(
+                player, dx, dy, in_player_coords=in_player_coords, can_drill=can_drill
+            )
+            self.need_render_event.set()
+            return True
         return False
 
     # RingGame overrides this to get blocks to wrap back to top
     def fix_moving_square(self, player: Player, square: Square) -> None:
         pass
 
-    def rotate(self, player: Player, counter_clockwise: bool) -> None:
-        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            for square in player.moving_block_or_wait_counter.squares:
-                square.rotate(counter_clockwise)
-                self.fix_moving_square(player, square)
+    def _rotate(self, player: Player, counter_clockwise: bool) -> None:
+        assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        for square in player.moving_block_or_wait_counter.squares:
+            square.rotate(counter_clockwise)
+            self.fix_moving_square(player, square)
 
-            if self.is_valid():
-                self.need_render_event.set()
-            else:
-                for square in player.moving_block_or_wait_counter.squares:
-                    square.rotate(not counter_clockwise)
-                    self.fix_moving_square(player, square)
+    def rotate(self, player: Player, counter_clockwise: bool) -> None:
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return
+
+        temp_copy = self.create_temporary_copy()
+        temp_player = temp_copy.players[self.players.index(player)]
+        temp_copy._rotate(temp_player, counter_clockwise)
+        if temp_copy.is_valid():
+            self._rotate(player, counter_clockwise)
 
     @abstractmethod
     def add_player(self, name: str, color: int) -> Player:
