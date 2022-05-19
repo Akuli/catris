@@ -329,6 +329,7 @@ class Game:
         for square in self.landed_squares:
             result[square.x, square.y] = square.get_text(player, landed=True)
         for point in self._predict_landing_places(player):
+            # "::" can go on top of landed blocks, useful for drills
             if point in result:
                 result[point] = result[point].replace(b"  ", b"::")
             else:
