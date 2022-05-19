@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, ClassVar, Iterator
+from typing import Any, Callable, ClassVar, Generator, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
@@ -112,6 +113,40 @@ class Game:
             return False
         return True
 
+    # Inside this context manager, you can get the game to invalid state if you want.
+    # All changes to blocks will be erased when you exit the context manager.
+    @contextlib.contextmanager
+    def temporary_state(self) -> Generator[None, None, None]:
+        old_landed = self.landed_squares
+        self.landed_squares = {copy.copy(s) for s in self.landed_squares}
+        old_need_render = self.need_render_event.is_set()
+
+        old_moving = []
+        for block in self._get_moving_blocks().values():
+            old_moving.append((block, block.squares))
+            block.squares = {copy.copy(s) for s in block.squares}
+
+        try:
+            yield
+        finally:
+            self.landed_squares = old_landed
+            for block, squares in old_moving:
+                block.squares = squares
+            if old_need_render:
+                self.need_render_event.set()
+            else:
+                self.need_render_event.clear()
+
+    def _apply_change_if_possible(self, callback: Callable[[], None]) -> bool:
+        assert self.is_valid()
+        with self.temporary_state():
+            callback()
+            stayed_valid = self.is_valid()
+        if stayed_valid:
+            callback()
+            return True
+        return False
+
     def game_is_over(self) -> bool:
         return not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
@@ -191,6 +226,37 @@ class Game:
 
         assert self.is_valid()
 
+    def _move(
+        self, player: Player, dx: int, dy: int, in_player_coords: bool, can_drill: bool
+    ) -> None:
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+            return
+
+        if in_player_coords:
+            dx, dy = player.player_to_world(dx, dy)
+
+        assert isinstance(player.moving_block_or_wait_counter, MovingBlock)
+        for square in player.moving_block_or_wait_counter.squares:
+            square.x += dx
+            square.y += dy
+            self.fix_moving_square(player, square)
+
+            if can_drill and isinstance(square, DrillSquare):
+                square_sets = [self.landed_squares]
+                for block in self._get_moving_blocks().values():
+                    square_sets.append(block.squares)
+
+                for square_set in square_sets:
+                    for other_square in square_set.copy():
+                        if (
+                            other_square.x == square.x
+                            and other_square.y == square.y
+                            and not isinstance(other_square, DrillSquare)
+                        ):
+                            square_set.remove(other_square)
+
+        self.need_render_event.set()
+
     def move_if_possible(
         self,
         player: Player,
@@ -200,64 +266,25 @@ class Game:
         *,
         can_drill: bool = False,
     ) -> bool:
-        assert self.is_valid()
-        if in_player_coords:
-            dx, dy = player.player_to_world(dx, dy)
-
-        if isinstance(player.moving_block_or_wait_counter, MovingBlock):
-            drilled = []
-
-            for square in player.moving_block_or_wait_counter.squares:
-                square.x += dx
-                square.y += dy
-                self.fix_moving_square(player, square)
-
-                if can_drill and isinstance(square, DrillSquare):
-                    square_sets = [self.landed_squares]
-                    for block in self._get_moving_blocks().values():
-                        square_sets.append(block.squares)
-
-                    for square_set in square_sets:
-                        for other_square in square_set.copy():
-                            if (
-                                other_square.x == square.x
-                                and other_square.y == square.y
-                                and not isinstance(other_square, DrillSquare)
-                            ):
-                                square_set.remove(other_square)
-                                drilled.append((square_set, other_square))
-
-            if self.is_valid():
-                self.need_render_event.set()
-                return True
-
-            for square_set, removed_square in drilled:
-                square_set.add(removed_square)
-
-            for square in player.moving_block_or_wait_counter.squares:
-                square.x -= dx
-                square.y -= dy
-                self.fix_moving_square(player, square)
-            assert self.is_valid()
-
-        return False
+        return self._apply_change_if_possible(
+            lambda: self._move(player, dx, dy, in_player_coords, can_drill)
+        )
 
     # RingGame overrides this to get blocks to wrap back to top
     def fix_moving_square(self, player: Player, square: Square) -> None:
         pass
 
-    def rotate(self, player: Player, counter_clockwise: bool) -> None:
+    def _rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
             for square in player.moving_block_or_wait_counter.squares:
                 square.rotate(counter_clockwise)
                 self.fix_moving_square(player, square)
+            self.need_render_event.set()
 
-            if self.is_valid():
-                self.need_render_event.set()
-            else:
-                for square in player.moving_block_or_wait_counter.squares:
-                    square.rotate(not counter_clockwise)
-                    self.fix_moving_square(player, square)
+    def rotate_if_possible(self, player: Player, counter_clockwise: bool) -> bool:
+        return self._apply_change_if_possible(
+            lambda: self._rotate(player, counter_clockwise)
+        )
 
     @abstractmethod
     def add_player(self, name: str, color: int) -> Player:
@@ -279,49 +306,37 @@ class Game:
                 elif square.x >= first_column + width:
                     square.x -= width
 
-    # Where will the block move if user presses down arrow key?
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
-        # Drill squares land differently and I don't want to duplicate their
-        # landing logic here
-        if _player_has_a_drill(player):
+        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
             return set()
 
-        block = player.moving_block_or_wait_counter
-        if not isinstance(block, MovingBlock):
-            return set()
-
-        # Temporarily changing squares feels a bit hacky, but it's simple and it works
-        old_squares = block.squares
-        block.squares = {copy.copy(square) for square in block.squares}
-        assert self.is_valid()
-
-        try:
-            for offset in range(1, 100):
-                previous_squares = {copy.copy(square) for square in block.squares}
-                for square in block.squares:
-                    square.x -= player.up_x
-                    square.y -= player.up_y
-                    self.fix_moving_square(player, square)
-                if not self.is_valid():
-                    return {(s.x, s.y) for s in previous_squares}
-
+        with self.temporary_state():
+            for i in range(100):
+                if not self.move_if_possible(
+                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
+                ):
+                    # Can't move down anymore. This is where it will land
+                    return {
+                        (s.x, s.y) for s in player.moving_block_or_wait_counter.squares
+                    }
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
-
-        finally:
-            block.squares = old_squares
 
     def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
+        for square in self.landed_squares:
+            result[square.x, square.y] = square.get_text(player, landed=True)
         for point in self._predict_landing_places(player):
-            result[point] = b"::"
+            # "::" can go on top of landed blocks, useful for drills
+            if point in result:
+                result[point] = result[point].replace(b"  ", b"::")
+            else:
+                result[point] = b"::"
         for block in self._get_moving_blocks().values():
             for square in block.squares:
                 result[square.x, square.y] = square.get_text(player, landed=False)
-        for square in self.landed_squares:
-            result[square.x, square.y] = square.get_text(player, landed=True)
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
 

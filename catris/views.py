@@ -654,7 +654,9 @@ class PlayingView(View):
             self.game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
             self.player.set_fast_down(False)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
-            self.game.rotate(self.player, self.client.rotate_counter_clockwise)
+            self.game.rotate_if_possible(
+                self.player, self.client.rotate_counter_clockwise
+            )
             self.player.set_fast_down(False)
         elif received in (b"S", b"s", DOWN_ARROW_KEY, b" "):
             self.player.set_fast_down(True)
