@@ -6,7 +6,7 @@ import contextlib
 import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Iterator, Generator
+from typing import Any, Callable, ClassVar, Generator, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
