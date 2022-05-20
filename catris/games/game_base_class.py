@@ -311,7 +311,7 @@ class Game:
             return set()
 
         with self.temporary_state():
-            for i in range(100):
+            for i in range(40):  # enough even in ring mode
                 if not self.move_if_possible(
                     player, dx=0, dy=1, in_player_coords=True, can_drill=True
                 ):
