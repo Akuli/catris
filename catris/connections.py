@@ -24,8 +24,7 @@ class RawTCPConnection:
         return ip
 
     def get_send_queue_size(self) -> int:
-        # https://github.com/python/typeshed/issues/5779
-        return self._writer.transport.get_write_buffer_size()  # type: ignore
+        return self._writer.transport.get_write_buffer_size()
 
     def put_to_send_queue(self, data: bytes) -> None:
         self._writer.write(data)
