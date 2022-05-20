@@ -57,16 +57,6 @@ async def main() -> None:
         )
         logging.info("Listening for websocket connections on port 54321...")
         async with tcp_server, ws_server:
-#
-#            import socket as socketmodule
-#
-#            sockets = []
-#            for i in range(5):
-#                s = socketmodule.create_connection(('localhost', 12345))
-#                s.sendall(b'a%d\rr\raaaaaaaaaas' % i)
-#                sockets.append(s)
-#            print("Lol...")
-#            await asyncio.wait_for(tcp_server.serve_forever(), timeout=10)
             await tcp_server.serve_forever()
 
 
