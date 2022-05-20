@@ -28,7 +28,7 @@ from catris.ansi import (
 )
 from catris.connections import RawTCPConnection, WebSocketConnection
 from catris.lobby import Lobby
-from catris.views import AskNameView, PlayingView, TextEntryView, View
+from catris.views import AskNameView, TextEntryView, View
 
 
 class Server:
