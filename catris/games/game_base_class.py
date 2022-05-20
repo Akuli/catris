@@ -52,9 +52,10 @@ class Game:
     def get_terminal_size(self) -> tuple[int, int]:
         pass
 
+    # This is a classmethod to work around circular import problems
     @classmethod
     def get_max_players(self) -> int:
-        from catris.lobby import MAX_CLIENTS_PER_LOBBY  # circular import
+        from catris.lobby import MAX_CLIENTS_PER_LOBBY
         return MAX_CLIENTS_PER_LOBBY
 
     @property
