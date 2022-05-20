@@ -475,7 +475,6 @@ class Game:
         # All moving squares can be drilled or bombed away
         for player, moving_block in self._get_moving_blocks().items():
             if not moving_block.squares:
-                print("Asd Asd")
                 self.new_block(player)
 
         # Blocks of different users can be on each other's way, but should
