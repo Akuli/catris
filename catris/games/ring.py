@@ -111,7 +111,7 @@ class RingGame(Game):
         }
 
     def get_terminal_size(self) -> tuple[int, int]:
-        width = max(len(row) for row in MAP) + 22
+        width = max(len(row) for row in MAP)
         height = len(MAP) + 1
         return (width, height)
 

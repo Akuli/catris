@@ -116,7 +116,7 @@ class Client:
             # Bottom of view. If user types something, it's unlikely to be
             # noticed here before it gets wiped by the next refresh.
             cursor_pos = (height, 1)
-        assert len(lines) < height  # last line blank
+        assert len(lines) < height, (len(lines), height)  # last line blank
 
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow

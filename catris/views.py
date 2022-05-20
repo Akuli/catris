@@ -570,7 +570,7 @@ class PlayingView(View):
 
     def get_terminal_size(self) -> tuple[int, int]:
         width, height = self.game.get_terminal_size()
-        width += 22  # room for UI on the side
+        width += 20  # room for UI on the side
         return (max(width, 80), height)
 
     def quit_game(self) -> None:

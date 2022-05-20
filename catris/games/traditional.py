@@ -67,7 +67,7 @@ class TraditionalGame(Game):
         return self._get_width_per_player() * len(self.players)
 
     def get_terminal_size(self) -> tuple[int, int]:
-        return (2*self._get_width() + 2, HEIGHT + 4)
+        return (2*self._get_width() + 2, 24)
 
     def is_valid(self) -> bool:
         if self.players:

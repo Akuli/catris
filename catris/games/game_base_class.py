@@ -48,8 +48,9 @@ class Game:
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
 
+    @abstractmethod
     def get_terminal_size(self) -> tuple[int, int]:
-        return (80, 24)
+        pass
 
     @classmethod
     def get_max_players(self) -> int:
