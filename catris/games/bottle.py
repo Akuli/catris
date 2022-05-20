@@ -14,7 +14,6 @@ class BottleGame(Game):
     NAME = "Bottle game"
     ID = "bottle"
 
-    # Please make sure the game fits in 80 columns
     BOTTLE = [
         rb"    |xxxxxxxxxx|    ",
         rb"    |xxxxxxxxxx|    ",
