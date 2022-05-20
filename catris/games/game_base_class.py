@@ -312,13 +312,14 @@ class Game:
 
         with self.temporary_state():
             for i in range(40):  # enough even in ring mode
-                if not self.move_if_possible(
-                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
-                ):
-                    # Can't move down anymore. This is where it will land
-                    return {
+                coords = {
                         (s.x, s.y) for s in player.moving_block_or_wait_counter.squares
                     }
+                # _move() is faster than move_if_possible()
+                self._move(player, dx=0, dy=1, in_player_coords=True, can_drill=True)
+                if not self.is_valid():
+                    # Can't move down anymore. This is where it will land
+                    return coords
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
 
