@@ -319,10 +319,10 @@ class Game:
             return set()
 
         with self.temporary_state():
-            for i in range(100):
+            for i in range(40):  # enough even in ring mode
                 coords = {
-                        (s.x, s.y) for s in player.moving_block_or_wait_counter.squares
-                    }
+                    (s.x, s.y) for s in player.moving_block_or_wait_counter.squares
+                }
                 # _move() is faster than move_if_possible()
                 self._move(player, dx=0, dy=1, in_player_coords=True, can_drill=True)
                 if not self.is_valid():
