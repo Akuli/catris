@@ -517,17 +517,19 @@ class GameOverView(View):
         lines.append(b"|-------|----------|-------".ljust(80, b"-"))
 
         for hs in self._high_scores:
-            player_string = ", ".join(hs.players)
-            line_string = (
-                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
-            )
+            line_prefix = f"| {hs.score:<6}| {hs.get_duration_string():<9}| "
+            players = hs.players.copy()
+            while len(line_prefix + ", ".join(players)) > 80:
+                # Shorten long player names
+                new_players = []
+                for name in players:
+                    if len(name) == max(len(name) for name in players):
+                        new_players.append(name[:-4] + "...")
+                    else:
+                        new_players.append(name)
+                players = new_players
 
-            n = 80 - len(line_string)
-            if len(line_string) > n:
-                # TODO: not ideal, truncate each player name instead?
-                line_string = line_string[:n-3] + "..."
-
-            line = line_string.encode("utf-8")
+            line = (line_prefix + ", ".join(players)).encode("utf-8")
             if hs == self.new_high_score:
                 lines.append((COLOR % 42) + line)
             else:
