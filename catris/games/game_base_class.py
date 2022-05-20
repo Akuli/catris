@@ -56,6 +56,7 @@ class Game:
     @classmethod
     def get_max_players(self) -> int:
         from catris.lobby import MAX_CLIENTS_PER_LOBBY
+
         return MAX_CLIENTS_PER_LOBBY
 
     @property

@@ -46,7 +46,7 @@ class BottleGame(Game):
         return self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
 
     def get_terminal_size(self) -> tuple[int, int]:
-        return (self._get_width()*2 + 2, 24)
+        return (self._get_width() * 2 + 2, 24)
 
     # Boundaries between bottles belong to neither neighbor player
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:

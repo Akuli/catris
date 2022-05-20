@@ -122,7 +122,11 @@ class Client:
         # temporary place for long times, even if internet is slow
         to_send = b""
 
-        if self._last_render_view != self.view or self._last_render_size != (width, height) or force_redraw:
+        if (
+            self._last_render_view != self.view
+            or self._last_render_size != (width, height)
+            or force_redraw
+        ):
             self._last_render_lines.clear()
             to_send += RESIZE % (height, width)
             to_send += CLEAR_SCREEN
