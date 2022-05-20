@@ -521,6 +521,12 @@ class GameOverView(View):
             line_string = (
                 f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
             )
+
+            n = 80 - len(line_string)
+            if len(line_string) > n:
+                # TODO: not ideal, truncate each player name instead?
+                line_string = line_string[:n-3] + "..."
+
             line = line_string.encode("utf-8")
             if hs == self.new_high_score:
                 lines.append((COLOR % 42) + line)
