@@ -522,8 +522,9 @@ class GameOverView(View):
             while len(line_prefix + ", ".join(players)) > 80:
                 # Shorten long player names
                 new_players = []
+                maxlen = max(len(name) for name in players)
                 for name in players:
-                    if len(name) == max(len(name) for name in players):
+                    if len(name) == maxlen:
                         new_players.append(name[:-4] + "...")
                     else:
                         new_players.append(name)
