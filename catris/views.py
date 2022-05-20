@@ -523,6 +523,7 @@ class GameOverView(View):
                 # Shorten long player names
                 new_players = []
                 maxlen = max(len(name) for name in players)
+                assert maxlen >= 4
                 for name in players:
                     if len(name) == maxlen:
                         new_players.append(name[:-4] + "...")
