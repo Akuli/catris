@@ -4,7 +4,6 @@ from typing import Iterator
 
 from catris.ansi import COLOR
 from catris.player import Player
-from catris.squares import Square
 
 from .game_base_class import Game
 
@@ -74,28 +73,28 @@ class TraditionalGame(Game):
                 (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
             }
 
+        # FIXME: can you move off-screen block too much to the side?
         return super().is_valid() and all(
-            square.x in range(self._get_width()) and square.y < self.HEIGHT
+            x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks().values()
-            for square in block.squares
-        )
+            for (x, y) in block.squares.keys()
+       )
 
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
-        full_rows = {}
-
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+        full_rows = []
         for y in range(self.HEIGHT):
-            row = {square for square in self.landed_squares if square.y == y}
-            if len(row) == self._get_width() and self._get_width() != 0:
-                full_rows[y] = row
+            if all((x, y) in self.landed_squares_2 for x in range(self._get_width())):
+                full_rows.append(y)
 
-        yield {square for squares in full_rows.values() for square in squares}
+        yield {(x, y) for x in range(self._get_width()) for y in full_rows}
         self.score += calculate_score(self, len(full_rows))
 
-        for full_y, squares in sorted(full_rows.items()):
-            self.landed_squares -= squares
-            for square in self.landed_squares:
-                if square.y < full_y:
-                    square.y += 1
+        for full_y in full_rows:  # must be in correct order, top to bottom
+            self.landed_squares_2 = {
+                (x, (y+1 if y < full_y else y)): square
+                for (x, y), square in self.landed_squares_2.items()
+                if y != full_y
+            }
 
         self.finish_wiping_full_lines()
 

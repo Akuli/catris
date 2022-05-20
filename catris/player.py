@@ -7,7 +7,7 @@ from catris.squares import Square, create_moving_squares
 
 @dataclasses.dataclass(eq=False)
 class MovingBlock:
-    squares: set[Square]
+    squares: dict[tuple[int, int], Square]
     fast_down: bool = False
     came_from_hold: bool = False
 
@@ -67,9 +67,9 @@ class Player:
         self.moving_block_start_y *= -1
 
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            for square in self.moving_block_or_wait_counter.squares:
-                square.x *= -1
-                square.y *= -1
+            self.moving_block_or_wait_counter.squares = {
+                (-x, -y): square for (x, y), square in self.moving_block_or_wait_counter.squares.items()}
+            for square in self.moving_block_or_wait_counter.squares.values():
                 square.offset_x *= -1
                 square.offset_y *= -1
                 square.moving_dir_x *= -1
