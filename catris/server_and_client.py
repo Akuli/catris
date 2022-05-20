@@ -88,8 +88,9 @@ class Client:
         self.lobby: Lobby | None = None
         self.color: int | None = None
         self.view: View = AskNameView(self)
-        self._last_rendered_view: View | None = None
-        self._last_displayed_lines: list[bytes] = []
+        self._last_render_view: View | None = None
+        self._last_render_lines: list[bytes] = []
+        self._last_render_size: tuple[int, int] | None = None
 
         self.rotate_counter_clockwise = False
         self.lobby_id_hidden = False
@@ -106,35 +107,30 @@ class Client:
         logging.log(level, f"(client {self._client_id}) {msg}")
 
     def render(self, *, force_redraw: bool = False) -> None:
+        width, height = self.view.get_terminal_size()
+
         lines = self.view.get_lines_to_render()
         if isinstance(lines, tuple):
             lines, cursor_pos = lines
         else:
             # Bottom of view. If user types something, it's unlikely to be
             # noticed here before it gets wiped by the next refresh.
-            cursor_pos = (len(lines) + 1, 1)
+            cursor_pos = (height, 1)
+        assert len(lines) < height  # last line blank
 
         # Send it all at once, so that hopefully cursor won't be in a
         # temporary place for long times, even if internet is slow
         to_send = b""
 
-        if self._last_rendered_view != self.view or force_redraw:
-            self._last_displayed_lines.clear()
-            if isinstance(self.view, PlayingView):
-                width = self.view.game.TERMINAL_WIDTH_NEEDED
-                height = self.view.game.TERMINAL_HEIGHT_NEEDED
-            else:
-                width = 80
-                height = 24
-
-            # TODO: don't resize if already big enough? https://stackoverflow.com/a/35688423
+        if self._last_render_view != self.view or self._last_render_size != (width, height) or force_redraw:
+            self._last_render_lines.clear()
             to_send += RESIZE % (height, width)
             to_send += CLEAR_SCREEN
 
-        while len(lines) < len(self._last_displayed_lines):
+        while len(lines) < len(self._last_render_lines):
             lines.append(b"")
-        while len(lines) > len(self._last_displayed_lines):
-            self._last_displayed_lines.append(b"")
+        while len(lines) > len(self._last_render_lines):
+            self._last_render_lines.append(b"")
 
         if isinstance(self.view, TextEntryView):
             to_send += SHOW_CURSOR
@@ -147,15 +143,17 @@ class Client:
         to_send += CLEAR_TO_END_OF_LINE
 
         for y, (old_line, new_line) in enumerate(
-            zip(self._last_displayed_lines, lines), start=1
+            zip(self._last_render_lines, lines), start=1
         ):
             # Re-rendering cursor line helps with AskNameView
             if old_line != new_line or y == cursor_pos[0]:
                 to_send += MOVE_CURSOR % (y, 1)
                 to_send += new_line
                 to_send += CLEAR_TO_END_OF_LINE
-        self._last_displayed_lines = lines.copy()
-        self._last_rendered_view = self.view
+
+        self._last_render_view = self.view
+        self._last_render_lines = lines.copy()
+        self._last_render_size = (width, height)
 
         to_send += MOVE_CURSOR % cursor_pos
         self._send_bytes(to_send)

@@ -101,11 +101,6 @@ class RingGame(Game):
     NAME = "Ring game"
     ID = "ring"
 
-    TERMINAL_WIDTH_NEEDED = max(len(row) for row in MAP) + 22
-    TERMINAL_HEIGHT_NEEDED = len(MAP) + 1
-
-    MAX_PLAYERS = 4
-
     def __init__(self) -> None:
         super().__init__()
         self.valid_landed_coordinates = {
@@ -114,6 +109,15 @@ class RingGame(Game):
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
             if MAP[y + GAME_RADIUS + 1][2 * (x + GAME_RADIUS) + 1 :].startswith(b"xx")
         }
+
+    def get_terminal_size(self) -> tuple[int, int]:
+        width = max(len(row) for row in MAP) + 22
+        height = len(MAP) + 1
+        return (width, height)
+
+    @classmethod
+    def get_max_players(self) -> int:
+        return 4
 
     def is_valid(self) -> bool:
         if not super().is_valid():

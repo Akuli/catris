@@ -40,15 +40,13 @@ def calculate_score(game: Game, full_row_count: int) -> int:
     return result
 
 
+# Width varies as people join/leave
+HEIGHT = 20
+
+
 class TraditionalGame(Game):
     NAME = "Traditional game"
     ID = "traditional"
-    TERMINAL_HEIGHT_NEEDED = 24
-
-    # Width varies as people join/leave. If you adjust these, please make sure
-    # the game fits in 80 columns.
-    HEIGHT = 20
-    MAX_PLAYERS = 4
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
@@ -68,14 +66,17 @@ class TraditionalGame(Game):
     def _get_width(self) -> int:
         return self._get_width_per_player() * len(self.players)
 
+    def get_terminal_size(self) -> tuple[int, int]:
+        return (2*self._get_width() + 2, HEIGHT + 4)
+
     def is_valid(self) -> bool:
         if self.players:
             assert self.valid_landed_coordinates == {
-                (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+                (x, y) for x in range(self._get_width()) for y in range(HEIGHT)
             }
 
         return super().is_valid() and all(
-            square.x in range(self._get_width()) and square.y < self.HEIGHT
+            square.x in range(self._get_width()) and square.y < HEIGHT
             for block in self._get_moving_blocks().values()
             for square in block.squares
         )
@@ -83,7 +84,7 @@ class TraditionalGame(Game):
     def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
         full_rows = {}
 
-        for y in range(self.HEIGHT):
+        for y in range(HEIGHT):
             row = {square for square in self.landed_squares if square.y == y}
             if len(row) == self._get_width() and self._get_width() != 0:
                 full_rows[y] = row
@@ -105,7 +106,7 @@ class TraditionalGame(Game):
             player.moving_block_start_x = (i * w) + (w // 2)
 
         self.valid_landed_coordinates = {
-            (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+            (x, y) for x in range(self._get_width()) for y in range(HEIGHT)
         }
 
     def add_player(self, name: str, color: int) -> Player:
@@ -156,7 +157,7 @@ class TraditionalGame(Game):
         lines = [name_line, header_line]
         square_texts = self.get_square_texts(rendering_for_this_player)
 
-        for y in range(self.HEIGHT):
+        for y in range(HEIGHT):
             line = b"|"
             for x in range(self._get_width()):
                 line += square_texts.get((x, y), b"  ")

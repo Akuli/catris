@@ -13,10 +13,8 @@ from .traditional import calculate_score
 class BottleGame(Game):
     NAME = "Bottle game"
     ID = "bottle"
-    TERMINAL_HEIGHT_NEEDED = 24
 
     # Please make sure the game fits in 80 columns
-    MAX_PLAYERS = 3
     BOTTLE = [
         rb"    |xxxxxxxxxx|    ",
         rb"    |xxxxxxxxxx|    ",

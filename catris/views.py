@@ -38,6 +38,9 @@ class View:
     def __init__(self, client: Client) -> None:
         self.client = client
 
+    def get_terminal_size(self) -> tuple[int, int]:
+        return (80, 24)
+
     # Can return lines or a tuple: (lines, cursor_pos)
     @abstractmethod
     def get_lines_to_render(self) -> list[bytes] | tuple[list[bytes], tuple[int, int]]:
@@ -338,17 +341,18 @@ class ChooseGameView(View):
         if self._menu.selected_index >= len(GAME_CLASSES):
             return False
         game = self.client.lobby.games.get(GAME_CLASSES[self._menu.selected_index])
-        return game is not None and len(game.players) == type(game).MAX_PLAYERS
+        return game is not None and len(game.players) >= type(game).get_max_players()
 
     def _fill_menu(self) -> None:
         assert self.client.lobby is not None
         self._menu.items.clear()
         for game_class in GAME_CLASSES:
             game = self.client.lobby.games.get(game_class, None)
-            n = 0 if game is None else len(game.players)
+            current = 0 if game is None else len(game.players)
+            maximum = game_class.get_max_players()
             self._menu.items.append(
                 (
-                    f"{game_class.NAME} ({n}/{game_class.MAX_PLAYERS} players)",
+                    f"{game_class.NAME} ({current}/{maximum} players)",
                     self._start_playing,
                 )
             )
@@ -555,6 +559,11 @@ class PlayingView(View):
             [("Continue playing", game.toggle_pause), ("Quit game", self.quit_game)]
         )
 
+    def get_terminal_size(self) -> tuple[int, int]:
+        width, height = self.game.get_terminal_size()
+        width += 22  # room for UI on the side
+        return (max(width, 80), height)
+
     def quit_game(self) -> None:
         assert self.client.lobby is not None
         assert self.client.lobby.games[type(self.game)] == self.game
@@ -615,8 +624,7 @@ class PlayingView(View):
                 b"o%so" % (b"=" * width),
             ]
 
-            terminal_width = self.game.TERMINAL_WIDTH_NEEDED
-            terminal_height = self.game.TERMINAL_HEIGHT_NEEDED
+            terminal_width, terminal_height = self.get_terminal_size()
 
             for index, line in enumerate(
                 paused_lines, start=(terminal_height - len(paused_lines)) // 2
