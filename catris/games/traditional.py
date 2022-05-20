@@ -85,16 +85,16 @@ class TraditionalGame(Game):
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_rows = []
         for y in range(self.HEIGHT):
-            if all((x, y) in self.landed_squares_2 for x in range(self._get_width())):
+            if all((x, y) in self.landed_squares for x in range(self._get_width())):
                 full_rows.append(y)
 
         yield {(x, y) for x in range(self._get_width()) for y in full_rows}
         self.score += calculate_score(self, len(full_rows))
 
         for full_y in full_rows:  # must be in correct order, top to bottom
-            self.landed_squares_2 = {
+            self.landed_squares = {
                 (x, (y+1 if y < full_y else y)): square
-                for (x, y), square in self.landed_squares_2.items()
+                for (x, y), square in self.landed_squares.items()
                 if y != full_y
             }
 

@@ -72,7 +72,7 @@ class BottleGame(Game):
         for y, row in enumerate(self.BOTTLE):
             if row.startswith(b"|") and row.endswith(b"|"):
                 # Whole line
-                points = {p for p in self.landed_squares_2.keys() if p[1] == y}
+                points = {p for p in self.landed_squares.keys() if p[1] == y}
                 if len(points) == self._get_width():
                     full_areas.append(points)
             else:
@@ -84,7 +84,7 @@ class BottleGame(Game):
                         if (x, y) in self.valid_landed_coordinates
                         and self.square_belongs_to_player(player, x, y)
                     }
-                    if points.issubset(self.landed_squares_2.keys()):
+                    if points.issubset(self.landed_squares.keys()):
                         full_areas.append(points)
 
         yield {point for point_set in full_areas for point in point_set}
@@ -94,9 +94,9 @@ class BottleGame(Game):
         for removed_points in full_areas:
             removed_y = list(removed_points)[0][1]
             removed_xs = {x for x, y in removed_points}
-            self.landed_squares_2 = {
+            self.landed_squares = {
                 (x, (y + 1 if y < removed_y and x in removed_xs else y)): square
-                for (x, y), square in self.landed_squares_2.items()
+                for (x, y), square in self.landed_squares.items()
                 if (x, y) not in removed_points
             }
 
@@ -132,7 +132,7 @@ class BottleGame(Game):
             x = self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
             for y, row in enumerate(self.BOTTLE):
                 if row.startswith(b"|") and row.endswith(b"|"):
-                    self.landed_squares_2[x, y] = BottleSeparatorSquare(
+                    self.landed_squares[x, y] = BottleSeparatorSquare(
                         self.players[-1].color, color
                     )
 
@@ -166,9 +166,9 @@ class BottleGame(Game):
             left_neighbor = self.players[self.players.index(player) - 1]
             right_neighbor = self.players[self.players.index(player) + 1]
 
-            for (x, y), square in list(self.landed_squares_2.items()):
+            for (x, y), square in list(self.landed_squares.items()):
                 if x == left_wall_x:
-                    self.landed_squares_2[right_wall_x, y] = square
+                    self.landed_squares[right_wall_x, y] = square
                 if x in (left_wall_x, right_wall_x) and isinstance(
                     square, BottleSeparatorSquare
                 ):

@@ -133,12 +133,12 @@ class RingGame(Game):
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
             max(abs(x), abs(y))
-            for x, y in (self.valid_landed_coordinates - self.landed_squares_2.keys())
+            for x, y in (self.valid_landed_coordinates - self.landed_squares.keys())
         }
 
         yield {
             (x, y)
-            for x, y in self.landed_squares_2.keys()
+            for x, y in self.landed_squares.keys()
             if max(abs(x), abs(y)) in full_radiuses
         }
 
@@ -152,7 +152,7 @@ class RingGame(Game):
     def _delete_ring(self, r: int) -> None:
         new_landed_squares = {}
 
-        for (x, y), square in self.landed_squares_2.items():
+        for (x, y), square in self.landed_squares.items():
             # preserve squares inside the ring
             if max(abs(x), abs(y)) < r:
                 new_landed_squares[x, y] = square
@@ -179,7 +179,7 @@ class RingGame(Game):
                 y += 1
             new_landed_squares[x, y] = square
 
-        self.landed_squares_2 = new_landed_squares
+        self.landed_squares = new_landed_squares
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         # Let me know if you need to understand how this works. I'll explain.
