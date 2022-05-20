@@ -106,7 +106,7 @@ class TextEntryView(View):
 # latin-1 chars, aka bytes(range(256)).decode("latin-1"), with some removed
 # It's important to ban characters that are more than 1 unit wide on terminal.
 VALID_NAME_CHARS = (
-    " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷"
+    " !\"#$%&'()*+-./:;<=>?@\\^_`{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
     "0123456789"
