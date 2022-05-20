@@ -66,7 +66,8 @@ async def main() -> None:
 #                s.sendall(b'a%d\rr\raaaaaaaaaas' % i)
 #                sockets.append(s)
 #            print("Lol...")
-            await asyncio.wait_for(tcp_server.serve_forever(), timeout=10)
+#            await asyncio.wait_for(tcp_server.serve_forever(), timeout=10)
+            await tcp_server.serve_forever()
 
 
 asyncio.run(main())

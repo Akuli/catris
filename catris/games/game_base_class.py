@@ -121,7 +121,9 @@ class Game:
         old_moving = []
         for block in self._get_moving_blocks().values():
             old_moving.append((block, block.squares))
-            block.squares = block.squares.copy()
+            block.squares = {
+                point: copy.copy(square) for point, square in block.squares.items()
+            }
 
         try:
             yield
@@ -276,7 +278,7 @@ class Game:
     def fix_moving_square(
         self, player: Player, square: Square, x: int, y: int
     ) -> tuple[int, int]:
-        pass
+        return (x, y)
 
     def _rotate(self, player: Player, counter_clockwise: bool) -> None:
         if isinstance(player.moving_block_or_wait_counter, MovingBlock):
@@ -394,7 +396,7 @@ class Game:
         while True:
             await self.pause_aware_sleep(1)
 
-            for square in self._get_all_squares():
+            for square in self._get_all_squares().values():
                 if isinstance(square, BombSquare):
                     square.timer -= 1
 
@@ -473,6 +475,7 @@ class Game:
         # All moving squares can be drilled or bombed away
         for player, moving_block in self._get_moving_blocks().items():
             if not moving_block.squares:
+                print("Asd Asd")
                 self.new_block(player)
 
         # Blocks of different users can be on each other's way, but should
@@ -506,6 +509,7 @@ class Game:
                 block.fast_down = False
             elif set(block.squares.keys()).issubset(self.valid_landed_coordinates):
                 self.landed_squares_2.update(block.squares)
+                block.squares.clear()  # prevents invalid state errors
                 self.new_block(player)
             else:
                 self.start_please_wait_countdown(player)
