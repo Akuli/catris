@@ -188,10 +188,10 @@ class RingGame(Game):
     def fix_moving_square(
         self, player: Player, square: Square, x: int, y: int
     ) -> tuple[int, int]:
-        x, y = player.world_to_player(x, y)
-
         # Moving blocks don't initially wrap, but they start wrapping once they
         # go below the midpoint
+        #
+        # x and y are in player coordinates
         if y > 0:
             square.wrap_around_end = True
 
@@ -200,7 +200,7 @@ class RingGame(Game):
             y %= 2 * GAME_RADIUS + 1
             y -= GAME_RADIUS
 
-        return player.player_to_world(x, y)
+        return (x, y)
 
     def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
