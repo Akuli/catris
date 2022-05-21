@@ -136,10 +136,8 @@ class BottleGame(Game):
                         self.players[-1].color, color
                     )
 
-        player = Player(
-            # spawn_x changed soon
-            name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1
-        )
+        # spawn_x will be changed soon
+        player = Player(name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1)
         self.players.append(player)
         self._update_spawn_places_and_landed_coords()
         self.new_block(player)
