@@ -65,13 +65,3 @@ class Player:
         self.up_y *= -1
         self.moving_block_start_x *= -1
         self.moving_block_start_y *= -1
-
-        if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            block = self.moving_block_or_wait_counter
-            block.squares_in_player_coords = {
-                (-x, -y): square
-                for (x, y), square in block.squares_in_player_coords.items()
-            }
-            for square in block.squares_in_player_coords.values():
-                square.offset_x *= -1
-                square.offset_y *= -1
