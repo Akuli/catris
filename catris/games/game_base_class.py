@@ -402,8 +402,8 @@ class Game:
 
             async with self.flashing_lock:
                 exploding_bombs = {
-                    (x, y)
-                    for (x, y), square in self._get_all_squares().items()
+                    point
+                    for point, square in self._get_all_squares().items()
                     if isinstance(square, BombSquare) and square.timer <= 0
                 }
                 while exploding_bombs:
