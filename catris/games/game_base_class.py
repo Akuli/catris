@@ -244,19 +244,11 @@ class Game:
                 for point, square in player.moving_block_or_wait_counter.squares.items()
                 if isinstance(square, DrillSquare)
             }
-
-            square_dicts = [self.landed_squares]
-            for block in self._get_moving_blocks().values():
-                square_dicts.append(block.squares)
-
-            for square_set in square_dicts:
-                new_content = {
-                    point: square
-                    for point, square in square_set.items()
-                    if (isinstance(square, DrillSquare) or point not in drill_points)
-                }
-                square_set.clear()
-                square_set.update(new_content)
+            self.delete_matching_points(
+                lambda x, y, square: (
+                    (x, y) in drill_points and not isinstance(square, DrillSquare)
+                )
+            )
 
         self.need_render_event.set()
 
@@ -315,6 +307,18 @@ class Game:
             }
             square_dict.clear()
             square_dict.update(new_content)
+
+    def delete_matching_points(
+        self, condition: Callable[[int, int, Square], bool]
+    ) -> None:
+        for (x, y), square in list(self.landed_squares.items()):
+            if condition(x, y, square):
+                del self.landed_squares[x, y]
+
+        for block in self._get_moving_blocks().values():
+            for (x, y), square in block.squares:
+                if condition(x, y, square):
+                    del block.squares[x, y]
 
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
         if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
@@ -376,19 +380,9 @@ class Game:
 
         if exploding_points:
             await self.flash(exploding_points, 41)
-            self.landed_squares = {
-                point: square
-                for point, square in self.landed_squares.items()
-                if point not in exploding_points
-            }
-            for player in self.players:
-                block = player.moving_block_or_wait_counter
-                if isinstance(block, MovingBlock):
-                    block.squares = {
-                        point: square
-                        for point, square in block.squares.items()
-                        if point not in exploding_points
-                    }
+            self.delete_matching_points(
+                lambda x, y, square: ((x, y) in exploding_points)
+            )
 
         return explode_next
 
