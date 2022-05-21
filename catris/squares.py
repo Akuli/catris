@@ -20,9 +20,7 @@ class _RotateMode(Enum):
 
 class Square:
     def __init__(self, rotate_mode: _RotateMode) -> None:
-        self.x = 0
-        self.y = 0
-        # The offset is a vector from current position (x, y) to center of rotation
+        # The offset is a vector from center of rotation to current position
         self.offset_x = 0
         self.offset_y = 0
         # Moving direction is used to display drill squares correctly for all players
@@ -30,8 +28,6 @@ class Square:
         self.moving_dir_y = 1
         # These don't change as the square moves down and lands.
         # Used in the hold feature, where an already moving block has to be respawned
-        self.original_x = 0
-        self.original_y = 0
         self.original_offset_x = 0
         self.original_offset_y = 0
         self._in_world_coordinates = False
@@ -44,11 +40,11 @@ class Square:
     # This way they don't need updating if spawn location or player's orientation changes.
     # When squares are added to the game, they switch to the game's coordinates.
     # This way we don't need lots of conversions in game logic.
-    def switch_to_world_coordinates(self, player: Player) -> None:
+    def switch_to_world_coordinates(self, player: Player) -> tuple[int, int]:
         assert not self._in_world_coordinates
-        self.x, self.y = player.player_to_world(self.x, self.y)
-        self.x += player.moving_block_start_x
-        self.y += player.moving_block_start_y
+        x, y = player.player_to_world(self.original_offset_x, self.original_offset_y)
+        x += player.moving_block_start_x
+        y += player.moving_block_start_y
         self.offset_x, self.offset_y = player.player_to_world(
             self.offset_x, self.offset_y
         )
@@ -56,37 +52,40 @@ class Square:
             self.moving_dir_x, self.moving_dir_y
         )
         self._in_world_coordinates = True
+        return (x, y)
 
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
-        self.x = self.original_x
-        self.y = self.original_y
         self.offset_x = self.original_offset_x
         self.offset_y = self.original_offset_y
         self.moving_dir_x = 0
         self.moving_dir_y = 1
         self._in_world_coordinates = False
 
-    def _raw_rotate(self, counter_clockwise: bool) -> None:
-        self.x += self.offset_x
-        self.y += self.offset_y
+    def _raw_rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
+        x -= self.offset_x
+        y -= self.offset_y
         if counter_clockwise:
             self.offset_x, self.offset_y = self.offset_y, -self.offset_x
         else:
             self.offset_x, self.offset_y = -self.offset_y, self.offset_x
-        self.x -= self.offset_x
-        self.y -= self.offset_y
+        x += self.offset_x
+        y += self.offset_y
+        return (x, y)
 
-    def rotate(self, counter_clockwise: bool) -> None:
+    def rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
         if self._rotate_mode == _RotateMode.NO_ROTATING:
             pass
         elif self._rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
             self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
-            self._raw_rotate(counter_clockwise=self._next_rotate_goes_backwards)
+            x, y = self._raw_rotate(
+                x, y, counter_clockwise=self._next_rotate_goes_backwards
+            )
         elif self._rotate_mode == _RotateMode.FULL_ROTATING:
-            self._raw_rotate(counter_clockwise)
+            x, y = self._raw_rotate(x, y, counter_clockwise)
         else:
             raise NotImplementedError(self._rotate_mode)
+        return (x, y)
 
     # player is None when the block is not yet in world coordinates
     @abstractmethod
@@ -261,7 +260,7 @@ class DrillSquare(Square):
             # Trial and error was used to figure out some of this
             return (dir_y * x + dir_x * y, -dir_x * x + dir_y * y)
 
-        x, y = rotate(self.original_x, self.original_y)
+        x, y = rotate(self.original_offset_x, self.original_offset_y)
         corners = {
             rotate(-1, 0),
             rotate(-1, 1 - DRILL_HEIGHT),
@@ -341,14 +340,10 @@ def create_moving_squares(score: int) -> set[Square]:
 
     for x, y in relative_coords:
         square = copy.copy(center_square)
-        square.x = x
-        square.y = y
-        square.original_x = x
-        square.original_y = y
-        square.offset_x = -x
-        square.offset_y = -y
-        square.original_offset_x = -x
-        square.original_offset_y = -y
+        square.offset_x = x
+        square.offset_y = y
+        square.original_offset_x = x
+        square.original_offset_y = y
         result.add(square)
 
     return result
