@@ -4,12 +4,8 @@ import copy
 import random
 from abc import abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from catris.ansi import COLOR
-
-if TYPE_CHECKING:
-    from catris.player import Player
 
 
 class _RotateMode(Enum):
@@ -31,6 +27,7 @@ class Square:
         self.wrap_around_end = False  # for ring mode
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
+        self.moving_dir_when_landed: tuple[int, int] | None = None
 
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
@@ -62,9 +59,10 @@ class Square:
             raise NotImplementedError(self._rotate_mode)
         return (x, y)
 
-    # player is None when the block is not yet in world coordinates
+    # Moving direction given as the player looking at the drill sees it.
+    # For example, (0, 1) means towards bottom of terminal.
     @abstractmethod
-    def get_text(self, player: Player | None, landed: bool) -> bytes:
+    def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         raise NotImplementedError
 
 
@@ -94,7 +92,7 @@ class NormalSquare(Square):
         super().__init__(rotate_mode)
         self.shape_letter = shape_letter
 
-    def get_text(self, player: Player | None, landed: bool) -> bytes:
+    def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         return (COLOR % BLOCK_COLORS[self.shape_letter]) + b"  " + (COLOR % 0)
 
 
@@ -103,7 +101,7 @@ class BombSquare(Square):
         super().__init__(_RotateMode.NO_ROTATING)
         self.timer = 15
 
-    def get_text(self, player: Player | None, landed: bool) -> bytes:
+    def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         # red middle text when bomb about to explode
         color = 31 if self.timer <= 3 else 33
         text = str(self.timer).center(2).encode("ascii")
@@ -116,7 +114,7 @@ class BottleSeparatorSquare(Square):
         self.left_color = left_color
         self.right_color = right_color
 
-    def get_text(self, player: Player | None, landed: bool) -> bytes:
+    def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         return (
             (COLOR % self.left_color)
             + b"|"
@@ -224,9 +222,8 @@ class DrillSquare(Square):
         super().__init__(_RotateMode.NO_ROTATING)
         self.picture_counter = 0
 
-    def get_text(self, player: Player | None, landed: bool) -> bytes:
-        # FIXME
-        dir_x, dir_y = 0, 1
+    def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
+        dir_x, dir_y = visible_moving_dir
 
         def rotate(x: int, y: int) -> tuple[int, int]:
             # Trial and error was used to figure out some of this

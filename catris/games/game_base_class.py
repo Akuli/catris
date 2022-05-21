@@ -355,12 +355,17 @@ class Game:
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
 
-    def get_square_texts(self, rendering_for_this_player: Player) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(
+        self, rendering_for_this_player: Player
+    ) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
         for point, square in self.landed_squares.items():
-            result[point] = square.get_text(rendering_for_this_player, landed=True)
+            assert square.moving_dir_when_landed is not None
+            dx, dy = square.moving_dir_when_landed
+            visible_dir = rendering_for_this_player.world_to_player(dx, dy)
+            result[point] = square.get_text(visible_dir, landed=True)
         for point in self._predict_landing_places(rendering_for_this_player):
             # "::" can go on top of landed blocks, useful for drills
             if point in result:
@@ -368,9 +373,12 @@ class Game:
             else:
                 result[point] = b"::"
         for player, block in self._get_moving_blocks().items():
+            visible_moving_dir = rendering_for_this_player.world_to_player(
+                -player.up_x, -player.up_y
+            )
             for (x, y), square in block.squares_in_player_coords.items():
                 result[player.player_to_world(x, y)] = square.get_text(
-                    player, landed=False
+                    visible_moving_dir, landed=False
                 )
         for point, color in self.flashing_squares.items():
             result[point] = (COLOR % color) + b"  " + (COLOR % 0)
@@ -526,12 +534,9 @@ class Game:
                 player.player_to_world(x, y) in self.valid_landed_coordinates
                 for x, y in block.squares_in_player_coords.keys()
             ):
-                self.landed_squares.update(
-                    {
-                        player.player_to_world(x, y): square
-                        for (x, y), square in block.squares_in_player_coords.items()
-                    }
-                )
+                for (x, y), square in block.squares_in_player_coords.items():
+                    square.moving_dir_when_landed = (-player.up_x, -player.up_y)
+                    self.landed_squares[player.player_to_world(x, y)] = square
                 block.squares_in_player_coords.clear()  # prevents invalid state errors
                 self.new_block(player)
             else:
