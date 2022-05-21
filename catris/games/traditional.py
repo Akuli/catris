@@ -9,16 +9,11 @@ from .game_base_class import Game
 
 
 def calculate_score(game: Game, full_row_count: int) -> int:
-    if full_row_count == 0:
-        single_player_score = 0
-    elif full_row_count == 1:
-        single_player_score = 10
-    elif full_row_count == 2:
-        single_player_score = 30
-    elif full_row_count == 3:
-        single_player_score = 60
-    else:
-        single_player_score = 100
+    # 1 row  --> 10
+    # 2 rows --> 30
+    # 3 rows --> 60
+    # 4 rows --> 100
+    single_player_score = 5 * full_row_count * (full_row_count + 1)
 
     # It's more difficult to get full lines with more players.
     # A line is full in the game, if all players have it player-specifically full.
