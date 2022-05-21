@@ -23,44 +23,19 @@ class Square:
         # The offset is a vector from center of rotation to current position
         self.offset_x = 0
         self.offset_y = 0
-        # Moving direction is used to display drill squares correctly for all players
-        self.moving_dir_x = 0
-        self.moving_dir_y = 1
-        # These don't change as the square moves down and lands.
+        # These don't change as the square rotates.
         # Used in the hold feature, where an already moving block has to be respawned
         self.original_offset_x = 0
         self.original_offset_y = 0
-        self._in_world_coordinates = False
 
         self.wrap_around_end = False  # for ring mode
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
 
-    # Squares are initially in relative coordinates: up = (0,1), rotation center = (0,0)
-    # This way they don't need updating if spawn location or player's orientation changes.
-    # When squares are added to the game, they switch to the game's coordinates.
-    # This way we don't need lots of conversions in game logic.
-    def switch_to_world_coordinates(self, player: Player) -> tuple[int, int]:
-        assert not self._in_world_coordinates
-        x, y = player.player_to_world(self.original_offset_x, self.original_offset_y)
-        x += player.moving_block_start_x
-        y += player.moving_block_start_y
-        self.offset_x, self.offset_y = player.player_to_world(
-            self.offset_x, self.offset_y
-        )
-        self.moving_dir_x, self.moving_dir_y = player.player_to_world(
-            self.moving_dir_x, self.moving_dir_y
-        )
-        self._in_world_coordinates = True
-        return (x, y)
-
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
         self.offset_x = self.original_offset_x
         self.offset_y = self.original_offset_y
-        self.moving_dir_x = 0
-        self.moving_dir_y = 1
-        self._in_world_coordinates = False
 
     def _raw_rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
         x -= self.offset_x
@@ -250,11 +225,8 @@ class DrillSquare(Square):
         self.picture_counter = 0
 
     def get_text(self, player: Player | None, landed: bool) -> bytes:
-        dir_x = self.moving_dir_x
-        dir_y = self.moving_dir_y
-        if self._in_world_coordinates:
-            assert player is not None
-            dir_x, dir_y = player.world_to_player(dir_x, dir_y)
+        # FIXME
+        dir_x, dir_y = 0, 1
 
         def rotate(x: int, y: int) -> tuple[int, int]:
             # Trial and error was used to figure out some of this

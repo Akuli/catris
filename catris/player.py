@@ -75,5 +75,3 @@ class Player:
             for square in block.squares_in_player_coords.values():
                 square.offset_x *= -1
                 square.offset_y *= -1
-                square.moving_dir_x *= -1
-                square.moving_dir_y *= -1

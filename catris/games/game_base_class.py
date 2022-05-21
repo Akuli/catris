@@ -168,8 +168,15 @@ class Game:
             squares = player.next_moving_squares
             player.next_moving_squares = create_moving_squares(self.score)
 
+        spawn_x, spawn_y = player.world_to_player(
+            player.moving_block_start_x, player.moving_block_start_y
+        )
         square_dict = {
-            square.switch_to_world_coordinates(player): square for square in squares
+            (
+                spawn_x + square.original_offset_x,
+                spawn_y + square.original_offset_y,
+            ): square
+            for square in squares
         }
 
         player.moving_block_or_wait_counter = MovingBlock(
@@ -348,19 +355,19 @@ class Game:
             # Block won't land if you press down arrow. Happens a lot in ring mode.
             return set()
 
-    def get_square_texts(self, player: Player) -> dict[tuple[int, int], bytes]:
+    def get_square_texts(self, rendering_for_this_player: Player) -> dict[tuple[int, int], bytes]:
         assert self.is_valid()
 
         result = {}
         for point, square in self.landed_squares.items():
-            result[point] = square.get_text(player, landed=True)
-        for point in self._predict_landing_places(player):
+            result[point] = square.get_text(rendering_for_this_player, landed=True)
+        for point in self._predict_landing_places(rendering_for_this_player):
             # "::" can go on top of landed blocks, useful for drills
             if point in result:
                 result[point] = result[point].replace(b"  ", b"::")
             else:
                 result[point] = b"::"
-        for block in self._get_moving_blocks().values():
+        for player, block in self._get_moving_blocks().items():
             for (x, y), square in block.squares_in_player_coords.items():
                 result[player.player_to_world(x, y)] = square.get_text(
                     player, landed=False
