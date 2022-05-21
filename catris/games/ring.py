@@ -120,8 +120,7 @@ class RingGame(Game):
             return False
 
         for player, block in self._get_moving_blocks().items():
-            for (x, y) in block.squares.keys():
-                player_x, player_y = player.world_to_player(x, y)
+            for player_x, player_y in block.squares_in_player_coords.keys():
                 if player_y < -GAME_RADIUS:
                     # Square above game. Treat it like the first row of map
                     player_y = -GAME_RADIUS
@@ -189,10 +188,10 @@ class RingGame(Game):
     def fix_moving_square(
         self, player: Player, square: Square, x: int, y: int
     ) -> tuple[int, int]:
-        x, y = player.world_to_player(x, y)
-
         # Moving blocks don't initially wrap, but they start wrapping once they
         # go below the midpoint
+        #
+        # x and y are in player coordinates
         if y > 0:
             square.wrap_around_end = True
 
@@ -201,7 +200,7 @@ class RingGame(Game):
             y %= 2 * GAME_RADIUS + 1
             y -= GAME_RADIUS
 
-        return player.player_to_world(x, y)
+        return (x, y)
 
     def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
@@ -215,14 +214,7 @@ class RingGame(Game):
         except ValueError:
             up_x, up_y = min(unused_directions)
 
-        player = Player(
-            name,
-            color,
-            up_x,
-            up_y,
-            moving_block_start_x=(GAME_RADIUS + 1) * up_x,
-            moving_block_start_y=(GAME_RADIUS + 1) * up_y,
-        )
+        player = Player(name, color, up_x, up_y, spawn_x=0, spawn_y=-(GAME_RADIUS + 1))
         self.players.append(player)
         self.new_block(player)
         return player

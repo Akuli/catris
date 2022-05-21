@@ -7,7 +7,7 @@ from catris.squares import Square, create_moving_squares
 
 @dataclasses.dataclass(eq=False)
 class MovingBlock:
-    squares: dict[tuple[int, int], Square]
+    squares_in_player_coords: dict[tuple[int, int], Square]
     fast_down: bool = False
     came_from_hold: bool = False
 
@@ -19,10 +19,11 @@ class Player:
     # What direction is up in the player's view? The up vector always has length 1.
     up_x: int
     up_y: int
-    # These should be barely above the top of the game.
-    # For example, in traditional tetris, that means moving_block_start_y = -1.
-    moving_block_start_x: int
-    moving_block_start_y: int
+    # These should be barely above the top of the game, in player coordinates.
+    # For example, this is -1 in traditional game and bottle game.
+    spawn_x: int
+    spawn_y: int
+
     moving_block_or_wait_counter: MovingBlock | int = 0
     held_squares: set[Square] | None = None
 
@@ -56,23 +57,3 @@ class Player:
     def set_fast_down(self, value: bool) -> None:
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.fast_down = value
-
-    # This is called only when there's one player.
-    # Could instead flip the world around, but it would be difficult if there's
-    # currently a flashing row.
-    def flip_view(self) -> None:
-        self.up_x *= -1
-        self.up_y *= -1
-        self.moving_block_start_x *= -1
-        self.moving_block_start_y *= -1
-
-        if isinstance(self.moving_block_or_wait_counter, MovingBlock):
-            self.moving_block_or_wait_counter.squares = {
-                (-x, -y): square
-                for (x, y), square in self.moving_block_or_wait_counter.squares.items()
-            }
-            for square in self.moving_block_or_wait_counter.squares.values():
-                square.offset_x *= -1
-                square.offset_y *= -1
-                square.moving_dir_x *= -1
-                square.moving_dir_y *= -1

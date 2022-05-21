@@ -74,12 +74,10 @@ class TraditionalGame(Game):
             }
 
         # FIXME: can you move off-screen block too much to the side?
-        for block in self._get_moving_blocks().values():
-            assert None not in block.squares.keys()
         return super().is_valid() and all(
             x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks().values()
-            for (x, y) in block.squares.keys()
+            for (x, y) in block.squares_in_player_coords.keys()
         )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
@@ -103,21 +101,15 @@ class TraditionalGame(Game):
     def _update_spawn_places_and_landed_coords(self) -> None:
         w = self._get_width_per_player()
         for i, player in enumerate(self.players):
-            player.moving_block_start_x = (i * w) + (w // 2)
+            player.spawn_x = (i * w) + (w // 2)
 
         self.valid_landed_coordinates = {
             (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
         }
 
     def add_player(self, name: str, color: int) -> Player:
-        player = Player(
-            name,
-            color,
-            up_x=0,
-            up_y=-1,
-            moving_block_start_x=123,  # changed soon
-            moving_block_start_y=-1,
-        )
+        # spawn_x will be changed soon
+        player = Player(name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1)
         self.players.append(player)
         self._update_spawn_places_and_landed_coords()
         self.new_block(player)

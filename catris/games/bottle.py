@@ -59,7 +59,7 @@ class BottleGame(Game):
         return super().is_valid() and all(
             (x, max(0, y)) in self.valid_landed_coordinates
             for block in self._get_moving_blocks().values()
-            for x, y in block.squares.keys()
+            for x, y in block.squares_in_player_coords.keys()
         )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
@@ -104,7 +104,7 @@ class BottleGame(Game):
 
     def _update_spawn_places_and_landed_coords(self) -> None:
         for i, player in enumerate(self.players):
-            player.moving_block_start_x = (i * self.BOTTLE_OUTER_WIDTH) + (
+            player.spawn_x = (i * self.BOTTLE_OUTER_WIDTH) + (
                 self.BOTTLE_INNER_WIDTH // 2
             )
 
@@ -136,14 +136,8 @@ class BottleGame(Game):
                         self.players[-1].color, color
                     )
 
-        player = Player(
-            name,
-            color,
-            up_x=0,
-            up_y=-1,
-            moving_block_start_x=123,  # changed soon
-            moving_block_start_y=-1,
-        )
+        # spawn_x will be changed soon
+        player = Player(name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1)
         self.players.append(player)
         self._update_spawn_places_and_landed_coords()
         self.new_block(player)

@@ -540,7 +540,7 @@ def _get_block_preview(squares: set[Square]) -> list[bytes]:
     result = [[b"  "] * width for y in range(height)]
     for s in squares:
         result[s.original_offset_y - min_y][s.original_offset_x - min_x] = s.get_text(
-            player=None, landed=False
+            visible_moving_dir=(0, 1), landed=False
         )
     return [b"".join(row) for row in result]
 
@@ -668,10 +668,12 @@ class PlayingView(View):
             and isinstance(self.game, RingGame)
             and len(self.game.players) == 1
         ):
-            self.game.players[0].flip_view()
+            self.game.players[0].up_x *= -1
+            self.game.players[0].up_y *= -1
             if self.game.is_valid():
                 self.game.need_render_event.set()
             else:
-                # Can't flip, blocks are on top of each other. Flip again to undo.
-                self.game.players[0].flip_view()
+                # Can't flip, blocks overlap. Flip again to undo.
+                self.game.players[0].up_x *= -1
+                self.game.players[0].up_y *= -1
         return None
