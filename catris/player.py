@@ -57,10 +57,3 @@ class Player:
     def set_fast_down(self, value: bool) -> None:
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.fast_down = value
-
-    # This is called only when there's one player.
-    # Could instead flip the world around, but it would be difficult if there's
-    # currently a flashing row.
-    def flip_view(self) -> None:
-        self.up_x *= -1
-        self.up_y *= -1
