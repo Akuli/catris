@@ -74,12 +74,10 @@ class TraditionalGame(Game):
             }
 
         # FIXME: can you move off-screen block too much to the side?
-        for block in self._get_moving_blocks().values():
-            assert None not in block.squares.keys()
         return super().is_valid() and all(
             x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks().values()
-            for (x, y) in block.squares.keys()
+            for (x, y) in block.squares_in_player_coords.keys()
         )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:

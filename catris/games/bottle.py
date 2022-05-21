@@ -59,7 +59,7 @@ class BottleGame(Game):
         return super().is_valid() and all(
             (x, max(0, y)) in self.valid_landed_coordinates
             for block in self._get_moving_blocks().values()
-            for x, y in block.squares.keys()
+            for x, y in block.squares_in_player_coords.keys()
         )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:

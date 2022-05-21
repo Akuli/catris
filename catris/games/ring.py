@@ -120,8 +120,7 @@ class RingGame(Game):
             return False
 
         for player, block in self._get_moving_blocks().items():
-            for (x, y) in block.squares.keys():
-                player_x, player_y = player.world_to_player(x, y)
+            for player_x, player_y in block.squares_in_player_coords.keys():
                 if player_y < -GAME_RADIUS:
                     # Square above game. Treat it like the first row of map
                     player_y = -GAME_RADIUS
