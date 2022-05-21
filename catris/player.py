@@ -19,10 +19,11 @@ class Player:
     # What direction is up in the player's view? The up vector always has length 1.
     up_x: int
     up_y: int
-    # These should be barely above the top of the game.
-    # For example, in traditional tetris, that means moving_block_start_y = -1.
-    moving_block_start_x: int
-    moving_block_start_y: int
+    # These should be barely above the top of the game, in player coordinates.
+    # Currently this means that spawn_y is always -1.
+    spawn_x: int
+    spawn_y: int
+
     moving_block_or_wait_counter: MovingBlock | int = 0
     held_squares: set[Square] | None = None
 
@@ -63,5 +64,3 @@ class Player:
     def flip_view(self) -> None:
         self.up_x *= -1
         self.up_y *= -1
-        self.moving_block_start_x *= -1
-        self.moving_block_start_y *= -1

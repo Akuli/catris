@@ -168,13 +168,10 @@ class Game:
             squares = player.next_moving_squares
             player.next_moving_squares = create_moving_squares(self.score)
 
-        spawn_x, spawn_y = player.world_to_player(
-            player.moving_block_start_x, player.moving_block_start_y
-        )
         square_dict = {
             (
-                spawn_x + square.original_offset_x,
-                spawn_y + square.original_offset_y,
+                player.spawn_x + square.original_offset_x,
+                player.spawn_y + square.original_offset_y,
             ): square
             for square in squares
         }

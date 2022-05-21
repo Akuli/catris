@@ -214,14 +214,7 @@ class RingGame(Game):
         except ValueError:
             up_x, up_y = min(unused_directions)
 
-        player = Player(
-            name,
-            color,
-            up_x,
-            up_y,
-            moving_block_start_x=(GAME_RADIUS + 1) * up_x,
-            moving_block_start_y=(GAME_RADIUS + 1) * up_y,
-        )
+        player = Player(name, color, up_x, up_y, spawn_x=0, spawn_y=-(GAME_RADIUS + 1))
         self.players.append(player)
         self.new_block(player)
         return player
