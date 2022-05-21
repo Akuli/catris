@@ -20,7 +20,7 @@ class Player:
     up_x: int
     up_y: int
     # These should be barely above the top of the game, in player coordinates.
-    # Currently this means that spawn_y is always -1.
+    # For example, this is -1 in traditional game and bottle game.
     spawn_x: int
     spawn_y: int
 
