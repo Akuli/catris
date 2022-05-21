@@ -316,7 +316,7 @@ class Game:
                 del self.landed_squares[x, y]
 
         for block in self._get_moving_blocks().values():
-            for (x, y), square in block.squares:
+            for (x, y), square in block.squares.items():
                 if condition(x, y, square):
                     del block.squares[x, y]
 
