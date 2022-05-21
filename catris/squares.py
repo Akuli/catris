@@ -20,9 +20,6 @@ class _RotateMode(Enum):
 
 class Square:
     def __init__(self, rotate_mode: _RotateMode) -> None:
-        # Where is the square when it's created? Relative to rotation center.
-        self.original_x = 0
-        self.original_y = 0
         # The offset is a vector from center of rotation to current position
         self.offset_x = 0
         self.offset_y = 0
@@ -45,7 +42,7 @@ class Square:
     # This way we don't need lots of conversions in game logic.
     def switch_to_world_coordinates(self, player: Player) -> tuple[int, int]:
         assert not self._in_world_coordinates
-        x, y = player.player_to_world(self.original_x, self.original_y)
+        x, y = player.player_to_world(self.original_offset_x, self.original_offset_y)
         x += player.moving_block_start_x
         y += player.moving_block_start_y
         self.offset_x, self.offset_y = player.player_to_world(
@@ -263,7 +260,7 @@ class DrillSquare(Square):
             # Trial and error was used to figure out some of this
             return (dir_y * x + dir_x * y, -dir_x * x + dir_y * y)
 
-        x, y = rotate(self.original_x, self.original_y)
+        x, y = rotate(self.original_offset_x, self.original_offset_y)
         corners = {
             rotate(-1, 0),
             rotate(-1, 1 - DRILL_HEIGHT),
@@ -343,8 +340,6 @@ def create_moving_squares(score: int) -> set[Square]:
 
     for x, y in relative_coords:
         square = copy.copy(center_square)
-        square.original_x = x
-        square.original_y = y
         square.offset_x = x
         square.offset_y = y
         square.original_offset_x = x

@@ -532,14 +532,14 @@ class GameOverView(View):
 
 
 def _get_block_preview(squares: set[Square]) -> list[bytes]:
-    min_x = min(s.original_x for s in squares)
-    min_y = min(s.original_y for s in squares)
-    width = max(s.original_x - min_x for s in squares) + 1
-    height = max(s.original_y - min_y for s in squares) + 1
+    min_x = min(s.original_offset_x for s in squares)
+    min_y = min(s.original_offset_y for s in squares)
+    width = max(s.original_offset_x - min_x for s in squares) + 1
+    height = max(s.original_offset_y - min_y for s in squares) + 1
 
     result = [[b"  "] * width for y in range(height)]
     for s in squares:
-        result[s.original_y - min_y][s.original_x - min_x] = s.get_text(
+        result[s.original_offset_y - min_y][s.original_offset_x - min_x] = s.get_text(
             player=None, landed=False
         )
     return [b"".join(row) for row in result]
