@@ -23,7 +23,7 @@ class Square:
         # Where is the square when it's created? Relative to rotation center.
         self.original_x = 0
         self.original_y = 0
-        # The offset is a vector from current position to center of rotation
+        # The offset is a vector from center of rotation to current position
         self.offset_x = 0
         self.offset_y = 0
         # Moving direction is used to display drill squares correctly for all players
@@ -66,14 +66,14 @@ class Square:
         self._in_world_coordinates = False
 
     def _raw_rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
-        x += self.offset_x
-        y += self.offset_y
+        x -= self.offset_x
+        y -= self.offset_y
         if counter_clockwise:
             self.offset_x, self.offset_y = self.offset_y, -self.offset_x
         else:
             self.offset_x, self.offset_y = -self.offset_y, self.offset_x
-        x -= self.offset_x
-        y -= self.offset_y
+        x += self.offset_x
+        y += self.offset_y
         return (x, y)
 
     def rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
@@ -345,10 +345,10 @@ def create_moving_squares(score: int) -> set[Square]:
         square = copy.copy(center_square)
         square.original_x = x
         square.original_y = y
-        square.offset_x = -x
-        square.offset_y = -y
-        square.original_offset_x = -x
-        square.original_offset_y = -y
+        square.offset_x = x
+        square.offset_y = y
+        square.original_offset_x = x
+        square.original_offset_y = y
         result.add(square)
 
     return result
