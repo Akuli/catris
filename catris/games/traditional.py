@@ -80,7 +80,7 @@ class TraditionalGame(Game):
             x in range(self._get_width()) and y < self.HEIGHT
             for block in self._get_moving_blocks().values()
             for (x, y) in block.squares.keys()
-       )
+        )
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_rows = []
@@ -93,7 +93,7 @@ class TraditionalGame(Game):
 
         for full_y in full_rows:  # must be in correct order, top to bottom
             self.landed_squares = {
-                (x, (y+1 if y < full_y else y)): square
+                (x, (y + 1 if y < full_y else y)): square
                 for (x, y), square in self.landed_squares.items()
                 if y != full_y
             }

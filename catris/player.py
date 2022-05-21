@@ -68,7 +68,9 @@ class Player:
 
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.squares = {
-                (-x, -y): square for (x, y), square in self.moving_block_or_wait_counter.squares.items()}
+                (-x, -y): square
+                for (x, y), square in self.moving_block_or_wait_counter.squares.items()
+            }
             for square in self.moving_block_or_wait_counter.squares.values():
                 square.offset_x *= -1
                 square.offset_y *= -1

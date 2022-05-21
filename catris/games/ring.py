@@ -186,7 +186,9 @@ class RingGame(Game):
         dot = x * player.up_x + y * player.up_y
         return dot >= 0 and 2 * dot**2 >= x * x + y * y
 
-    def fix_moving_square(self, player: Player, square: Square, x: int, y: int) -> tuple[int, int]:
+    def fix_moving_square(
+        self, player: Player, square: Square, x: int, y: int
+    ) -> tuple[int, int]:
         x, y = player.world_to_player(x, y)
 
         # Moving blocks don't initially wrap, but they start wrapping once they

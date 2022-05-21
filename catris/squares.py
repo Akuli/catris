@@ -81,7 +81,9 @@ class Square:
             pass
         elif self._rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
             self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
-            x, y = self._raw_rotate(x, y, counter_clockwise=self._next_rotate_goes_backwards)
+            x, y = self._raw_rotate(
+                x, y, counter_clockwise=self._next_rotate_goes_backwards
+            )
         elif self._rotate_mode == _RotateMode.FULL_ROTATING:
             x, y = self._raw_rotate(x, y, counter_clockwise)
         else:
