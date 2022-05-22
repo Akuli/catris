@@ -37,6 +37,19 @@ class Lobby:
         self.games: dict[type[Game], Game] = {}
         self.clients: list[Client] = []
 
+    def current_and_max_players(self, game_class: type[Game]) -> tuple[int, int]:
+        if game_class in self.games:
+            current = len(self.games[game_class].players)
+        else:
+            current = 0
+
+        if game_class.MAX_PLAYERS is None:
+            maximum = MAX_CLIENTS_PER_LOBBY
+        else:
+            maximum = game_class.MAX_PLAYERS
+
+        return (current, maximum)
+
     # ChooseGameViews display a list of all players and how many are playing each game.
     # Call this method when any of that info changes.
     def update_choose_game_views(self) -> None:

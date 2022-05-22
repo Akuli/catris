@@ -21,6 +21,7 @@ def _player_has_a_drill(player: Player) -> bool:
 class Game:
     NAME: ClassVar[str]
     ID: ClassVar[str]
+    MAX_PLAYERS: ClassVar[int | None] = None  # None means use max clients per lobby
 
     def __init__(self) -> None:
         self.players: list[Player] = []
@@ -49,13 +50,6 @@ class Game:
     @abstractmethod
     def get_terminal_size(self) -> tuple[int, int]:
         pass
-
-    # This is a classmethod to work around circular import problems
-    @classmethod
-    def get_max_players(self) -> int:
-        from catris.lobby import MAX_CLIENTS_PER_LOBBY
-
-        return MAX_CLIENTS_PER_LOBBY
 
     @property
     def is_paused(self) -> bool:

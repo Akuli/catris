@@ -335,21 +335,20 @@ class ChooseGameView(View):
         self._menu.selected_index = GAME_CLASSES.index(selected_game_class)
 
     def _should_show_cannot_join_error(self) -> bool:
-        assert self.client.name is not None
         assert self.client.lobby is not None
 
         if self._menu.selected_index >= len(GAME_CLASSES):
             return False
-        game = self.client.lobby.games.get(GAME_CLASSES[self._menu.selected_index])
-        return game is not None and len(game.players) >= type(game).get_max_players()
+        game_class =  GAME_CLASSES[self._menu.selected_index]
+        current, maximum = self.client.lobby.current_and_max_players(game_class)
+        assert current <= maximum
+        return current == maximum
 
     def _fill_menu(self) -> None:
         assert self.client.lobby is not None
         self._menu.items.clear()
         for game_class in GAME_CLASSES:
-            game = self.client.lobby.games.get(game_class, None)
-            current = 0 if game is None else len(game.players)
-            maximum = game_class.get_max_players()
+            current, maximum = self.client.lobby.current_and_max_players(game_class)
             self._menu.items.append(
                 (
                     f"{game_class.NAME} ({current}/{maximum} players)",

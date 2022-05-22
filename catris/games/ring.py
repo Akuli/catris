@@ -100,6 +100,7 @@ def wrap_names(players_by_letter: dict[str, Player]) -> dict[str, list[str]]:
 class RingGame(Game):
     NAME = "Ring game"
     ID = "ring"
+    MAX_PLAYERS = 4
 
     def __init__(self) -> None:
         super().__init__()
@@ -114,10 +115,6 @@ class RingGame(Game):
         width = max(len(row) for row in MAP)
         height = len(MAP) + 1
         return (width, height)
-
-    @classmethod
-    def get_max_players(self) -> int:
-        return 4
 
     def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
         if y < -GAME_RADIUS:
