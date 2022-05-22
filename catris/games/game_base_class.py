@@ -250,7 +250,7 @@ class Game:
                 return False
             world_point = self.player_to_world(player, player_x, player_y)
             if world_point in other_squares:
-                if square.can_drill(other_squares[world_point]):
+                if can_drill and square.can_drill(other_squares[world_point]):
                     gonna_drill.add(world_point)
                 else:
                     # bumping into another square
