@@ -57,6 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const terminal = new class {
     constructor() {
       this._el = document.getElementById("terminal");
+      this._cache = [];
 
       this.width = 0;
       this.height = 0;
@@ -69,11 +70,6 @@ document.addEventListener("DOMContentLoaded", () => {
       this._resize(80, 24);
     }
 
-    _applyStyle(span) {
-      span.style.color = this.fgColor;
-      span.style.backgroundColor = this.bgColor;
-    }
-
     _fixCursorPos() {
       if (this._cursorX < 0) this._cursorX = 0;
       if (this._cursorY < 0) this._cursorY = 0;
@@ -81,128 +77,60 @@ document.addEventListener("DOMContentLoaded", () => {
       if (this._cursorY >= this.height) this._cursorY = this.height-1;
     }
 
-    // Can be called in a loop, but calls must be in the same order as spans appear in the terminal.
-    // May change text of the span given as argument, but doesn't delete it.
-    _mergeWithPreviousSpanIfPossible(right) {
-      const left = right?.previousElementSibling;
-      if (left && right
-          && left.style.color === right.style.color
-          && left.style.backgroundColor === right.style.backgroundColor)
-      {
-        right.textContent = left.textContent + right.textContent;
-        left.remove();  
-      }
+    _makeBlankCell() {
+      const cell = document.createElement("span");
+      cell.textContent = " ";
+      cell.style.color = this.fgColor;
+      cell.style.backgroundColor = this.bgColor;
+      return { cell, text: " ", fg: this.fgColor, bg: this.bgColor };
     }
 
-    _deleteText(x, y, deleteCount) {
-      const spansToRemove = [];
-      let spanStart = 0;
-      for (const span of this._el.children[y].children) {
-        const spanEnd = spanStart + span.textContent.length;
+    _writeCell(x, y, text) {
+      console.assert(text.length === 1);
+      const cacheItem = this._cache[y][x];
 
-        const overlapStart = Math.max(spanStart, x);
-        const overlapEnd = Math.min(spanEnd, x + deleteCount);
-        if (overlapStart < overlapEnd) {
-          // Delete overlapping part
-          const relativeOverlapStart = overlapStart - spanStart;
-          const relativeOverlapEnd = overlapEnd - spanStart;
-          console.assert(relativeOverlapStart >= 0);
-          console.assert(relativeOverlapEnd >= 0);
-          const t = span.textContent;
-          span.textContent = t.slice(0, relativeOverlapStart) + t.slice(relativeOverlapEnd);
-          if (span.textContent === "") {
-            // Avoid adding/removing child elements while looping over them
-            spansToRemove.push(span);
-          }
-        }
-
-        spanStart = spanEnd;
+      // Editing and querying DOM elements is slow, avoid that
+      if (cacheItem.fg !== this.fgColor) {
+        cacheItem.fg = this.fgColor;
+        cacheItem.cell.style.color = this.fgColor;
       }
-
-      for (const span of spansToRemove) {
-        // If another non-empty span got merged into the span on a previous iteration, don't remove
-        if (span.textContent === "") {
-          const right = span.nextElementSibling;
-          span.remove();
-          this._mergeWithPreviousSpanIfPossible(right);
-        }
+      if (cacheItem.bg !== this.bgColor) {
+        cacheItem.bg = this.bgColor;
+        cacheItem.cell.style.backgroundColor = this.bgColor;
       }
-    }
-
-    _insertText(x, y, text) {
-      if (text === "") {
-        return;
+      if (cacheItem.text !== text) {
+        cacheItem.text = text;
+        cacheItem.cell.textContent = text;
       }
-
-      const newSpan = document.createElement("span");
-      newSpan.textContent = text;
-      this._applyStyle(newSpan);
-
-      const row = this._el.children[y];
-
-      let spanStart = 0;
-      for (const span of row.children) {
-        if (x === spanStart) {
-          // New span goes just before start of an existing span
-          row.insertBefore(newSpan, span);
-          this._mergeWithPreviousSpanIfPossible(newSpan);
-          this._mergeWithPreviousSpanIfPossible(span);
-          return;
-        }
-
-        const spanEnd = spanStart + span.textContent.length;
-        if (spanStart < x && x < spanEnd) {
-          // Split span into two, add in middle
-          const leftSide = span.cloneNode();
-          const rightSide = span.cloneNode();
-          leftSide.textContent = span.textContent.slice(0, x - spanStart);
-          rightSide.textContent = span.textContent.slice(x - spanStart);
-
-          row.insertBefore(leftSide, span);
-          row.insertBefore(newSpan, span);
-          row.insertBefore(rightSide, span);
-          span.remove();
-
-          this._mergeWithPreviousSpanIfPossible(newSpan);
-          this._mergeWithPreviousSpanIfPossible(rightSide);
-          return;
-        }
-
-        spanStart = spanEnd;
-      }
-
-      // New span is not at the start of any span and not inside any span.
-      // It must be after all other spans.
-      console.assert(x === spanStart);
-      row.appendChild(newSpan);
-      this._mergeWithPreviousSpanIfPossible(newSpan);
-    }
-
-    _makeBlankRow() {
-      const row = document.createElement("pre");
-      row.innerHTML = "<span></span>";
-      row.querySelector("span").textContent = " ".repeat(this.width);
-      this._applyStyle(row);
-      return row;
     }
 
     _resize(newWidth, newHeight) {
       for (let y = this.height; y < newHeight; y++) {
-        this._el.appendChild(this._makeBlankRow());
+        const elementRow = document.createElement("pre");
+        const cacheRow = Array(this.width).fill().map(() => this._makeBlankCell());
+        for (const cacheItem of cacheRow) {
+          elementRow.appendChild(cacheItem.cell);
+        }
+        this._el.appendChild(elementRow);
+        this._cache.push(cacheRow);
       }
+
       for (let y = this.height-1; y >= newHeight; y--) {
         this._el.children[y].remove();
+        this._cache.pop();
       }
       this.height = newHeight;
 
-      if (newWidth > this.width) {
-        for (let y = 0; y < this.height; y++) {
-          this._insertText(this.width, y, " ".repeat(newWidth - this.width));
+      for (let y = 0; y < this.height; y++) {
+        const cacheRow = this._cache[y];
+        const elementRow = this._el.children[y];
+        for (const cacheItem of cacheRow.splice(newWidth)) {
+          cacheItem.cell.remove();
         }
-      }
-      if (newWidth < this.width) {
-        for (let y = 0; y < this.height; y++) {
-          this._deleteText(newWidth, y, this.width - newWidth);
+        for (let x = this.width; x < newWidth; x++) {
+          const cacheItem = this._makeBlankCell();
+          cacheRow.push(cacheItem);
+          elementRow.appendChild(cacheItem.cell);
         }
       }
       this.width = newWidth;
@@ -212,31 +140,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     _clear() {
-      this._el.innerHTML = "";
-      for (let i = 0; i < this.height; i++) {
-        this._el.appendChild(this._makeBlankRow());
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          this._writeCell(x, y, " ");
+        }
       }
     }
 
     _clearFromCursorToEndOfLine() {
-      const n = this.width - this._cursorX;
-      this._deleteText(this._cursorX, this._cursorY, n);
-      this._insertText(this._cursorX, this._cursorY, " ".repeat(n));
+      for (let x = this._cursorX; x < this.width; x++) {
+        this._writeCell(x, this._cursorY, " ");
+      }
     }
 
     clearFromCursorToEndOfScreen() {
       this._clearFromCursorToEndOfLine();
       for (let y = this._cursorY + 1; y < this.height; y++) {
-        this._deleteText(0, y, this.width);
-        this._insertText(0, y, " ".repeat(this.width));
+        for (let x = 0; x < this.width; x++) {
+          this._writeCell(x, y, " ");
+        }
       }
     }
 
     _addTextRaw(text) {
       console.assert(this._cursorX + text.length <= this.width);
-      this._deleteText(this._cursorX, this._cursorY, text.length);
-      this._insertText(this._cursorX, this._cursorY, text);
-      this._cursorX += text.length;
+      for (const character of text) {
+        this._writeCell(this._cursorX, this._cursorY, character);
+        this._cursorX++;
+      }
       if (this._cursorX === this.width) {
         this._cursorX = 0;
         this._cursorY++;
