@@ -102,9 +102,6 @@ document.addEventListener("DOMContentLoaded", () => {
         cacheItem.text = text;
         cacheItem.cell.textContent = text;
       }
-      if (text === "B") {
-        console.log(Object.assign({}, cacheItem));
-      }
     }
 
     _resize(newWidth, newHeight) {
