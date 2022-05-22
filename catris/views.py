@@ -666,10 +666,10 @@ class PlayingView(View):
             )
             self.client.render()
         elif received in (b"A", b"a", LEFT_ARROW_KEY):
-            self.game.move_if_possible(self.player, dx=-1, dy=0, in_player_coords=True)
+            self.game.move_if_possible(self.player, dx=-1, dy=0)
             self.player.set_fast_down(False)
         elif received in (b"D", b"d", RIGHT_ARROW_KEY):
-            self.game.move_if_possible(self.player, dx=1, dy=0, in_player_coords=True)
+            self.game.move_if_possible(self.player, dx=1, dy=0)
             self.player.set_fast_down(False)
         elif received in (b"W", b"w", UP_ARROW_KEY, b"\r"):
             self.game.rotate_if_possible(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import textwrap
 from typing import Iterator
 
@@ -118,21 +119,10 @@ class RingGame(Game):
     def get_max_players(self) -> int:
         return 4
 
-    def is_valid(self) -> bool:
-        if not super().is_valid():
-            return False
-
-        for player, block in self._get_moving_blocks().items():
-            for player_x, player_y in block.squares_in_player_coords.keys():
-                if player_y < -GAME_RADIUS:
-                    # Square above game. Treat it like the first row of map
-                    player_y = -GAME_RADIUS
-                if (
-                    self.player_to_world(player, player_x, player_y)
-                    not in self.valid_landed_coordinates
-                ):
-                    return False
-        return True
+    def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
+        if y < -GAME_RADIUS:
+            y = -GAME_RADIUS
+        return self.player_to_world(player, x, y) in self.valid_landed_coordinates
 
     def player_to_world(self, player: Player, x: int, y: int) -> tuple[int, int]:
         if y > 0:
@@ -144,10 +134,10 @@ class RingGame(Game):
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
-        full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
-            max(abs(x), abs(y))
-            for x, y in (self.valid_landed_coordinates - self.landed_squares.keys())
-        }
+        counts = collections.Counter(
+            max(abs(x), abs(y)) for x, y in self.landed_squares
+        )
+        full_radiuses = {r for r, count in counts.items() if count == 8 * r}
 
         yield {
             (x, y)

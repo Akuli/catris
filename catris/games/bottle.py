@@ -55,12 +55,8 @@ class BottleGame(Game):
         right = left + self.BOTTLE_INNER_WIDTH
         return x in range(left, right)
 
-    def is_valid(self) -> bool:
-        return super().is_valid() and all(
-            (x, max(0, y)) in self.valid_landed_coordinates
-            for block in self._get_moving_blocks().values()
-            for x, y in block.squares_in_player_coords.keys()
-        )
+    def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
+        return (x, max(0, y)) in self.valid_landed_coordinates
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         if not self.players:
