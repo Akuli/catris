@@ -312,10 +312,10 @@ class Game:
                 if self.player_to_world(player, x, y) in points_to_delete:
                     del block.squares_in_player_coords[x, y]
 
-    def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
+    def _predict_landing_places(self, player: Player) -> dict[tuple[int, int], Square]:
         block = player.moving_block_or_wait_counter
         if not isinstance(block, MovingBlock):
-            return set()
+            return {}
 
         other_squares = self._get_all_squares(exclude=player)
         biggest_working_offset = 0
@@ -336,12 +336,12 @@ class Game:
             if not this_offset_works:
                 biggest_working_offset = offset - 1
                 return {
-                    self.player_to_world(player, x, y + biggest_working_offset)
-                    for x, y in block.squares_in_player_coords.keys()
+                    self.player_to_world(player, x, y + biggest_working_offset): square
+                    for (x, y), square in block.squares_in_player_coords.items()
                 }
 
         # Block won't land if you press down arrow. Happens a lot in ring mode.
-        return set()
+        return {}
 
     def get_square_texts(
         self, rendering_for_this_player: Player
@@ -354,12 +354,16 @@ class Game:
             dx, dy = square.moving_dir_when_landed
             visible_dir = self.world_to_player(rendering_for_this_player, dx, dy)
             result[point] = square.get_text(visible_dir, landed=True)
-        for point in self._predict_landing_places(rendering_for_this_player):
+        for point, square in self._predict_landing_places(
+            rendering_for_this_player
+        ).items():
             # "::" can go on top of landed blocks, useful for drills
-            if point in result:
-                result[point] = result[point].replace(b"  ", b"::")
-            else:
-                result[point] = b"::"
+            result.setdefault(point, b"  ")
+            result[point] = (
+                (COLOR % square.get_predicted_landing_color())
+                + result[point].replace(b"  ", b"::")
+                + (COLOR % 0)
+            )
         for player, block in self._get_moving_blocks().items():
             visible_moving_dir = self.world_to_player(
                 rendering_for_this_player, -player.up_x, -player.up_y

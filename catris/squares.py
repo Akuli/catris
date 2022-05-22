@@ -31,6 +31,10 @@ class Square:
     def can_drill(self, other: Square) -> bool:
         return False
 
+    # Foreground color used for displaying "::" where the block will land
+    def get_predicted_landing_color(self) -> int:
+        return 0
+
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
         self.offset_x = self.original_offset_x
@@ -106,11 +110,13 @@ class BombSquare(Square):
         super().__init__(_RotateMode.NO_ROTATING)
         self.timer = 15
 
+    def get_predicted_landing_color(self) -> int:
+        # red when bomb about to explode
+        return 31 if self.timer <= 3 else 33
+
     def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
-        # red middle text when bomb about to explode
-        color = 31 if self.timer <= 3 else 33
         text = str(self.timer).center(2).encode("ascii")
-        return (COLOR % color) + text + (COLOR % 0)
+        return (COLOR % self.get_predicted_landing_color()) + text + (COLOR % 0)
 
 
 class BottleSeparatorSquare(Square):
