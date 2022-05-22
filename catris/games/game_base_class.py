@@ -221,20 +221,11 @@ class Game:
         assert self.is_valid()
 
     def move_if_possible(
-        self,
-        player: Player,
-        dx: int,
-        dy: int,
-        in_player_coords: bool,
-        *,
-        can_drill: bool = False,
+        self, player: Player, dx: int, dy: int, *, can_drill: bool = False
     ) -> bool:
         block = player.moving_block_or_wait_counter
         if not isinstance(block, MovingBlock):
             return False
-
-        if not in_player_coords:
-            dx, dy = self.world_to_player(player, dx, dy)
 
         new_squares = {
             (x + dx, y + dy): square
@@ -508,9 +499,7 @@ class Game:
             something_moved = False
             # Move drills last, makes them consistently drill other moving blocks
             for player in sorted(todo, key=_player_has_a_drill):
-                moved = self.move_if_possible(
-                    player, dx=0, dy=1, in_player_coords=True, can_drill=True
-                )
+                moved = self.move_if_possible(player, dx=0, dy=1, can_drill=True)
                 if moved:
                     something_moved = True
                     todo.remove(player)
