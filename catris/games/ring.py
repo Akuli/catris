@@ -124,9 +124,20 @@ class RingGame(Game):
                 if player_y < -GAME_RADIUS:
                     # Square above game. Treat it like the first row of map
                     player_y = -GAME_RADIUS
-                if (player_x, player_y) not in self.valid_landed_coordinates:
+                if (
+                    self.player_to_world(player, player_x, player_y)
+                    not in self.valid_landed_coordinates
+                ):
                     return False
         return True
+
+    def player_to_world(self, player: Player, x: int, y: int) -> tuple[int, int]:
+        if y > 0:
+            # wrap around the end
+            y += GAME_RADIUS
+            y %= 2 * GAME_RADIUS + 1
+            y -= GAME_RADIUS
+        return super().player_to_world(player, x, y)
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
@@ -185,23 +196,6 @@ class RingGame(Game):
         dot = x * player.up_x + y * player.up_y
         return dot >= 0 and 2 * dot**2 >= x * x + y * y
 
-    def fix_moving_square(
-        self, player: Player, square: Square, x: int, y: int
-    ) -> tuple[int, int]:
-        # Moving blocks don't initially wrap, but they start wrapping once they
-        # go below the midpoint
-        #
-        # x and y are in player coordinates
-        if y > 0:
-            square.wrap_around_end = True
-
-        if square.wrap_around_end:
-            y += GAME_RADIUS
-            y %= 2 * GAME_RADIUS + 1
-            y -= GAME_RADIUS
-
-        return (x, y)
-
     def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
         opposites_of_used_directions = {(-x, -y) for x, y in used_directions}
@@ -227,8 +221,8 @@ class RingGame(Game):
         colors_by_letter = {"w": 0, "a": 0, "s": 0, "d": 0}
 
         for player in self.players:
-            relative_direction = rendering_for_this_player.world_to_player(
-                player.up_x, player.up_y
+            relative_direction = self.world_to_player(
+                rendering_for_this_player, player.up_x, player.up_y
             )
             letter = {(0, -1): "w", (-1, 0): "a", (0, 1): "s", (1, 0): "d"}[
                 relative_direction
@@ -250,7 +244,7 @@ class RingGame(Game):
                 x = map_x // 2 - GAME_RADIUS
                 if map_row.startswith(b"xx", map_x):
                     result_line += square_texts.get(
-                        rendering_for_this_player.player_to_world(x, y), b"  "
+                        self.player_to_world(rendering_for_this_player, x, y), b"  "
                     )
                     map_x += 2
                 elif map_row.startswith(b"=", map_x):

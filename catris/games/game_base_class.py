@@ -86,6 +86,22 @@ class Game:
             unpaused_sleep_time = time.monotonic() - start
             sleep_time -= unpaused_sleep_time
 
+    # There's two kinds of coordinates, player coordinates and world coordinates.
+    # In player coordinates, y axis points down on screen and x axis points right.
+    # World coordinates are "global", not player-specific in any way.
+    # In traditional game and bottle game, there's no difference.
+    def world_to_player(self, player: Player, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-player.up_y * x + player.up_x * y),
+            (-player.up_x * x - player.up_y * y),
+        )
+
+    def player_to_world(self, player: Player, x: int, y: int) -> tuple[int, int]:
+        return (
+            (-player.up_y * x - player.up_x * y),
+            (player.up_x * x - player.up_y * y),
+        )
+
     def _get_moving_blocks(self) -> dict[Player, MovingBlock]:
         return {
             player: player.moving_block_or_wait_counter
@@ -97,18 +113,18 @@ class Game:
         result = self.landed_squares.copy()
         for player, block in self._get_moving_blocks().items():
             for (player_x, player_y), square in block.squares_in_player_coords.items():
-                result[player.player_to_world(player_x, player_y)] = square
+                result[self.player_to_world(player, player_x, player_y)] = square
         return result
 
     def is_valid(self) -> bool:
         seen = set(self.landed_squares.keys())
         for player, block in self._get_moving_blocks().items():
             block_points = {
-                player.player_to_world(x, y)
+                self.player_to_world(player, x, y)
                 for x, y in block.squares_in_player_coords.keys()
             }
             if block_points & seen:
-                # print("Invalid state: duplicate squares")
+                # print("Invalid state: duplicate squares at", block_points & seen)
                 return False
             seen.update(block_points)
 
@@ -222,7 +238,7 @@ class Game:
         # When this happens, just delete the landed block.
         for player, block in self._get_moving_blocks().items():
             for player_x, player_y in block.squares_in_player_coords.keys():
-                point = player.player_to_world(player_x, player_y)
+                point = self.player_to_world(player, player_x, player_y)
                 if point in self.landed_squares:
                     del self.landed_squares[point]
 
@@ -236,19 +252,15 @@ class Game:
             return
 
         if not in_player_coords:
-            dx, dy = player.world_to_player(dx, dy)
+            dx, dy = self.world_to_player(player, dx, dy)
 
         squares = block.squares_in_player_coords
         squares = {(x + dx, y + dy): square for (x, y), square in squares.items()}
-        squares = {
-            self.fix_moving_square(player, square, x, y): square
-            for (x, y), square in squares.items()
-        }
         block.squares_in_player_coords = squares
 
         if can_drill:
             drill_points = {
-                player.player_to_world(x, y)
+                self.player_to_world(player, x, y)
                 for (x, y), square in block.squares_in_player_coords.items()
                 if isinstance(square, DrillSquare)
             }
@@ -273,20 +285,12 @@ class Game:
             lambda: self._move(player, dx, dy, in_player_coords, can_drill)
         )
 
-    # RingGame overrides this to get blocks to wrap back to top
-    def fix_moving_square(
-        self, player: Player, square: Square, player_x: int, player_y: int
-    ) -> tuple[int, int]:
-        return (player_x, player_y)
-
     def _rotate(self, player: Player, counter_clockwise: bool) -> None:
         block = player.moving_block_or_wait_counter
         if isinstance(block, MovingBlock):
             new_squares = {}
             for (x, y), square in block.squares_in_player_coords.items():
-                x, y = square.rotate(x, y, counter_clockwise)
-                x, y = self.fix_moving_square(player, square, x, y)
-                new_squares[x, y] = square
+                new_squares[square.rotate(x, y, counter_clockwise)] = square
             block.squares_in_player_coords = new_squares
             self.need_render_event.set()
 
@@ -330,7 +334,7 @@ class Game:
             for (player_x, player_y), square in list(
                 block.squares_in_player_coords.items()
             ):
-                x, y = player.player_to_world(player_x, player_y)
+                x, y = self.player_to_world(player, player_x, player_y)
                 if condition(x, y, square):
                     del block.squares_in_player_coords[player_x, player_y]
 
@@ -341,7 +345,7 @@ class Game:
         with self.temporary_state():
             for i in range(40):  # enough even in ring mode
                 coords = {
-                    player.player_to_world(x, y)
+                    self.player_to_world(player, x, y)
                     for x, y in player.moving_block_or_wait_counter.squares_in_player_coords.keys()
                 }
                 # _move() is faster than move_if_possible()
@@ -361,7 +365,7 @@ class Game:
         for point, square in self.landed_squares.items():
             assert square.moving_dir_when_landed is not None
             dx, dy = square.moving_dir_when_landed
-            visible_dir = rendering_for_this_player.world_to_player(dx, dy)
+            visible_dir = self.world_to_player(rendering_for_this_player, dx, dy)
             result[point] = square.get_text(visible_dir, landed=True)
         for point in self._predict_landing_places(rendering_for_this_player):
             # "::" can go on top of landed blocks, useful for drills
@@ -370,11 +374,11 @@ class Game:
             else:
                 result[point] = b"::"
         for player, block in self._get_moving_blocks().items():
-            visible_moving_dir = rendering_for_this_player.world_to_player(
-                -player.up_x, -player.up_y
+            visible_moving_dir = self.world_to_player(
+                rendering_for_this_player, -player.up_x, -player.up_y
             )
             for (x, y), square in block.squares_in_player_coords.items():
-                result[player.player_to_world(x, y)] = square.get_text(
+                result[self.player_to_world(player, x, y)] = square.get_text(
                     visible_moving_dir, landed=False
                 )
         for point, color in self.flashing_squares.items():
@@ -528,12 +532,13 @@ class Game:
             if block.fast_down:
                 block.fast_down = False
             elif all(
-                player.player_to_world(x, y) in self.valid_landed_coordinates
+                self.player_to_world(player, x, y) in self.valid_landed_coordinates
                 for x, y in block.squares_in_player_coords.keys()
             ):
                 for (x, y), square in block.squares_in_player_coords.items():
                     square.moving_dir_when_landed = (-player.up_x, -player.up_y)
-                    self.landed_squares[player.player_to_world(x, y)] = square
+                    world_point = self.player_to_world(player, x, y)
+                    self.landed_squares[world_point] = square
                 block.squares_in_player_coords.clear()  # prevents invalid state errors
                 self.new_block(player)
             else:
