@@ -34,15 +34,13 @@ def calculate_score(game: Game, full_row_count: int) -> int:
     return result
 
 
+# Width varies as people join/leave
+HEIGHT = 20
+
+
 class TraditionalGame(Game):
     NAME = "Traditional game"
     ID = "traditional"
-    TERMINAL_HEIGHT_NEEDED = 24
-
-    # Width varies as people join/leave. If you adjust these, please make sure
-    # the game fits in 80 columns.
-    HEIGHT = 20
-    MAX_PLAYERS = 4
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         index = self.players.index(player)
@@ -62,13 +60,16 @@ class TraditionalGame(Game):
     def _get_width(self) -> int:
         return self._get_width_per_player() * len(self.players)
 
+    def get_terminal_size(self) -> tuple[int, int]:
+        return (2 * self._get_width() + 2, 24)
+
     # TODO: when block is off-screen, don't allow going into another player's area?
     def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
-        return x in range(self._get_width()) and y < self.HEIGHT
+        return x in range(self._get_width()) and y < HEIGHT
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_rows = []
-        for y in range(self.HEIGHT):
+        for y in range(HEIGHT):
             if all((x, y) in self.landed_squares for x in range(self._get_width())):
                 full_rows.append(y)
 
@@ -90,7 +91,7 @@ class TraditionalGame(Game):
             player.spawn_x = (i * w) + (w // 2)
 
         self.valid_landed_coordinates = {
-            (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
+            (x, y) for x in range(self._get_width()) for y in range(HEIGHT)
         }
 
     def add_player(self, name: str, color: int) -> Player:
@@ -135,7 +136,7 @@ class TraditionalGame(Game):
         lines = [name_line, header_line]
         square_texts = self.get_square_texts(rendering_for_this_player)
 
-        for y in range(self.HEIGHT):
+        for y in range(HEIGHT):
             line = b"|"
             for x in range(self._get_width()):
                 line += square_texts.get((x, y), b"  ")

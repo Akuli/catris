@@ -38,6 +38,9 @@ class View:
     def __init__(self, client: Client) -> None:
         self.client = client
 
+    def get_terminal_size(self) -> tuple[int, int]:
+        return (80, 24)
+
     # Can return lines or a tuple: (lines, cursor_pos)
     @abstractmethod
     def get_lines_to_render(self) -> list[bytes] | tuple[list[bytes], tuple[int, int]]:
@@ -332,23 +335,23 @@ class ChooseGameView(View):
         self._menu.selected_index = GAME_CLASSES.index(selected_game_class)
 
     def _should_show_cannot_join_error(self) -> bool:
-        assert self.client.name is not None
         assert self.client.lobby is not None
 
         if self._menu.selected_index >= len(GAME_CLASSES):
             return False
-        game = self.client.lobby.games.get(GAME_CLASSES[self._menu.selected_index])
-        return game is not None and len(game.players) == type(game).MAX_PLAYERS
+        game_class = GAME_CLASSES[self._menu.selected_index]
+        current, maximum = self.client.lobby.current_and_max_players(game_class)
+        assert current <= maximum
+        return current == maximum
 
     def _fill_menu(self) -> None:
         assert self.client.lobby is not None
         self._menu.items.clear()
         for game_class in GAME_CLASSES:
-            game = self.client.lobby.games.get(game_class, None)
-            n = 0 if game is None else len(game.players)
+            current, maximum = self.client.lobby.current_and_max_players(game_class)
             self._menu.items.append(
                 (
-                    f"{game_class.NAME} ({n}/{game_class.MAX_PLAYERS} players)",
+                    f"{game_class.NAME} ({current}/{maximum} players)",
                     self._start_playing,
                 )
             )
@@ -513,11 +516,21 @@ class GameOverView(View):
         lines.append(b"|-------|----------|-------".ljust(80, b"-"))
 
         for hs in self._high_scores:
-            player_string = ", ".join(hs.players)
-            line_string = (
-                f"| {hs.score:<6}| {hs.get_duration_string():<9}| {player_string}"
-            )
-            line = line_string.encode("utf-8")
+            line_prefix = f"| {hs.score:<6}| {hs.get_duration_string():<9}| "
+            players = hs.players.copy()
+            while len(line_prefix + ", ".join(players)) > 80:
+                # Shorten long player names
+                new_players = []
+                maxlen = max(len(name) for name in players)
+                assert maxlen >= 4
+                for name in players:
+                    if len(name) == maxlen:
+                        new_players.append(name[:-4] + "...")
+                    else:
+                        new_players.append(name)
+                players = new_players
+
+            line = (line_prefix + ", ".join(players)).encode("utf-8")
             if hs == self.new_high_score:
                 lines.append((COLOR % 42) + line)
             else:
@@ -554,6 +567,11 @@ class PlayingView(View):
         self._paused_menu = _Menu(
             [("Continue playing", game.toggle_pause), ("Quit game", self.quit_game)]
         )
+
+    def get_terminal_size(self) -> tuple[int, int]:
+        width, height = self.game.get_terminal_size()
+        width += 20  # room for UI on the side
+        return (max(width, 80), height)
 
     def quit_game(self) -> None:
         assert self.client.lobby is not None
@@ -615,8 +633,7 @@ class PlayingView(View):
                 b"o%so" % (b"=" * width),
             ]
 
-            terminal_width = self.game.TERMINAL_WIDTH_NEEDED
-            terminal_height = self.game.TERMINAL_HEIGHT_NEEDED
+            terminal_width, terminal_height = self.get_terminal_size()
 
             for index, line in enumerate(
                 paused_lines, start=(terminal_height - len(paused_lines)) // 2

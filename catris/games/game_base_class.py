@@ -21,9 +21,7 @@ def _player_has_a_drill(player: Player) -> bool:
 class Game:
     NAME: ClassVar[str]
     ID: ClassVar[str]
-    TERMINAL_WIDTH_NEEDED: ClassVar[int] = 80
-    TERMINAL_HEIGHT_NEEDED: ClassVar[int]
-    MAX_PLAYERS: ClassVar[int]
+    MAX_PLAYERS: ClassVar[int | None] = None  # None means use max clients per lobby
 
     def __init__(self) -> None:
         self.players: list[Player] = []
@@ -48,6 +46,10 @@ class Game:
         # Prevents moving blocks down and causing weird bugs.
         self.flashing_lock = asyncio.Lock()
         self.flashing_squares: dict[tuple[int, int], int] = {}
+
+    @abstractmethod
+    def get_terminal_size(self) -> tuple[int, int]:
+        pass
 
     @property
     def is_paused(self) -> bool:

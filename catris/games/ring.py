@@ -100,10 +100,6 @@ def wrap_names(players_by_letter: dict[str, Player]) -> dict[str, list[str]]:
 class RingGame(Game):
     NAME = "Ring game"
     ID = "ring"
-
-    TERMINAL_WIDTH_NEEDED = max(len(row) for row in MAP) + 22
-    TERMINAL_HEIGHT_NEEDED = len(MAP) + 1
-
     MAX_PLAYERS = 4
 
     def __init__(self) -> None:
@@ -114,6 +110,11 @@ class RingGame(Game):
             for y in range(-GAME_RADIUS, GAME_RADIUS + 1)
             if MAP[y + GAME_RADIUS + 1][2 * (x + GAME_RADIUS) + 1 :].startswith(b"xx")
         }
+
+    def get_terminal_size(self) -> tuple[int, int]:
+        width = max(len(row) for row in MAP)
+        height = len(MAP) + 1
+        return (width, height)
 
     def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
         if y < -GAME_RADIUS:

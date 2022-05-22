@@ -13,10 +13,7 @@ from .traditional import calculate_score
 class BottleGame(Game):
     NAME = "Bottle game"
     ID = "bottle"
-    TERMINAL_HEIGHT_NEEDED = 24
 
-    # Please make sure the game fits in 80 columns
-    MAX_PLAYERS = 3
     BOTTLE = [
         rb"    |xxxxxxxxxx|    ",
         rb"    |xxxxxxxxxx|    ",
@@ -47,6 +44,9 @@ class BottleGame(Game):
     def _get_width(self) -> int:
         # -1 at the end is the leftmost and rightmost "|" borders
         return self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
+
+    def get_terminal_size(self) -> tuple[int, int]:
+        return (self._get_width() * 2 + 2, 24)
 
     # Boundaries between bottles belong to neither neighbor player
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
