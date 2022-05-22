@@ -5,7 +5,6 @@ from typing import Iterator
 
 from catris.ansi import COLOR
 from catris.player import Player
-from catris.squares import Square
 
 from .game_base_class import Game
 
@@ -124,27 +123,36 @@ class RingGame(Game):
             return False
 
         for player, block in self._get_moving_blocks().items():
-            for square in block.squares:
-                player_x, player_y = player.world_to_player(square.x, square.y)
+            for player_x, player_y in block.squares_in_player_coords.keys():
                 if player_y < -GAME_RADIUS:
                     # Square above game. Treat it like the first row of map
                     player_y = -GAME_RADIUS
-                if (player_x, player_y) not in self.valid_landed_coordinates:
+                if (
+                    self.player_to_world(player, player_x, player_y)
+                    not in self.valid_landed_coordinates
+                ):
                     return False
         return True
 
+    def player_to_world(self, player: Player, x: int, y: int) -> tuple[int, int]:
+        if y > 0:
+            # wrap around the end
+            y += GAME_RADIUS
+            y %= 2 * GAME_RADIUS + 1
+            y -= GAME_RADIUS
+        return super().player_to_world(player, x, y)
+
     # In ring mode, full lines are actually full squares, represented by radiuses.
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
-        landed_locations = {(s.x, s.y) for s in self.landed_squares}
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
             max(abs(x), abs(y))
-            for x, y in (self.valid_landed_coordinates - landed_locations)
+            for x, y in (self.valid_landed_coordinates - self.landed_squares.keys())
         }
 
         yield {
-            square
-            for square in self.landed_squares
-            if max(abs(square.x), abs(square.y)) in full_radiuses
+            (x, y)
+            for x, y in self.landed_squares.keys()
+            if max(abs(x), abs(y)) in full_radiuses
         }
 
         self.score += 100 * len(full_radiuses)
@@ -155,50 +163,41 @@ class RingGame(Game):
         self.finish_wiping_full_lines()
 
     def _delete_ring(self, r: int) -> None:
-        for square in self.landed_squares.copy():
+        new_landed_squares = {}
+
+        for (x, y), square in self.landed_squares.items():
             # preserve squares inside the ring
-            if max(abs(square.x), abs(square.y)) < r:
+            if max(abs(x), abs(y)) < r:
+                new_landed_squares[x, y] = square
                 continue
 
             # delete squares on the ring
-            if max(abs(square.x), abs(square.y)) == r:
-                self.landed_squares.remove(square)
+            if max(abs(x), abs(y)) == r:
                 continue
 
             # Move towards center. Squares at a diagonal direction from center
             # have abs(x) == abs(y) move in two different directions.
             # Two squares can move into the same place. That's fine.
-            move_left = square.x > 0 and abs(square.x) >= abs(square.y)
-            move_right = square.x < 0 and abs(square.x) >= abs(square.y)
-            move_up = square.y > 0 and abs(square.y) >= abs(square.x)
-            move_down = square.y < 0 and abs(square.y) >= abs(square.x)
+            move_left = x > 0 and abs(x) >= abs(y)
+            move_right = x < 0 and abs(x) >= abs(y)
+            move_up = y > 0 and abs(y) >= abs(x)
+            move_down = y < 0 and abs(y) >= abs(x)
             if move_left:
-                square.x -= 1
+                x -= 1
             if move_right:
-                square.x += 1
+                x += 1
             if move_up:
-                square.y -= 1
+                y -= 1
             if move_down:
-                square.y += 1
+                y += 1
+            new_landed_squares[x, y] = square
+
+        self.landed_squares = new_landed_squares
 
     def square_belongs_to_player(self, player: Player, x: int, y: int) -> bool:
         # Let me know if you need to understand how this works. I'll explain.
         dot = x * player.up_x + y * player.up_y
         return dot >= 0 and 2 * dot**2 >= x * x + y * y
-
-    def fix_moving_square(self, player: Player, square: Square) -> None:
-        x, y = player.world_to_player(square.x, square.y)
-
-        # Moving blocks don't initially wrap, but they start wrapping once they
-        # go below the midpoint
-        if y > 0:
-            square.wrap_around_end = True
-
-        if square.wrap_around_end:
-            y += GAME_RADIUS
-            y %= 2 * GAME_RADIUS + 1
-            y -= GAME_RADIUS
-            square.x, square.y = player.player_to_world(x, y)
 
     def add_player(self, name: str, color: int) -> Player:
         used_directions = {(p.up_x, p.up_y) for p in self.players}
@@ -212,14 +211,7 @@ class RingGame(Game):
         except ValueError:
             up_x, up_y = min(unused_directions)
 
-        player = Player(
-            name,
-            color,
-            up_x,
-            up_y,
-            moving_block_start_x=(GAME_RADIUS + 1) * up_x,
-            moving_block_start_y=(GAME_RADIUS + 1) * up_y,
-        )
+        player = Player(name, color, up_x, up_y, spawn_x=0, spawn_y=-(GAME_RADIUS + 1))
         self.players.append(player)
         self.new_block(player)
         return player
@@ -232,8 +224,8 @@ class RingGame(Game):
         colors_by_letter = {"w": 0, "a": 0, "s": 0, "d": 0}
 
         for player in self.players:
-            relative_direction = rendering_for_this_player.world_to_player(
-                player.up_x, player.up_y
+            relative_direction = self.world_to_player(
+                rendering_for_this_player, player.up_x, player.up_y
             )
             letter = {(0, -1): "w", (-1, 0): "a", (0, 1): "s", (1, 0): "d"}[
                 relative_direction
@@ -255,7 +247,7 @@ class RingGame(Game):
                 x = map_x // 2 - GAME_RADIUS
                 if map_row.startswith(b"xx", map_x):
                     result_line += square_texts.get(
-                        rendering_for_this_player.player_to_world(x, y), b"  "
+                        self.player_to_world(rendering_for_this_player, x, y), b"  "
                     )
                     map_x += 2
                 elif map_row.startswith(b"=", map_x):

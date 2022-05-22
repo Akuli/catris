@@ -4,22 +4,16 @@ from typing import Iterator
 
 from catris.ansi import COLOR
 from catris.player import Player
-from catris.squares import Square
 
 from .game_base_class import Game
 
 
 def calculate_score(game: Game, full_row_count: int) -> int:
-    if full_row_count == 0:
-        single_player_score = 0
-    elif full_row_count == 1:
-        single_player_score = 10
-    elif full_row_count == 2:
-        single_player_score = 30
-    elif full_row_count == 3:
-        single_player_score = 60
-    else:
-        single_player_score = 100
+    # 1 row  --> 10
+    # 2 rows --> 30
+    # 3 rows --> 60
+    # 4 rows --> 100
+    single_player_score = 5 * full_row_count * (full_row_count + 1)
 
     # It's more difficult to get full lines with more players.
     # A line is full in the game, if all players have it player-specifically full.
@@ -76,48 +70,41 @@ class TraditionalGame(Game):
             }
 
         return super().is_valid() and all(
-            square.x in range(self._get_width()) and square.y < HEIGHT
+            x in range(self._get_width()) and y < HEIGHT
             for block in self._get_moving_blocks().values()
-            for square in block.squares
+            for (x, y) in block.squares_in_player_coords.keys()
         )
 
-    def find_and_then_wipe_full_lines(self) -> Iterator[set[Square]]:
-        full_rows = {}
-
+    def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
+        full_rows = []
         for y in range(HEIGHT):
-            row = {square for square in self.landed_squares if square.y == y}
-            if len(row) == self._get_width() and self._get_width() != 0:
-                full_rows[y] = row
+            if all((x, y) in self.landed_squares for x in range(self._get_width())):
+                full_rows.append(y)
 
-        yield {square for squares in full_rows.values() for square in squares}
+        yield {(x, y) for x in range(self._get_width()) for y in full_rows}
         self.score += calculate_score(self, len(full_rows))
 
-        for full_y, squares in sorted(full_rows.items()):
-            self.landed_squares -= squares
-            for square in self.landed_squares:
-                if square.y < full_y:
-                    square.y += 1
+        for full_y in full_rows:  # must be in correct order, top to bottom
+            self.landed_squares = {
+                (x, (y + 1 if y < full_y else y)): square
+                for (x, y), square in self.landed_squares.items()
+                if y != full_y
+            }
 
         self.finish_wiping_full_lines()
 
     def _update_spawn_places_and_landed_coords(self) -> None:
         w = self._get_width_per_player()
         for i, player in enumerate(self.players):
-            player.moving_block_start_x = (i * w) + (w // 2)
+            player.spawn_x = (i * w) + (w // 2)
 
         self.valid_landed_coordinates = {
             (x, y) for x in range(self._get_width()) for y in range(HEIGHT)
         }
 
     def add_player(self, name: str, color: int) -> Player:
-        player = Player(
-            name,
-            color,
-            up_x=0,
-            up_y=-1,
-            moving_block_start_x=123,  # changed soon
-            moving_block_start_y=-1,
-        )
+        # spawn_x will be changed soon
+        player = Player(name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1)
         self.players.append(player)
         self._update_spawn_places_and_landed_coords()
         self.new_block(player)

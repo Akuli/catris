@@ -546,15 +546,15 @@ class GameOverView(View):
 
 
 def _get_block_preview(squares: set[Square]) -> list[bytes]:
-    min_x = min(square.x for square in squares)
-    min_y = min(square.y for square in squares)
-    width = max(square.x - min_x for square in squares) + 1
-    height = max(square.y - min_y for square in squares) + 1
+    min_x = min(s.original_offset_x for s in squares)
+    min_y = min(s.original_offset_y for s in squares)
+    width = max(s.original_offset_x - min_x for s in squares) + 1
+    height = max(s.original_offset_y - min_y for s in squares) + 1
 
     result = [[b"  "] * width for y in range(height)]
-    for square in squares:
-        result[square.y - min_y][square.x - min_x] = square.get_text(
-            player=None, landed=False
+    for s in squares:
+        result[s.original_offset_y - min_y][s.original_offset_x - min_x] = s.get_text(
+            visible_moving_dir=(0, 1), landed=False
         )
     return [b"".join(row) for row in result]
 
@@ -686,10 +686,12 @@ class PlayingView(View):
             and isinstance(self.game, RingGame)
             and len(self.game.players) == 1
         ):
-            self.game.players[0].flip_view()
+            self.game.players[0].up_x *= -1
+            self.game.players[0].up_y *= -1
             if self.game.is_valid():
                 self.game.need_render_event.set()
             else:
-                # Can't flip, blocks are on top of each other. Flip again to undo.
-                self.game.players[0].flip_view()
+                # Can't flip, blocks overlap. Flip again to undo.
+                self.game.players[0].up_x *= -1
+                self.game.players[0].up_y *= -1
         return None
