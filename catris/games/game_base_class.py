@@ -124,7 +124,7 @@ class Game:
     def is_valid(self) -> bool:
         for player, block in self._get_moving_blocks().items():
             if not all(self.is_valid_moving_block_coords(player, x, y) for x, y in block.squares_in_player_coords.keys()):
-                print("Invalid state: moving block in invalid place")
+                #print("Invalid state: moving block in invalid place")
                 return False
 
         seen = set(self.landed_squares.keys())
@@ -134,7 +134,7 @@ class Game:
                 for x, y in block.squares_in_player_coords.keys()
             }
             if block_points & seen:
-                print("Invalid state: duplicate squares at", block_points & seen)
+                #print("Invalid state: duplicate squares at", block_points & seen)
                 return False
             seen.update(block_points)
 

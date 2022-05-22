@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import textwrap
 from typing import Iterator
 
@@ -129,10 +130,10 @@ class RingGame(Game):
 
     # In ring mode, full lines are actually full squares, represented by radiuses.
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
-        full_radiuses = set(range(MIDDLE_AREA_RADIUS + 1, GAME_RADIUS + 1)) - {
-            max(abs(x), abs(y))
-            for x, y in (self.valid_landed_coordinates - self.landed_squares.keys())
-        }
+        counts = collections.Counter(
+            max(abs(x), abs(y)) for x, y in self.landed_squares
+        )
+        full_radiuses = {r for r, count in counts.items() if count == 8 * r}
 
         yield {
             (x, y)
