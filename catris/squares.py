@@ -28,6 +28,9 @@ class Square:
         self._next_rotate_goes_backwards = False
         self.moving_dir_when_landed: tuple[int, int] | None = None
 
+    def can_drill(self, other: Square) -> bool:
+        return False
+
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
         self.offset_x = self.original_offset_x
@@ -220,6 +223,9 @@ class DrillSquare(Square):
     def __init__(self) -> None:
         super().__init__(_RotateMode.NO_ROTATING)
         self.picture_counter = 0
+
+    def can_drill(self, other: Square) -> bool:
+        return not isinstance(other, DrillSquare)
 
     def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         dir_x, dir_y = visible_moving_dir

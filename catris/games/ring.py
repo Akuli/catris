@@ -114,21 +114,10 @@ class RingGame(Game):
             if MAP[y + GAME_RADIUS + 1][2 * (x + GAME_RADIUS) + 1 :].startswith(b"xx")
         }
 
-    def is_valid(self) -> bool:
-        if not super().is_valid():
-            return False
-
-        for player, block in self._get_moving_blocks().items():
-            for player_x, player_y in block.squares_in_player_coords.keys():
-                if player_y < -GAME_RADIUS:
-                    # Square above game. Treat it like the first row of map
-                    player_y = -GAME_RADIUS
-                if (
-                    self.player_to_world(player, player_x, player_y)
-                    not in self.valid_landed_coordinates
-                ):
-                    return False
-        return True
+    def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
+        if y < -GAME_RADIUS:
+            y = -GAME_RADIUS
+        return self.player_to_world(player, x, y) in self.valid_landed_coordinates
 
     def player_to_world(self, player: Player, x: int, y: int) -> tuple[int, int]:
         if y > 0:
