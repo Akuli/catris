@@ -109,22 +109,27 @@ class Game:
             if isinstance(player.moving_block_or_wait_counter, MovingBlock)
         }
 
-    def _get_all_squares(self, *, exclude: Player | None = None) -> dict[tuple[int, int], Square]:
+    def _get_all_squares(
+        self, *, exclude: Player | None = None
+    ) -> dict[tuple[int, int], Square]:
         result = self.landed_squares.copy()
         for player, block in self._get_moving_blocks().items():
             if player != exclude:
-                for (player_x, player_y), square in block.squares_in_player_coords.items():
-                    result[self.player_to_world(player, player_x, player_y)] = square
+                for (x, y), square in block.squares_in_player_coords.items():
+                    result[self.player_to_world(player, x, y)] = square
         return result
 
     @abstractmethod
-    def is_valid_moving_block_coords(self, player: Player, x: int,  y: int) -> bool:
+    def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
         pass
 
     def is_valid(self) -> bool:
         for player, block in self._get_moving_blocks().items():
-            if not all(self.is_valid_moving_block_coords(player, x, y) for x, y in block.squares_in_player_coords.keys()):
-                #print("Invalid state: moving block in invalid place")
+            if not all(
+                self.is_valid_moving_block_coords(player, x, y)
+                for x, y in block.squares_in_player_coords.keys()
+            ):
+                # print("Invalid state: moving block in invalid place")
                 return False
 
         seen = set(self.landed_squares.keys())
@@ -134,7 +139,7 @@ class Game:
                 for x, y in block.squares_in_player_coords.keys()
             }
             if block_points & seen:
-                #print("Invalid state: duplicate squares at", block_points & seen)
+                # print("Invalid state: duplicate squares at", block_points & seen)
                 return False
             seen.update(block_points)
 
@@ -347,14 +352,15 @@ class Game:
                     del block.squares_in_player_coords[player_x, player_y]
 
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
-        if not isinstance(player.moving_block_or_wait_counter, MovingBlock):
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
             return set()
 
         other_squares = self._get_all_squares(exclude=player)
         biggest_working_offset = 0
         for offset in range(1, 40):  # enough even in ring mode
             this_offset_works = True
-            for (x, y), square in player.moving_block_or_wait_counter.squares_in_player_coords.items():
+            for (x, y), square in block.squares_in_player_coords.items():
                 if not self.is_valid_moving_block_coords(player, x, y + offset):
                     this_offset_works = False
                     break
@@ -370,7 +376,7 @@ class Game:
                 biggest_working_offset = offset - 1
                 return {
                     self.player_to_world(player, x, y + biggest_working_offset)
-                    for x, y in player.moving_block_or_wait_counter.squares_in_player_coords.keys()
+                    for x, y in block.squares_in_player_coords.keys()
                 }
 
         # Block won't land if you press down arrow. Happens a lot in ring mode.
