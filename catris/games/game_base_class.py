@@ -256,7 +256,7 @@ class Game:
                     # bumping into another square
                     return False
 
-        self.delete_matching_points(lambda x, y, square: (x, y) in gonna_drill)
+        self.delete_points(gonna_drill)
         block.squares_in_player_coords = new_squares
         self.need_render_event.set()
         return True
@@ -310,20 +310,16 @@ class Game:
             square_dict.clear()
             square_dict.update(new_content)
 
-    def delete_matching_points(
-        self, condition: Callable[[int, int, Square], bool]
-    ) -> None:
-        for (x, y), square in list(self.landed_squares.items()):
-            if condition(x, y, square):
-                del self.landed_squares[x, y]
+    def delete_points(self, points_to_delete: set[tuple[int, int]]) -> None:
+        for point in points_to_delete:
+            if point in self.landed_squares:
+                del self.landed_squares[point]
 
         for player, block in self._get_moving_blocks().items():
-            for (player_x, player_y), square in list(
-                block.squares_in_player_coords.items()
-            ):
-                x, y = self.player_to_world(player, player_x, player_y)
-                if condition(x, y, square):
-                    del block.squares_in_player_coords[player_x, player_y]
+            # Don't use world_to_player, it doesn't handle wrapping in ring game
+            for x, y in list(block.squares_in_player_coords.keys()):
+                if self.player_to_world(player, x, y) in points_to_delete:
+                    del block.squares_in_player_coords[x, y]
 
     def _predict_landing_places(self, player: Player) -> set[tuple[int, int]]:
         block = player.moving_block_or_wait_counter
@@ -411,9 +407,7 @@ class Game:
 
         if exploding_points:
             await self.flash(exploding_points, 41)
-            self.delete_matching_points(
-                lambda x, y, square: ((x, y) in exploding_points)
-            )
+            self.delete_points(exploding_points)
 
         return explode_next
 
