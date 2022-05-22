@@ -62,18 +62,9 @@ class TraditionalGame(Game):
     def _get_width(self) -> int:
         return self._get_width_per_player() * len(self.players)
 
-    def is_valid(self) -> bool:
-        if self.players:
-            assert self.valid_landed_coordinates == {
-                (x, y) for x in range(self._get_width()) for y in range(self.HEIGHT)
-            }
-
-        # FIXME: can you move off-screen block too much to the side?
-        return super().is_valid() and all(
-            x in range(self._get_width()) and y < self.HEIGHT
-            for block in self._get_moving_blocks().values()
-            for (x, y) in block.squares_in_player_coords.keys()
-        )
+    # TODO: when block is off-screen, don't allow going into another player's area?
+    def is_valid_moving_block_coords(self, player: Player, x: int, y: int) -> bool:
+        return x in range(self._get_width()) and y < self.HEIGHT
 
     def find_and_then_wipe_full_lines(self) -> Iterator[set[tuple[int, int]]]:
         full_rows = []

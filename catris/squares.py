@@ -28,35 +28,41 @@ class Square:
         self._next_rotate_goes_backwards = False
         self.moving_dir_when_landed: tuple[int, int] | None = None
 
+    def can_drill(self, other: Square) -> bool:
+        return False
+
     # Undoes the switch to world coordinates. Useful for the "hold" feature.
     def restore_original_coordinates(self) -> None:
         self.offset_x = self.original_offset_x
         self.offset_y = self.original_offset_y
 
-    def _raw_rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
-        x -= self.offset_x
-        y -= self.offset_y
-        if counter_clockwise:
-            self.offset_x, self.offset_y = self.offset_y, -self.offset_x
-        else:
-            self.offset_x, self.offset_y = -self.offset_y, self.offset_x
-        x += self.offset_x
-        y += self.offset_y
-        return (x, y)
-
-    def rotate(self, x: int, y: int, counter_clockwise: bool) -> tuple[int, int]:
+    def _get_rotated_offsets(self, counter_clockwise: bool) -> tuple[int, int]:
         if self._rotate_mode == _RotateMode.NO_ROTATING:
-            pass
+            return (self.offset_x, self.offset_y)
         elif self._rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
-            self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
-            x, y = self._raw_rotate(
-                x, y, counter_clockwise=self._next_rotate_goes_backwards
-            )
+            actually_counter_clockwise = not self._next_rotate_goes_backwards
         elif self._rotate_mode == _RotateMode.FULL_ROTATING:
-            x, y = self._raw_rotate(x, y, counter_clockwise)
+            actually_counter_clockwise = counter_clockwise
         else:
             raise NotImplementedError(self._rotate_mode)
-        return (x, y)
+
+        if actually_counter_clockwise:
+            return (self.offset_y, -self.offset_x)
+        else:
+            return (-self.offset_y, self.offset_x)
+
+    # Can be called without actually rotating block, to see where rotated coords would go
+    def get_rotated_coords(
+        self, x: int, y: int, counter_clockwise: bool
+    ) -> tuple[int, int]:
+        new_offset_x, new_offset_y = self._get_rotated_offsets(counter_clockwise)
+        return (x - self.offset_x + new_offset_x, y - self.offset_y + new_offset_y)
+
+    # Call this only when you are sure the block will be rotated.
+    def commit_to_rotating(self, counter_clockwise: bool) -> None:
+        self.offset_x, self.offset_y = self._get_rotated_offsets(counter_clockwise)
+        if self._rotate_mode == _RotateMode.ROTATE_90DEG_AND_BACK:
+            self._next_rotate_goes_backwards = not self._next_rotate_goes_backwards
 
     # Moving direction given as the player looking at the drill sees it.
     # For example, (0, 1) means towards bottom of terminal.
@@ -220,6 +226,9 @@ class DrillSquare(Square):
     def __init__(self) -> None:
         super().__init__(_RotateMode.NO_ROTATING)
         self.picture_counter = 0
+
+    def can_drill(self, other: Square) -> bool:
+        return not isinstance(other, DrillSquare)
 
     def get_text(self, visible_moving_dir: tuple[int, int], landed: bool) -> bytes:
         dir_x, dir_y = visible_moving_dir
