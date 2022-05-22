@@ -145,43 +145,6 @@ class Game:
 
         return set(self.landed_squares.keys()).issubset(self.valid_landed_coordinates)
 
-    # Inside this context manager, you can get the game to invalid state if you want.
-    # All changes to blocks will be erased when you exit the context manager.
-    @contextlib.contextmanager
-    def temporary_state(self) -> Generator[None, None, None]:
-        old_landed = self.landed_squares
-        self.landed_squares = self.landed_squares.copy()
-        old_need_render = self.need_render_event.is_set()
-
-        old_moving = []
-        for block in self._get_moving_blocks().values():
-            old_moving.append((block, block.squares_in_player_coords))
-            block.squares_in_player_coords = {
-                point: copy.copy(square)
-                for point, square in block.squares_in_player_coords.items()
-            }
-
-        try:
-            yield
-        finally:
-            self.landed_squares = old_landed
-            for block, squares in old_moving:
-                block.squares_in_player_coords = squares
-            if old_need_render:
-                self.need_render_event.set()
-            else:
-                self.need_render_event.clear()
-
-    def _apply_change_if_possible(self, callback: Callable[[], None]) -> bool:
-        assert self.is_valid()
-        with self.temporary_state():
-            callback()
-            stayed_valid = self.is_valid()
-        if stayed_valid:
-            callback()
-            return True
-        return False
-
     def game_is_over(self) -> bool:
         return not any(
             isinstance(p.moving_block_or_wait_counter, MovingBlock)
