@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import copy
 import time
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, Generator, Iterator
+from typing import Any, ClassVar, Iterator
 
 from catris.ansi import COLOR
 from catris.player import MovingBlock, Player
