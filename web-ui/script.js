@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const cacheRow = this._cache[y];
         const elementRow = this._el.children[y];
         for (const cacheItem of cacheRow.splice(newWidth)) {
-          cacheItem.elem.remove();
+          cacheItem.cell.remove();
         }
         for (let x = this.width; x < newWidth; x++) {
           const cacheItem = this._makeBlankCell();
