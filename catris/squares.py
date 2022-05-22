@@ -24,7 +24,6 @@ class Square:
         self.original_offset_x = 0
         self.original_offset_y = 0
 
-        self.wrap_around_end = False  # for ring mode
         self._rotate_mode = rotate_mode
         self._next_rotate_goes_backwards = False
         self.moving_dir_when_landed: tuple[int, int] | None = None

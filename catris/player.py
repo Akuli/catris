@@ -47,13 +47,6 @@ class Player:
             assert name
             name = name[:-1]
 
-    # In ring mode, player's view is rotated so that blocks fall down.
-    def world_to_player(self, x: int, y: int) -> tuple[int, int]:
-        return ((-self.up_y * x + self.up_x * y), (-self.up_x * x - self.up_y * y))
-
-    def player_to_world(self, x: int, y: int) -> tuple[int, int]:
-        return ((-self.up_y * x - self.up_x * y), (self.up_x * x - self.up_y * y))
-
     def set_fast_down(self, value: bool) -> None:
         if isinstance(self.moving_block_or_wait_counter, MovingBlock):
             self.moving_block_or_wait_counter.fast_down = value
