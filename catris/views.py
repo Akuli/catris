@@ -339,7 +339,7 @@ class ChooseGameView(View):
 
         if self._menu.selected_index >= len(GAME_CLASSES):
             return False
-        game_class =  GAME_CLASSES[self._menu.selected_index]
+        game_class = GAME_CLASSES[self._menu.selected_index]
         current, maximum = self.client.lobby.current_and_max_players(game_class)
         assert current <= maximum
         return current == maximum
