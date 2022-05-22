@@ -254,9 +254,10 @@ class Game:
         if not in_player_coords:
             dx, dy = self.world_to_player(player, dx, dy)
 
-        squares = block.squares_in_player_coords
-        squares = {(x + dx, y + dy): square for (x, y), square in squares.items()}
-        block.squares_in_player_coords = squares
+        block.squares_in_player_coords = {
+            (x + dx, y + dy): square
+            for (x, y), square in block.squares_in_player_coords.items()
+        }
 
         if can_drill:
             drill_points = {

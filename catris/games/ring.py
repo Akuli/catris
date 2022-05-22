@@ -5,7 +5,6 @@ from typing import Iterator
 
 from catris.ansi import COLOR
 from catris.player import Player
-from catris.squares import Square
 
 from .game_base_class import Game
 
