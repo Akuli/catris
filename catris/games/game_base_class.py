@@ -298,19 +298,30 @@ class Game:
         self.need_render_event.set()
         return True
 
-    def _rotate(self, player: Player, counter_clockwise: bool) -> None:
-        block = player.moving_block_or_wait_counter
-        if isinstance(block, MovingBlock):
-            new_squares = {}
-            for (x, y), square in block.squares_in_player_coords.items():
-                new_squares[square.rotate(x, y, counter_clockwise)] = square
-            block.squares_in_player_coords = new_squares
-            self.need_render_event.set()
-
     def rotate_if_possible(self, player: Player, counter_clockwise: bool) -> bool:
-        return self._apply_change_if_possible(
-            lambda: self._rotate(player, counter_clockwise)
-        )
+        block = player.moving_block_or_wait_counter
+        if not isinstance(block, MovingBlock):
+            return False
+
+        new_squares = {
+            square.get_rotated_coords(x, y, counter_clockwise): square
+            for (x, y), square in block.squares_in_player_coords.items()
+        }
+
+        other_squares = self._get_all_squares(exclude=player)
+        if any(
+            self.player_to_world(player, x, y) in other_squares
+            or not self.is_valid_moving_block_coords(player, x, y)
+            for x, y in new_squares.keys()
+        ):
+            return False
+
+        for square in new_squares.values():
+            # full commitment's what i'm thinking of...
+            square.commit_to_rotating(counter_clockwise)
+        block.squares_in_player_coords = new_squares
+        self.need_render_event.set()
+        return True
 
     @abstractmethod
     def add_player(self, name: str, color: int) -> Player:
