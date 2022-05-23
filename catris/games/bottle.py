@@ -128,9 +128,9 @@ class BottleGame(Game):
             x = self.BOTTLE_OUTER_WIDTH * len(self.players) - 1
             for y, row in enumerate(self.BOTTLE):
                 if row.startswith(b"|") and row.endswith(b"|"):
-                    self.landed_squares[x, y] = BottleSeparatorSquare(
-                        self.players[-1].color, color
-                    )
+                    sep = BottleSeparatorSquare(self.players[-1].color, color)
+                    sep.moving_dir_when_landed = (0, 1)
+                    self.landed_squares[x, y] = sep
 
         # spawn_x will be changed soon
         player = Player(name, color, up_x=0, up_y=-1, spawn_x=123, spawn_y=-1)
