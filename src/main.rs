@@ -5,9 +5,11 @@ use tokio::time::sleep;
 use std::time::Duration;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tokio::sync::watch;
 
 struct ServerState {
     text_showing: bool,
+    update_sender: watch::Sender<()>,
 }
 
 type SafeServerState = Arc<Mutex<ServerState>>;
@@ -17,7 +19,8 @@ async fn flipper(safe_state: SafeServerState) {
         {
             let mut state = safe_state.lock().unwrap();
             state.text_showing = !state.text_showing;
-            println!("Flipped: {}", state.text_showing)
+            println!("Flipped: {}", state.text_showing);
+            _ = state.update_sender.send(());  // TODO: why this failing?
         }
         sleep(Duration::from_secs(1)).await;
     }
@@ -25,6 +28,7 @@ async fn flipper(safe_state: SafeServerState) {
 
 async fn process(socket: &mut TcpStream, ip: IpAddr, safe_state: SafeServerState) {
     println!("Processing!!! {}", ip);
+    let mut receiver = safe_state.lock().unwrap().update_sender.subscribe();
     loop {
         let text_showing: bool;
         {
@@ -32,21 +36,22 @@ async fn process(socket: &mut TcpStream, ip: IpAddr, safe_state: SafeServerState
             text_showing = state.text_showing;
         }
         if text_showing {
-            socket.write(b"hello\r\n").await.unwrap();  // FIXME: don't panic
+            socket.write(b"true\r\n").await.unwrap();  // FIXME: don't panic
         } else {
-            socket.write(b"lolwat\r\n").await.unwrap();  // FIXME: don't panic
+            socket.write(b"false\r\n").await.unwrap();  // FIXME: don't panic
         }
-        sleep(Duration::from_millis(200)).await;
+
+        receiver.changed().await.unwrap();
     }
 }
 
 #[tokio::main]
 async fn main() {
-    // Bind the listener to the address
     let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
     println!("Listening!");
 
-    let safe_state = Arc::new(Mutex::new(ServerState{text_showing: false}));
+    let (sender, _) = watch::channel(());
+    let safe_state = Arc::new(Mutex::new(ServerState{update_sender: sender, text_showing: false}));
     tokio::spawn(flipper(safe_state.clone()));
 
     loop {
@@ -57,4 +62,3 @@ async fn main() {
         });
     }
 }
-
