@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import random
-import string
+import secrets
 from typing import TYPE_CHECKING, Container
 
 from catris.games import Game
@@ -15,11 +14,25 @@ if TYPE_CHECKING:
 
 
 def generate_lobby_id(ids_in_use: Container[str]) -> str:
-    system_random = random.SystemRandom()
     while True:
+        # I started with A-Z0-9 and removed chars that look confusingly similar
+        # in small font:
+        #
+        #   A and 4
+        #   B and 8
+        #   C and G
+        #   E and F
+        #   I and 1
+        #   O and 0 and Q
+        #   S and 5
+        #   U and V
+        #   Z and 2
+        #
+        # This conveniently leaves 16 characters, so it's basically hex with
+        # different chars to represent each number.
+        alphabet = "DHJKLMNPRTWXY379"
         lobby_id = "".join(
-            system_random.choice(string.ascii_uppercase + string.digits)
-            for i in range(6)
+            alphabet[int(hexdigit, 16)] for hexdigit in secrets.token_hex(3)
         )
         if lobby_id not in ids_in_use:
             return lobby_id
