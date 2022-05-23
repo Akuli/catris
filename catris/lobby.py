@@ -20,7 +20,7 @@ def generate_lobby_id(ids_in_use: Container[str]) -> str:
         #
         #   A and 4
         #   B and 8
-        #   C and G
+        #   C and G and 6
         #   E and F
         #   I and 1
         #   O and 0 and Q
