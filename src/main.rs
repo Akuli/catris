@@ -1,4 +1,4 @@
-use tokio::net::{TcpListener, TcpStream};
+/*use tokio::net::{TcpListener, TcpStream};
 use std::net::IpAddr;
 use tokio::io::AsyncWriteExt;
 use tokio::time::sleep;
@@ -6,9 +6,12 @@ use std::time::Duration;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::watch;
+*/
+mod game_logic;
 
+/*
 struct ServerState {
-    text_showing: bool,
+    flag: bool,
     update_sender: watch::Sender<()>,
 }
 
@@ -18,40 +21,40 @@ async fn flipper(safe_state: SafeServerState) {
     loop {
         {
             let mut state = safe_state.lock().unwrap();
-            state.text_showing = !state.text_showing;
-            println!("Flipped: {}", state.text_showing);
-            _ = state.update_sender.send(());  // TODO: why this failing?
+            state.flag = !state.flag;
+            state.update_sender.send(()).unwrap();
+            state.update_sender.send(()).unwrap();
         }
         sleep(Duration::from_secs(1)).await;
     }
 }
 
 async fn process(socket: &mut TcpStream, ip: IpAddr, safe_state: SafeServerState) {
-    println!("Processing!!! {}", ip);
+    println!("Connection from {}", ip);
     let mut receiver = safe_state.lock().unwrap().update_sender.subscribe();
     loop {
-        let text_showing: bool;
+        let flag: bool;
         {
             let state = safe_state.lock().unwrap();
-            text_showing = state.text_showing;
+            flag = state.flag;
         }
-        if text_showing {
-            socket.write(b"true\r\n").await.unwrap();  // FIXME: don't panic
+        if flag {
+            socket.write(b"true\r\n").await.unwrap();
         } else {
-            socket.write(b"false\r\n").await.unwrap();  // FIXME: don't panic
+            socket.write(b"false\r\n").await.unwrap();
         }
-
         receiver.changed().await.unwrap();
     }
 }
+*/
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
-    println!("Listening!");
+    /*
+    let listener = TcpListener::bind("127.0.0.1:12345").await.unwrap();
 
-    let (sender, _) = watch::channel(());
-    let safe_state = Arc::new(Mutex::new(ServerState{update_sender: sender, text_showing: false}));
+    let (sender, receiver) = watch::channel(());
+    let safe_state = Arc::new(Mutex::new(ServerState{update_sender: sender, flag: false}));
     tokio::spawn(flipper(safe_state.clone()));
 
     loop {
@@ -60,5 +63,27 @@ async fn main() {
         tokio::spawn(async move {
             process(&mut socket, sockaddr.ip(), safe_state).await;
         });
+    }*/
+
+    let block = game_logic::MovingBlock{
+        center_x: 5,
+        center_y: -1,
+        relative_coords: vec![(0,0),(0,-1),(-1,0),(-1,-1)],
+    };
+    let player = game_logic::Player{
+        name: "Foo".to_string(),
+        block: block,
+    };
+    println!("name = {}", player.name);
+    let mut game = game_logic::Game{
+        players: vec![player],
+    };
+    for (x, y) in game.players[0].block.relative_coords.clone().into_iter() {
+        println!("point: {} {}", x, y);
+    }
+    println!("Moving!!");
+    game.move_blocks_down();
+    for (x, y) in game.players[0].block.relative_coords.clone().into_iter() {
+        println!("point: {} {}", x, y);
     }
 }
