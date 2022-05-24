@@ -66,17 +66,17 @@ async fn main() {
         });
     }*/
 
-    let block = game_logic::MovingBlock{
+    let block = game_logic::MovingBlock {
         center_x: 5,
         center_y: -1,
-        relative_coords: vec![(0,0),(0,-1),(-1,0),(-1,-1)],
+        relative_coords: vec![(0, 0), (0, -1), (-1, 0), (-1, -1)],
     };
-    let player = game_logic::Player{
+    let player = game_logic::Player {
         name: "Foo".to_string(),
         block: block,
     };
     println!("name = {}", player.name);
-    let mut game = game_logic::Game{
+    let mut game = game_logic::Game {
         players: vec![player],
     };
 

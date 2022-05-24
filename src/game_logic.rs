@@ -14,7 +14,7 @@ pub struct MovingBlock {
 
 impl MovingBlock {
     fn get_square_contents(&self) -> SquareContent {
-        SquareContent{
+        SquareContent {
             ansi_colors: "\x1b[1;43m".to_string(),
             text: "  ".to_string(),
         }
@@ -47,7 +47,7 @@ impl Game {
         (i8::try_from(x).unwrap(), i8::try_from(y).unwrap())
     }
 
-    fn get_square_contents(&self) -> HashMap<(i8,i8), SquareContent> {
+    fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
         let mut result = HashMap::new();
         for player in &self.players {
             for (x, y) in &player.block.relative_coords {
@@ -57,7 +57,8 @@ impl Game {
                 );
                 result.insert(
                     self.player_to_world(player_point),
-                    player.block.get_square_contents());
+                    player.block.get_square_contents(),
+                );
             }
         }
 
@@ -73,7 +74,7 @@ impl Game {
             let mut current_colors = "".to_string();
 
             for x in 0..WIDTH {
-                let mut content = SquareContent{
+                let mut content = SquareContent {
                     ansi_colors: "".to_string(),
                     text: "  ".to_string(),
                 };
@@ -81,8 +82,8 @@ impl Game {
                     Some(found_content) => {
                         content.ansi_colors = found_content.ansi_colors.clone();
                         content.text = found_content.text.clone();
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
                 if current_colors != content.ansi_colors {
                     row.push_str("\x1b[0m");
