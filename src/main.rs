@@ -1,12 +1,13 @@
 /*use tokio::net::{TcpListener, TcpStream};
 use std::net::IpAddr;
 use tokio::io::AsyncWriteExt;
-use tokio::time::sleep;
-use std::time::Duration;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::watch;
 */
+use std::time::Duration;
+use tokio::time::sleep;
+
 mod game_logic;
 
 /*
@@ -78,12 +79,13 @@ async fn main() {
     let mut game = game_logic::Game{
         players: vec![player],
     };
-    for (x, y) in game.players[0].block.relative_coords.clone().into_iter() {
-        println!("point: {} {}", x, y);
-    }
-    println!("Moving!!");
-    game.move_blocks_down();
-    for (x, y) in game.players[0].block.relative_coords.clone().into_iter() {
-        println!("point: {} {}", x, y);
+
+    for _ in 1..10 {
+        println!("\x1b[2J");
+        for line in game.get_lines_to_render() {
+            println!("{}", line);
+        }
+        sleep(Duration::from_millis(400)).await;
+        game.move_blocks_down();
     }
 }
