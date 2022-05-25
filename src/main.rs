@@ -7,8 +7,13 @@ use tokio::sync::watch;
 */
 use std::time::Duration;
 use tokio::time::sleep;
+use std::io::Write;
 
+mod ansi;
 mod game_logic;
+mod render;
+
+use crate::render::RenderBuffer;
 
 /*
 struct ServerState {
@@ -80,11 +85,22 @@ async fn main() {
         players: vec![player],
     };
 
+    // double buffering, to avoid lots of memory allocations
+    let mut buffer1 = RenderBuffer::new();
+    let mut buffer2 = RenderBuffer::new();
+    let mut current_buffer = &mut buffer1;
+    let mut prev_buffer = &mut buffer2;
+
+    print!("\x1b[2J");
+
     for _ in 1..10 {
-        println!("\x1b[2J");
-        for line in game.get_lines_to_render() {
-            println!("{}", line);
-        }
+        game.render_to_buf(current_buffer);
+        print!("{}", current_buffer.get_updates_as_ansi_codes(prev_buffer));
+        let tmp = current_buffer;
+        current_buffer = prev_buffer;
+        prev_buffer = tmp;
+        std::io::stdout().flush();
+
         sleep(Duration::from_millis(400)).await;
         game.move_blocks_down();
     }

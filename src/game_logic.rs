@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
+use crate::ansi;
+use crate::render::RenderBuffer;
+
 struct SquareContent {
-    ansi_colors: String,
-    text: String,
+    text: [char; 2],
+    colors: ansi::Colors,
 }
 
 pub struct MovingBlock {
@@ -15,8 +18,8 @@ pub struct MovingBlock {
 impl MovingBlock {
     fn get_square_contents(&self) -> SquareContent {
         SquareContent {
-            ansi_colors: "\x1b[1;43m".to_string(),
-            text: "  ".to_string(),
+            text: [' ', ' '],
+            colors: ansi::Colors { fg: 0, bg: 43 },
         }
     }
 }
@@ -30,8 +33,8 @@ pub struct Game {
     pub players: Vec<Player>,
 }
 
-const WIDTH: i8 = 10;
-const HEIGHT: i8 = 20;
+const WIDTH: usize = 10;
+const HEIGHT: usize = 20;
 
 impl Game {
     pub fn move_blocks_down(&mut self) {
@@ -52,8 +55,8 @@ impl Game {
         for player in &self.players {
             for (x, y) in &player.block.relative_coords {
                 let player_point: (i32, i32) = (
-                    i32::from(*x) + player.block.center_x,
-                    i32::from(*y) + player.block.center_y,
+                    (*x as i32) + player.block.center_x,
+                    (*y as i32) + player.block.center_y,
                 );
                 result.insert(
                     self.player_to_world(player_point),
@@ -65,40 +68,25 @@ impl Game {
         result
     }
 
-    pub fn get_lines_to_render(&self) -> Vec<String> {
+    pub fn render_to_buf(&self, buffer: &mut RenderBuffer) {
+        buffer.resize(2 * WIDTH + 2, HEIGHT);
         let square_contents = self.get_square_contents();
-        let mut result: Vec<String> = vec![];
 
         for y in 0..HEIGHT {
-            let mut row = "|".to_string();
-            let mut current_colors = "".to_string();
+            buffer.set_text(0, y, &mut "|".chars(), ansi::Colors { fg: 0, bg: 0 });
+            buffer.set_text(
+                2*WIDTH + 1,
+                y,
+                &mut "|".chars(),
+                ansi::Colors { fg: 0, bg: 0 },
+            );
 
             for x in 0..WIDTH {
-                let mut content = SquareContent {
-                    ansi_colors: "".to_string(),
-                    text: "  ".to_string(),
-                };
-                match square_contents.get(&(x, y)) {
-                    Some(found_content) => {
-                        content.ansi_colors = found_content.ansi_colors.clone();
-                        content.text = found_content.text.clone();
-                    }
-                    _ => {}
+                let upoint = (x as i8, y as i8);
+                if let Some(content) = square_contents.get(&upoint) {
+                    buffer.set_text(2 * x + 1, y, &mut content.text.into_iter(), content.colors);
                 }
-                if current_colors != content.ansi_colors {
-                    row.push_str("\x1b[0m");
-                    row.push_str(&content.ansi_colors);
-                    current_colors = content.ansi_colors;
-                }
-                row.push_str(&content.text);
             }
-
-            if current_colors != "" {
-                row.push_str("\x1b[0m");
-            }
-            row.push_str("|");
-            result.push(row);
         }
-        result
     }
 }
