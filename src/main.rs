@@ -94,8 +94,11 @@ async fn main() {
     print!("\x1b[2J");
 
     for _ in 1..10 {
+        current_buffer.clear();
         game.render_to_buf(current_buffer);
+
         print!("{}", current_buffer.get_updates_as_ansi_codes(prev_buffer));
+
         let tmp = current_buffer;
         current_buffer = prev_buffer;
         prev_buffer = tmp;
