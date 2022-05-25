@@ -1,5 +1,5 @@
 pub const CLEAR_SCREEN: &str = "\x1b[0J";
-pub const RESET_COLORS: &str = "\x1b[0J";
+pub const RESET_COLORS: &str = "\x1b[0m";
 
 pub fn move_cursor(x: usize, y: usize) -> String {
     format!("\x1b[{};{}H", y + 1, x + 1)
