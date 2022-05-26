@@ -28,15 +28,11 @@ async fn handle_connection(
     loop {
         currently_rendering.clear();
         game.lock().unwrap().render_to_buf(&mut currently_rendering);
-        // TODO: socket error handling
-        socket
-            .write(
-                currently_rendering
-                    .get_updates_as_ansi_codes(&mut last_rendered)
-                    .as_bytes(),
-            )
-            .await
-            .unwrap();
+        let to_send = currently_rendering.get_updates_as_ansi_codes(&mut last_rendered);
+        if let Err(e) = socket.write_all(to_send.as_bytes()).await {
+            println!("Disconnected: {} {}", ip, e);
+            return;
+        }
         currently_rendering.copy_into(&mut last_rendered);
         need_render_receiver.changed().await.unwrap();
     }
@@ -70,21 +66,18 @@ async fn main() {
         players: vec![player],
     }));
 
-    // TODO: possible to clone the receiver we get from here?
-    let (need_render_sender, mut need_render_receiver) = watch::channel(());
+    let (need_render_sender, need_render_receiver) = watch::channel(());
     tokio::spawn(move_blocks_down_task(game.clone(), need_render_sender));
 
-    let (mut socket, sockaddr) = listener.accept().await.unwrap();
-    tokio::spawn(async move {
-        handle_connection(
-            &mut socket,
-            sockaddr.ip(),
-            &mut need_render_receiver,
-            game.clone(),
-        )
-        .await;
-    });
     loop {
-        sleep(Duration::from_millis(400)).await;
+        let (mut socket, sockaddr) = listener.accept().await.unwrap();
+        {
+            let game = game.clone();
+            let mut need_render_receiver = need_render_receiver.clone();
+            tokio::spawn(async move {
+                handle_connection(&mut socket, sockaddr.ip(), &mut need_render_receiver, game)
+                    .await;
+            });
+        }
     }
 }
