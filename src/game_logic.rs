@@ -16,6 +16,14 @@ pub struct MovingBlock {
 }
 
 impl MovingBlock {
+    fn new(player_index: usize) -> MovingBlock {
+        MovingBlock {
+            center_x: (10 * player_index + 5) as i32,
+            center_y: -1,
+            relative_coords: vec![(0, 0), (0, -1), (-1, 0), (-1, -1)],
+        }
+    }
+
     fn get_square_contents(&self) -> SquareContent {
         SquareContent {
             text: [' ', ' '],
@@ -37,6 +45,16 @@ const WIDTH: usize = 10;
 const HEIGHT: usize = 20;
 
 impl Game {
+    pub fn new(player_name: String) -> Game {
+        let player = Player {
+            name: player_name,
+            block: MovingBlock::new(0),
+        };
+        Game {
+            players: vec![player],
+        }
+    }
+
     pub fn move_blocks_down(&mut self) {
         for player in &mut self.players {
             for pair in &mut player.block.relative_coords {

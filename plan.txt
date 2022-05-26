@@ -1,0 +1,8 @@
+traditional game with all yellow square blocks and no ui
+other blocks than yellow square blocks
+ingame ui
+special blocks
+lobbies
+game selection menu, bottle game
+ring game
+ip logging rules

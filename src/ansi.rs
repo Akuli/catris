@@ -12,9 +12,10 @@ pub fn move_cursor(x: usize, y: usize) -> String {
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Colors {
+    // 0 means use default color
     pub fg: u8,
     pub bg: u8,
-} // 0 means use default color
+}
 
 impl Colors {
     pub fn escape_sequence(self) -> String {
