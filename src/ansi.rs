@@ -1,4 +1,4 @@
-pub const CLEAR_SCREEN: &str = "\x1b[0J";
+pub const CLEAR_SCREEN: &str = "\x1b[2J";
 pub const RESET_COLORS: &str = "\x1b[0m";
 
 pub fn resize_terminal(width: usize, height: usize) -> String {

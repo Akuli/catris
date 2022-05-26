@@ -80,12 +80,9 @@ impl RenderBuffer {
             // re-render everything
             result.push_str(&ansi::resize_terminal(self.width, self.height));
             result.push_str(&ansi::CLEAR_SCREEN);
+            let mut current_color = ansi::Colors { fg: 0, bg: 0 };
             for y in 0..self.height {
-                if y != 0 {
-                    result.push_str("\r\n");
-                }
-
-                let mut current_color = ansi::Colors { fg: 0, bg: 0 };
+                result.push_str(&ansi::move_cursor(0, y));
                 for x in 0..self.width {
                     if self.colors[y][x] != current_color {
                         current_color = self.colors[y][x];
@@ -93,7 +90,6 @@ impl RenderBuffer {
                     }
                     result.push(self.chars[y][x]);
                 }
-                result.push_str(&ansi::RESET_COLORS);
             }
         } else {
             // re-render changed part
