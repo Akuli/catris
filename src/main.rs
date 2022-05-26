@@ -27,10 +27,7 @@ async fn handle_connection(
 
     loop {
         currently_rendering.clear();
-        {
-            let game = game.lock().unwrap();
-            game.render_to_buf(&mut currently_rendering);
-        }
+        game.lock().unwrap().render_to_buf(&mut currently_rendering);
         // TODO: socket error handling
         socket
             .write(
