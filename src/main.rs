@@ -1,13 +1,12 @@
-/*use tokio::net::{TcpListener, TcpStream};
+use std::io::Write;
 use std::net::IpAddr;
-use tokio::io::AsyncWriteExt;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::sync::watch;
-*/
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::watch;
 use tokio::time::sleep;
-use std::io::Write;
 
 mod ansi;
 mod game_logic;
@@ -15,61 +14,51 @@ mod render;
 
 use crate::render::RenderBuffer;
 
-/*
-struct ServerState {
-    flag: bool,
-    update_sender: watch::Sender<()>,
-}
-
-type SafeServerState = Arc<Mutex<ServerState>>;
-
-async fn flipper(safe_state: SafeServerState) {
-    loop {
-        {
-            let mut state = safe_state.lock().unwrap();
-            state.flag = !state.flag;
-            state.update_sender.send(()).unwrap();
-            state.update_sender.send(()).unwrap();
-        }
-        sleep(Duration::from_secs(1)).await;
-    }
-}
-
-async fn process(socket: &mut TcpStream, ip: IpAddr, safe_state: SafeServerState) {
+async fn handle_connection(
+    socket: &mut TcpStream,
+    ip: IpAddr,
+    need_render_receiver: &mut watch::Receiver<()>,
+    game: Arc<Mutex<game_logic::Game>>,
+) {
     println!("Connection from {}", ip);
-    let mut receiver = safe_state.lock().unwrap().update_sender.subscribe();
+
+    let mut last_rendered = RenderBuffer::new();
+    let mut currently_rendering = RenderBuffer::new();
+
     loop {
-        let flag: bool;
+        currently_rendering.clear();
         {
-            let state = safe_state.lock().unwrap();
-            flag = state.flag;
+            let game = game.lock().unwrap();
+            game.render_to_buf(&mut currently_rendering);
         }
-        if flag {
-            socket.write(b"true\r\n").await.unwrap();
-        } else {
-            socket.write(b"false\r\n").await.unwrap();
-        }
-        receiver.changed().await.unwrap();
+        // TODO: socket error handling
+        socket
+            .write(
+                currently_rendering
+                    .get_updates_as_ansi_codes(&mut last_rendered)
+                    .as_bytes(),
+            )
+            .await
+            .unwrap();
+        currently_rendering.copy_into(&mut last_rendered);
+        need_render_receiver.changed().await.unwrap();
     }
 }
-*/
+
+async fn move_blocks_down_task(
+    game: Arc<Mutex<game_logic::Game>>,
+    need_render_sender: watch::Sender<()>,
+) {
+    loop {
+        game.lock().unwrap().move_blocks_down();
+        need_render_sender.send(()).unwrap();
+        sleep(Duration::from_millis(400)).await;
+    }
+}
 
 #[tokio::main]
 async fn main() {
-    /*
     let listener = TcpListener::bind("127.0.0.1:12345").await.unwrap();
-
-    let (sender, receiver) = watch::channel(());
-    let safe_state = Arc::new(Mutex::new(ServerState{update_sender: sender, flag: false}));
-    tokio::spawn(flipper(safe_state.clone()));
-
-    loop {
-        let (mut socket, sockaddr) = listener.accept().await.unwrap();
-        let safe_state = safe_state.clone();
-        tokio::spawn(async move {
-            process(&mut socket, sockaddr.ip(), safe_state).await;
-        });
-    }*/
 
     let block = game_logic::MovingBlock {
         center_x: 5,
@@ -80,31 +69,25 @@ async fn main() {
         name: "Foo".to_string(),
         block: block,
     };
-    println!("name = {}", player.name);
-    let mut game = game_logic::Game {
+    let game = Arc::new(Mutex::new(game_logic::Game {
         players: vec![player],
-    };
+    }));
 
-    // double buffering, to avoid lots of memory allocations
-    let mut buffer1 = RenderBuffer::new();
-    let mut buffer2 = RenderBuffer::new();
-    let mut current_buffer = &mut buffer1;
-    let mut prev_buffer = &mut buffer2;
+    // TODO: possible to clone the receiver we get from here?
+    let (need_render_sender, mut need_render_receiver) = watch::channel(());
+    tokio::spawn(move_blocks_down_task(game.clone(), need_render_sender));
 
-    print!("\x1b[2J");
-
-    for _ in 1..10 {
-        current_buffer.clear();
-        game.render_to_buf(current_buffer);
-
-        print!("{}", current_buffer.get_updates_as_ansi_codes(prev_buffer));
-
-        let tmp = current_buffer;
-        current_buffer = prev_buffer;
-        prev_buffer = tmp;
-        std::io::stdout().flush();
-
+    let (mut socket, sockaddr) = listener.accept().await.unwrap();
+    tokio::spawn(async move {
+        handle_connection(
+            &mut socket,
+            sockaddr.ip(),
+            &mut need_render_receiver,
+            game.clone(),
+        )
+        .await;
+    });
+    loop {
         sleep(Duration::from_millis(400)).await;
-        game.move_blocks_down();
     }
 }

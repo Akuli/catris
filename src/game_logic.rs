@@ -40,6 +40,10 @@ impl Game {
     pub fn move_blocks_down(&mut self) {
         for player in &mut self.players {
             for pair in &mut player.block.relative_coords {
+                // TODO: remove weird wrapping
+                if pair.1 > 25 {
+                    pair.1 = -5;
+                }
                 pair.1 += 1;
             }
         }
@@ -75,7 +79,7 @@ impl Game {
         for y in 0..HEIGHT {
             buffer.set_text(0, y, &mut "|".chars(), ansi::Colors { fg: 0, bg: 0 });
             buffer.set_text(
-                2*WIDTH + 1,
+                2 * WIDTH + 1,
                 y,
                 &mut "|".chars(),
                 ansi::Colors { fg: 0, bg: 0 },

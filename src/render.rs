@@ -63,28 +63,43 @@ impl RenderBuffer {
         }
     }
 
-    pub fn get_updates_as_ansi_codes(&mut self, old: &RenderBuffer) -> String {
+    pub fn copy_into(&self, dest: &mut RenderBuffer) {
+        dest.resize(self.width, self.height);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                dest.chars[y][x] = self.chars[y][x];
+                dest.colors[y][x] = self.colors[y][x];
+            }
+        }
+    }
+
+    pub fn get_updates_as_ansi_codes(&self, old: &RenderBuffer) -> String {
         let mut result = "".to_string();
-        let mut current_color = ansi::Colors { fg: 0, bg: 0 };
 
         if self.width != old.width || self.height != old.height {
-            // re-render everything bruh
+            // re-render everything
+            result.push_str(&ansi::resize_terminal(self.width, self.height));
             result.push_str(&ansi::CLEAR_SCREEN);
-            result.push_str(&ansi::move_cursor(0, 0));
             for y in 0..self.height {
+                if y != 0 {
+                    result.push_str("\r\n");
+                }
+
+                let mut current_color = ansi::Colors { fg: 0, bg: 0 };
                 for x in 0..self.width {
                     if self.colors[y][x] != current_color {
-                        result.push_str(&current_color.escape_sequence());
                         current_color = self.colors[y][x];
+                        result.push_str(&current_color.escape_sequence());
                     }
                     result.push(self.chars[y][x]);
                 }
-                result.push_str("\r\n");
+                result.push_str(&ansi::RESET_COLORS);
             }
         } else {
             // re-render changed part
-            let mut cursor_at_xy = false;
+            let mut current_color = ansi::Colors { fg: 0, bg: 0 };
             for y in 0..self.height {
+                let mut cursor_at_xy = false;
                 for x in 0..self.width {
                     if self.colors[y][x] == old.colors[y][x] && self.chars[y][x] == old.chars[y][x]
                     {
@@ -97,6 +112,7 @@ impl RenderBuffer {
                         }
                         if self.colors[y][x] != current_color {
                             result.push_str(&self.colors[y][x].escape_sequence());
+                            current_color = self.colors[y][x];
                         }
                         result.push(self.chars[y][x]);
                     }
