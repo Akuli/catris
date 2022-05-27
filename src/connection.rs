@@ -47,81 +47,60 @@ impl Drop for ConnectionLogger {
     }
 }
 
-fn parse_as_much_utf8_as_possible(bytes: &[u8], dest: &mut String) -> usize {
-    let mut i = 0;
-    while i < bytes.len() {
-        match std::str::from_utf8(&bytes[i..]) {
-            Ok(s) => {
-                dest.push_str(&s);
-                i = bytes.len();
-                break;
-            }
-            Err(e) => {
-                let start = i;
-                i += e.valid_up_to();
-                dest.push_str(std::str::from_utf8(&bytes[start..i]).unwrap());
-                if let Some(n) = e.error_len() {
-                    // skip invalid utf-8
-                    if n <= 0 {
-                        panic!("wat");
-                    }
-                    i += n;
-                } else {
-                    // stop when utf-8 looks valid so far but only part of a character received
-                    break;
-                }
-            }
-        }
-    }
-    i
-}
-
 #[derive(Debug)]
 enum KeyPress {
     Up,
     Down,
     Right,
     Left,
-    BackSpace, // TODO
+    BackSpace,
     Character(char),
 }
 
-fn parse_key_presses(text: String) -> (Vec<KeyPress>, String) {
-    let mut result = vec![];
-    let mut i = 0;
-    while i < text.len() {
-        if text[i..].to_string() == "\x1b".to_string()
-            || text[i..].to_string() == "\x1b[".to_string()
-        {
-            // part of arrow key, not fully received yet
-            return (result, text[i..].to_string());
-        }
-
-        let mut n = 3;
-        match &text[i..min(text.len(), i + 3)] {
-            "\x1b[A" => result.push(KeyPress::Up),
-            "\x1b[B" => result.push(KeyPress::Down),
-            "\x1b[C" => result.push(KeyPress::Right),
-            "\x1b[D" => result.push(KeyPress::Left),
-            _ => {
-                n = 1;
-                match &text[i..i + 1] {
-                    "\x7f" => result.push(KeyPress::BackSpace), // linux/mac terminal
-                    "\x08" => result.push(KeyPress::BackSpace), // windows cmd
-                    // FIXME: use text.chars() instead of indexing
-                    byte => result.push(KeyPress::Character(byte.chars().next().unwrap())),
+// Returning None means need to receive more data.
+// The usize is how many bytes were consumed.
+fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
+    match data {
+        b"" => None,
+        b"\x1b" => None,
+        b"\x1b[" => None,
+        b"\x1b[A" => Some((KeyPress::Up, 3)),
+        b"\x1b[B" => Some((KeyPress::Down, 3)),
+        b"\x1b[C" => Some((KeyPress::Right, 3)),
+        b"\x1b[D" => Some((KeyPress::Left, 3)),
+        b"\x7f" => Some((KeyPress::BackSpace, 1)), // linux/mac terminal
+        b"\x08" => Some((KeyPress::BackSpace, 1)), // windows cmd.exe
+        // utf-8 chars are never >4 bytes long
+        _ => match std::str::from_utf8(&data[0..min(data.len(), 4)]) {
+            Ok(s) => {
+                let ch = s.chars().next().unwrap();
+                Some((KeyPress::Character(ch), ch.to_string().len()))
+            }
+            Err(e) => {
+                // see std::str::Utf8Error
+                if e.valid_up_to() == 0 {
+                    if e.error_len() == None {
+                        // need more data
+                        None
+                    } else {
+                        Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1))
+                    }
+                } else {
+                    let ch = std::str::from_utf8(&data[..e.valid_up_to()])
+                        .unwrap()
+                        .chars()
+                        .next()
+                        .unwrap();
+                    Some((KeyPress::Character(ch), ch.to_string().len()))
                 }
             }
-        }
-        i += n;
+        },
     }
-    (result, "".to_string())
 }
 
 async fn handle_receiving(reader: &mut OwnedReadHalf, logger: &ConnectionLogger) {
     let mut buffer = [0 as u8; 100];
     let mut bytes_received = 0 as usize;
-    let mut text = "".to_string();
     loop {
         // Receive bytes. May be incomplete or invalid utf-8 characters, or
         // incomplete ansi escape sequence.
@@ -139,21 +118,24 @@ async fn handle_receiving(reader: &mut OwnedReadHalf, logger: &ConnectionLogger)
             }
         }
 
-        // Parse as much as possible into utf-8 string
-        let bytes_valid_utf8 =
-            parse_as_much_utf8_as_possible(&buffer[0..bytes_received], &mut text);
-        for i in bytes_valid_utf8..bytes_received {
-            buffer[i - bytes_valid_utf8] = buffer[i];
+        let mut consumed = 0 as usize;
+        loop {
+            match parse_key_press(&buffer[consumed..bytes_received]) {
+                None => {
+                    println!("need more data");
+                    break;
+                }
+                Some((keypress, n)) => {
+                    println!("got {:?}, skipping {} bytes", keypress, n);
+                    consumed += n;
+                }
+            }
         }
-        bytes_received -= bytes_valid_utf8;
 
-        // Parse as much characters and ANSI codes as possible
-        let (key_presses, remaining_text) = parse_key_presses(text);
-        text = remaining_text;
-
-        for k in key_presses {
-            println!("got key press: {:?}", k);
+        for i in consumed..bytes_received {
+            buffer[i - consumed] = buffer[i];
         }
+        bytes_received -= consumed;
     }
 }
 
