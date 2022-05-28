@@ -26,17 +26,11 @@ use crate::views;
 
 struct ClientInfo {
     client_id: u64,
+    logger: connection::ClientLogger,
     name: String,
     color: u8,
     need_render_sender: Arc<Notify>,
     view: Arc<Mutex<dyn views::View>>,
-}
-
-impl ClientInfo {
-    // TODO: this is copy pasta
-    pub fn log(&self, message: String) {
-        println!("[client {}] {}", self.client_id, message);
-    }
 }
 
 pub struct Lobby {
@@ -83,19 +77,19 @@ impl Lobby {
 
     pub fn add_client(
         &mut self,
-        client_id: u64,
+        logger: connection::ClientLogger,
         name: String,
         need_render_sender: Arc<Notify>,
         view: Arc<Mutex<dyn views::View>>,
     ) {
-        assert!(self.clients.len() < MAX_CLIENTS_PER_LOBBY);
         let unused_color = *ALL_COLORS
             .iter()
             .filter(|color| !self.clients.iter().any(|client| client.color == **color))
             .next()
             .unwrap();
         self.clients.push(ClientInfo {
-            client_id: client_id,
+            client_id: logger.client_id,
+            logger: logger,
             name: name,
             color: unused_color,
             need_render_sender: need_render_sender,
@@ -109,7 +103,7 @@ impl Lobby {
             .iter()
             .position(|c| c.client_id == client_id)
             .unwrap();
-        self.clients[i].log(format!("Leaving lobby: {}", self.id));
+        self.clients[i].logger.log(format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
     }
 }

@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::io;
 use std::io::Write;
 use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
@@ -23,6 +24,16 @@ use crate::lobby;
 use crate::render;
 use crate::views;
 
+// Even though you can create only one Client, it can be associated with multiple ClientLoggers
+pub struct ClientLogger {
+    pub client_id: u64,
+}
+impl ClientLogger {
+    pub fn log(&self, message: String) {
+        println!("[client {}] {}", self.client_id, message);
+    }
+}
+
 struct Client {
     ip: IpAddr,
     id: u64,
@@ -34,7 +45,7 @@ struct Client {
     lobby: Option<Arc<Mutex<lobby::Lobby>>>,
 }
 
-static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 impl Client {
     fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
@@ -49,20 +60,21 @@ impl Client {
             reader: reader,
             lobby: None,
         };
-        result.log(format!("New connection from {}", ip));
+        // TODO: don't log all IPs
+        result.logger().log(format!("New connection from {}", ip));
         result
     }
 
-    pub fn log(&self, message: String) {
-        println!("[client {}] {}", self.id, message);
+    pub fn logger(&self) -> ClientLogger {
+        ClientLogger { client_id: self.id }
     }
 
-    pub async fn receive_key_press(&mut self) -> Result<ansi::KeyPress, std::io::Error> {
+    pub async fn receive_key_press(&mut self) -> Result<ansi::KeyPress, io::Error> {
         loop {
             match ansi::parse_key_press(&self.recv_buffer[..self.recv_buffer_size]) {
                 Some((ansi::KeyPress::Quit, _)) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::ConnectionAborted,
+                    return Err(io::Error::new(
+                        io::ErrorKind::ConnectionAborted,
                         "received quit key press",
                     ));
                 }
@@ -80,8 +92,8 @@ impl Client {
                         .read(&mut self.recv_buffer[self.recv_buffer_size..])
                         .await?;
                     if n == 0 {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::ConnectionAborted,
+                        return Err(io::Error::new(
+                            io::ErrorKind::ConnectionAborted,
                             "connection closed",
                         ));
                     }
@@ -97,23 +109,19 @@ impl Drop for Client {
         if let Some(lobby) = &self.lobby {
             lobby.lock().unwrap().remove_client(self.id);
         }
-        self.log("Disconnected".to_string());
     }
 }
 
-async fn handle_receiving(
-    mut client: Client,
-    lobbies: lobby::Lobbies,
-) -> Result<(), std::io::Error> {
+async fn handle_receiving(mut client: Client, lobbies: lobby::Lobbies) -> Result<(), io::Error> {
     loop {
         match client.receive_key_press().await? {
             ansi::KeyPress::Character('n') => {
                 let mut lobbies = lobbies.lock().unwrap();
                 let mut lobby = lobby::Lobby::new(&*lobbies);
                 let id = lobby.id.clone();
-                client.log(format!("Created lobby: {}", id));
+                client.logger().log(format!("Created lobby: {}", id));
                 lobby.add_client(
-                    client.id,
+                    client.logger(),
                     "John".to_string(),
                     client.need_render_notify.clone(),
                     client.view.clone(),
@@ -131,7 +139,7 @@ async fn handle_sending(
     mut writer: OwnedWriteHalf,
     need_render_notify: Arc<Notify>,
     view: views::ViewRef,
-) {
+) -> Result<(), io::Error> {
     // pseudo optimization: double buffering to prevent copying between buffers
     let mut buffers = [render::RenderBuffer::new(), render::RenderBuffer::new()];
     let mut next_idx = 0;
@@ -139,9 +147,7 @@ async fn handle_sending(
     loop {
         view.lock().unwrap().render(&mut buffers[next_idx]);
         let to_send = buffers[1 - next_idx].get_updates_as_ansi_codes(&buffers[next_idx]);
-        if let Err(_) = writer.write_all(to_send.as_bytes()).await {
-            return;
-        }
+        writer.write_all(to_send.as_bytes()).await?;
         next_idx = 1 - next_idx;
         need_render_notify.notified().await;
     }
@@ -150,10 +156,13 @@ async fn handle_sending(
 pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lobbies) {
     let (reader, writer) = socket.into_split();
     let client = Client::new(ip, reader);
+    let logger = client.logger();
     let view = client.view.clone();
     let notify = client.need_render_notify.clone();
-    tokio::select! {
-        _ = handle_receiving(client, lobbies) => {},
-        _ = handle_sending(writer, notify, view) => {},
-    }
+
+    let error: Result<(), io::Error> = tokio::select! {
+        e = handle_receiving(client, lobbies) => {e},
+        e = handle_sending(writer, notify, view) => {e},
+    };
+    logger.log(format!("Disconnected: {:?}", error));
 }
