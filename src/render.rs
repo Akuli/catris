@@ -75,12 +75,12 @@ impl RenderBuffer {
 
     pub fn get_updates_as_ansi_codes(&self, old: &RenderBuffer) -> String {
         let mut result = "".to_string();
+        let mut current_color = ansi::Colors { fg: 0, bg: 0 };
 
         if self.width != old.width || self.height != old.height {
             // re-render everything
             result.push_str(&ansi::resize_terminal(self.width, self.height));
             result.push_str(&ansi::CLEAR_SCREEN);
-            let mut current_color = ansi::Colors { fg: 0, bg: 0 };
             for y in 0..self.height {
                 result.push_str(&ansi::move_cursor(0, y));
                 for x in 0..self.width {
@@ -93,7 +93,6 @@ impl RenderBuffer {
             }
         } else {
             // re-render changed part
-            let mut current_color = ansi::Colors { fg: 0, bg: 0 };
             for y in 0..self.height {
                 let mut cursor_at_xy = false;
                 for x in 0..self.width {
@@ -116,7 +115,9 @@ impl RenderBuffer {
             }
         }
 
-        result.push_str(&ansi::RESET_COLORS);
+        if current_color != (ansi::Colors { fg: 0, bg: 0 }) {
+            result.push_str(&ansi::RESET_COLORS);
+        }
         result
     }
 }
