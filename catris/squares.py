@@ -108,7 +108,7 @@ class NormalSquare(Square):
 class BombSquare(Square):
     def __init__(self) -> None:
         super().__init__(_RotateMode.NO_ROTATING)
-        self.timer = 15
+        self.timer = random.choice([15, 15, 15, 15, 3])
 
     def get_predicted_landing_color(self) -> int:
         # red when bomb about to explode
