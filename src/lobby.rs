@@ -19,14 +19,14 @@ use tokio::time::sleep;
 use weak_table::WeakValueHashMap;
 
 use crate::ansi;
-use crate::connection;
+use crate::client;
 use crate::game_logic;
 use crate::render;
 use crate::views;
 
 struct ClientInfo {
     client_id: u64,
-    logger: connection::ClientLogger,
+    logger: client::ClientLogger,
     name: String,
     color: u8,
     need_render_sender: Arc<Notify>,
@@ -77,7 +77,7 @@ impl Lobby {
 
     pub fn add_client(
         &mut self,
-        logger: connection::ClientLogger,
+        logger: client::ClientLogger,
         name: String,
         need_render_sender: Arc<Notify>,
         view: Arc<Mutex<dyn views::View>>,

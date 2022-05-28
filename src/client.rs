@@ -34,7 +34,7 @@ impl ClientLogger {
     }
 }
 
-struct Client {
+pub struct Client {
     ip: IpAddr,
     id: u64,
     pub need_render_notify: Arc<Notify>,
@@ -48,7 +48,7 @@ struct Client {
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 impl Client {
-    fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
+    pub fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
         let result = Client {
             ip: ip,
             // https://stackoverflow.com/a/32936288
@@ -102,6 +102,22 @@ impl Client {
             }
         }
     }
+
+    pub fn make_lobby(&mut self, lobbies: lobby::Lobbies) {
+                let mut lobbies = lobbies.lock().unwrap();
+                let mut lobby = lobby::Lobby::new(&*lobbies);
+                let id = lobby.id.clone();
+                self.logger().log(format!("Created lobby: {}", id));
+                lobby.add_client(
+                    self.logger(),
+                    "John".to_string(),
+                    self.need_render_notify.clone(),
+                    self.view.clone(),
+                );
+                let lobby = Arc::new(Mutex::new(lobby));
+                lobbies.insert(id, lobby.clone());
+                self.lobby = Some(lobby);
+    }
 }
 
 impl Drop for Client {
@@ -110,59 +126,4 @@ impl Drop for Client {
             lobby.lock().unwrap().remove_client(self.id);
         }
     }
-}
-
-async fn handle_receiving(mut client: Client, lobbies: lobby::Lobbies) -> Result<(), io::Error> {
-    loop {
-        match client.receive_key_press().await? {
-            ansi::KeyPress::Character('n') => {
-                let mut lobbies = lobbies.lock().unwrap();
-                let mut lobby = lobby::Lobby::new(&*lobbies);
-                let id = lobby.id.clone();
-                client.logger().log(format!("Created lobby: {}", id));
-                lobby.add_client(
-                    client.logger(),
-                    "John".to_string(),
-                    client.need_render_notify.clone(),
-                    client.view.clone(),
-                );
-                let lobby = Arc::new(Mutex::new(lobby));
-                lobbies.insert(id, lobby.clone());
-                client.lobby = Some(lobby);
-            }
-            key => println!("{:?}", key),
-        }
-    }
-}
-
-async fn handle_sending(
-    mut writer: OwnedWriteHalf,
-    need_render_notify: Arc<Notify>,
-    view: views::ViewRef,
-) -> Result<(), io::Error> {
-    // pseudo optimization: double buffering to prevent copying between buffers
-    let mut buffers = [render::RenderBuffer::new(), render::RenderBuffer::new()];
-    let mut next_idx = 0;
-
-    loop {
-        view.lock().unwrap().render(&mut buffers[next_idx]);
-        let to_send = buffers[1 - next_idx].get_updates_as_ansi_codes(&buffers[next_idx]);
-        writer.write_all(to_send.as_bytes()).await?;
-        next_idx = 1 - next_idx;
-        need_render_notify.notified().await;
-    }
-}
-
-pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lobbies) {
-    let (reader, writer) = socket.into_split();
-    let client = Client::new(ip, reader);
-    let logger = client.logger();
-    let view = client.view.clone();
-    let notify = client.need_render_notify.clone();
-
-    let error: Result<(), io::Error> = tokio::select! {
-        e = handle_receiving(client, lobbies) => {e},
-        e = handle_sending(writer, notify, view) => {e},
-    };
-    logger.log(format!("Disconnected: {:?}", error));
 }

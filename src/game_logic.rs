@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::ansi;
-use crate::render::RenderBuffer;
+use crate::render::Buffer;
 
 struct SquareContent {
     text: [char; 2],
@@ -90,7 +90,7 @@ impl Game {
         result
     }
 
-    pub fn render_to_buf(&self, buffer: &mut RenderBuffer) {
+    pub fn render_to_buf(&self, buffer: &mut Buffer) {
         buffer.resize(2 * WIDTH + 2, HEIGHT);
         let square_contents = self.get_square_contents();
 

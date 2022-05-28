@@ -1,15 +1,15 @@
 use crate::ansi;
 
-pub struct RenderBuffer {
+pub struct Buffer {
     width: usize,
     height: usize,
     chars: Vec<Vec<char>>,
     colors: Vec<Vec<ansi::Colors>>,
 }
 
-impl RenderBuffer {
-    pub fn new() -> RenderBuffer {
-        RenderBuffer {
+impl Buffer {
+    pub fn new() -> Buffer {
+        Buffer {
             width: 0,
             height: 0,
             chars: vec![],
@@ -63,7 +63,7 @@ impl RenderBuffer {
         }
     }
 
-    pub fn copy_into(&self, dest: &mut RenderBuffer) {
+    pub fn copy_into(&self, dest: &mut Buffer) {
         dest.resize(self.width, self.height);
         for y in 0..self.height {
             for x in 0..self.width {
@@ -73,7 +73,7 @@ impl RenderBuffer {
         }
     }
 
-    pub fn get_updates_as_ansi_codes(&self, old: &RenderBuffer) -> String {
+    pub fn get_updates_as_ansi_codes(&self, old: &Buffer) -> String {
         let mut result = "".to_string();
         let mut current_color = ansi::Colors { fg: 0, bg: 0 };
 

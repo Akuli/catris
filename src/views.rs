@@ -19,7 +19,7 @@ use weak_table::WeakValueHashMap;
 use crate::render;
 
 pub trait View: Send {
-    fn render(&self, buffer: &mut render::RenderBuffer);
+    fn render(&self, buffer: &mut render::Buffer);
 }
 
 pub type ViewRef = Arc<Mutex<dyn View>>;
@@ -27,7 +27,7 @@ pub type ViewRef = Arc<Mutex<dyn View>>;
 pub struct DummyView {}
 
 impl View for DummyView {
-    fn render(&self, buffer: &mut render::RenderBuffer) {
+    fn render(&self, buffer: &mut render::Buffer) {
         buffer.resize(0, 0);
     }
 }
