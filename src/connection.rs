@@ -21,12 +21,13 @@ use crate::ansi;
 use crate::game_logic;
 use crate::lobby;
 use crate::render;
+use crate::views;
 
 struct Client {
     ip: IpAddr,
     id: u64,
     pub need_render_notify: Arc<Notify>,
-    pub render_buffer: Arc<Mutex<render::RenderBuffer>>,
+    pub view: views::ViewRef,
     recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
     recv_buffer_size: usize,
     reader: OwnedReadHalf,
@@ -42,7 +43,7 @@ impl Client {
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             need_render_notify: Arc::new(Notify::new()),
-            render_buffer: Arc::new(Mutex::new(render::RenderBuffer::new())),
+            view: Arc::new(Mutex::new(views::DummyView {})),
             recv_buffer: [0 as u8; 100],
             recv_buffer_size: 0,
             reader: reader,
@@ -62,7 +63,7 @@ impl Client {
                 Some((ansi::KeyPress::Quit, _)) => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::ConnectionAborted,
-                        "user quit",
+                        "received quit key press",
                     ));
                 }
                 Some((key, bytes_used)) => {
@@ -115,7 +116,7 @@ async fn handle_receiving(
                     client.id,
                     "John".to_string(),
                     client.need_render_notify.clone(),
-                    client.render_buffer.clone(),
+                    client.view.clone(),
                 );
                 let lobby = Arc::new(Mutex::new(lobby));
                 lobbies.insert(id, lobby.clone());
@@ -129,21 +130,19 @@ async fn handle_receiving(
 async fn handle_sending(
     mut writer: OwnedWriteHalf,
     need_render_notify: Arc<Notify>,
-    render_buffer: Arc<Mutex<render::RenderBuffer>>,
+    view: views::ViewRef,
 ) {
-    let mut last_rendered = render::RenderBuffer::new();
-    let mut currently_rendering = render::RenderBuffer::new();
+    // pseudo optimization: double buffering to prevent copying between buffers
+    let mut buffers = [render::RenderBuffer::new(), render::RenderBuffer::new()];
+    let mut next_idx = 0;
 
     loop {
-        render_buffer
-            .lock()
-            .unwrap()
-            .copy_into(&mut currently_rendering);
-        let to_send = currently_rendering.get_updates_as_ansi_codes(&last_rendered);
+        view.lock().unwrap().render(&mut buffers[next_idx]);
+        let to_send = buffers[1 - next_idx].get_updates_as_ansi_codes(&buffers[next_idx]);
         if let Err(_) = writer.write_all(to_send.as_bytes()).await {
             return;
         }
-        currently_rendering.copy_into(&mut last_rendered);
+        next_idx = 1 - next_idx;
         need_render_notify.notified().await;
     }
 }
@@ -151,10 +150,10 @@ async fn handle_sending(
 pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lobbies) {
     let (reader, writer) = socket.into_split();
     let client = Client::new(ip, reader);
-    let render_buffer = client.render_buffer.clone();
+    let view = client.view.clone();
     let notify = client.need_render_notify.clone();
     tokio::select! {
         _ = handle_receiving(client, lobbies) => {},
-        _ = handle_sending(writer, notify, render_buffer) => {},
+        _ = handle_sending(writer, notify, view) => {},
     }
 }

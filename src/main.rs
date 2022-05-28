@@ -21,6 +21,7 @@ mod connection;
 mod game_logic;
 mod lobby;
 mod render;
+mod views;
 
 /*async fn move_blocks_down_task(
     game: Arc<Mutex<game_logic::Game>>,

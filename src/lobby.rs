@@ -22,13 +22,14 @@ use crate::ansi;
 use crate::connection;
 use crate::game_logic;
 use crate::render;
+use crate::views;
 
 struct ClientInfo {
     client_id: u64,
     name: String,
     color: u8,
     need_render_sender: Arc<Notify>,
-    render_buffer: Arc<Mutex<render::RenderBuffer>>,
+    view: Arc<Mutex<dyn views::View>>,
 }
 
 impl ClientInfo {
@@ -85,7 +86,7 @@ impl Lobby {
         client_id: u64,
         name: String,
         need_render_sender: Arc<Notify>,
-        render_buffer: Arc<Mutex<render::RenderBuffer>>,
+        view: Arc<Mutex<dyn views::View>>,
     ) {
         assert!(self.clients.len() < MAX_CLIENTS_PER_LOBBY);
         let unused_color = *ALL_COLORS
@@ -98,7 +99,7 @@ impl Lobby {
             name: name,
             color: unused_color,
             need_render_sender: need_render_sender,
-            render_buffer: render_buffer,
+            view: view,
         });
     }
 
