@@ -68,11 +68,11 @@ pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lo
     let logger = client.logger();
     let render_data = client.render_data.clone();
 
-    let error: Result<(), io::Error> = tokio::select! {
-        e = handle_receiving(client, lobbies) => e,
-        e = handle_sending(writer, render_data) => e,
+    let result: Result<(), io::Error> = tokio::select! {
+        res = handle_receiving(client, lobbies) => res,
+        res = handle_sending(writer, render_data) => res,
     };
-    logger.log(format!("Disconnected: {:?}", error));
+    logger.log(format!("Disconnected: {}", result.unwrap_err()));
 }
 
 #[tokio::main]

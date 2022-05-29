@@ -6,3 +6,4 @@ lobbies
 game selection menu, bottle game
 ring game
 ip logging rules
+prod with RUST_BACKTRACE=1
