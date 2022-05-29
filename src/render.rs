@@ -150,10 +150,7 @@ impl Buffer {
         for y in 0..self.height {
             // Output nothing for unchanged lines, but consider cursor line potentially changed.
             // This way we wipe away the character typed by user.
-            if self.chars[y] == old.chars[y]
-                && self.colors[y] == old.colors[y]
-                && y != cursor_y
-            {
+            if self.chars[y] == old.chars[y] && self.colors[y] == old.colors[y] && y != cursor_y {
                 continue;
             }
 

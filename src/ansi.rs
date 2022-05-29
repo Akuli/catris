@@ -2,6 +2,7 @@ use std::cmp::min;
 
 pub const CLEAR_SCREEN: &str = "\x1b[2J";
 pub const CLEAR_TO_END_OF_LINE: &str = "\x1b[0K";
+pub const CLEAR_FROM_CURSOR_TO_END_OF_SCREEN: &str = "\x1b[0J";
 pub const RESET_COLORS: &str = "\x1b[0m";
 pub const SHOW_CURSOR: &str = "\x1b[?25h";
 pub const HIDE_CURSOR: &str = "\x1b[?25l";
@@ -13,6 +14,10 @@ pub fn resize_terminal(width: usize, height: usize) -> String {
 
 pub fn move_cursor(x: usize, y: usize) -> String {
     format!("\x1b[{};{}H", y + 1, x + 1)
+}
+
+pub fn move_cursor_horizontally(x: usize) -> String {
+    format!("\x1b[{}G", x + 1)
 }
 
 #[derive(Clone, Copy, PartialEq)]

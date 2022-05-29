@@ -45,7 +45,7 @@ async fn handle_receiving(
 }
 
 async fn handle_sending(
-    mut writer: OwnedWriteHalf,
+    writer: &mut OwnedWriteHalf,
     render_data: Arc<Mutex<render::RenderData>>,
 ) -> Result<(), io::Error> {
     // pseudo optimization: double buffering to prevent copying between buffers
@@ -107,7 +107,8 @@ pub async fn handle_connection(
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
 ) {
     // TODO: max concurrent connections from same ip?
-    let (reader, writer) = socket.into_split();
+    let (reader, mut writer) = socket.into_split();
+
     let client = client::Client::new(ip, reader);
     let logger = client.logger();
     logger.log("New connection");
@@ -116,8 +117,18 @@ pub async fn handle_connection(
 
     let result: Result<(), io::Error> = tokio::select! {
         res = handle_receiving(client, lobbies, used_names) => res,
-        res = handle_sending(writer, render_data) => res,
+        res = handle_sending(&mut writer, render_data) => res,
     };
+
+    // Try to leave the terminal in a sane state
+    let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
+        + &ansi::move_cursor_horizontally(0)
+        + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
+    tokio::select! {
+        _ = writer.write_all(cleanup_ansi_codes.as_bytes()) => {},
+        _ = sleep(Duration::from_millis(500)) => {},
+    }
+
     logger.log(&format!("Disconnected: {}", result.unwrap_err()));
 }
 
