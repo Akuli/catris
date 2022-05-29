@@ -85,8 +85,7 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
         _ => {}
     }
 
-    // Extract UTF-8 character, they are never >4 bytes long
-    match std::str::from_utf8(&data[0..min(data.len(), 4)]) {
+    match std::str::from_utf8(data) {
         Ok(s) => {
             let ch = s.chars().next().unwrap();
             return Some((KeyPress::Character(ch), ch.to_string().len()));
