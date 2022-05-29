@@ -5,7 +5,7 @@ use crate::render::Buffer;
 
 struct SquareContent {
     text: [char; 2],
-    colors: ansi::Colors,
+    colors: ansi::Color,
 }
 
 pub struct MovingBlock {
@@ -27,7 +27,7 @@ impl MovingBlock {
     fn get_square_contents(&self) -> SquareContent {
         SquareContent {
             text: [' ', ' '],
-            colors: ansi::Colors { fg: 0, bg: 43 },
+            colors: ansi::YELLOW_BACKGROUND,
         }
     }
 }
@@ -95,14 +95,14 @@ impl Game {
         let square_contents = self.get_square_contents();
 
         for y in 0..HEIGHT {
-            buffer.set_char(0, y, '|', ansi::Colors { fg: 0, bg: 0 });
-            buffer.set_char(2 * WIDTH + 1, y, '|', ansi::Colors { fg: 0, bg: 0 });
+            buffer.set_char(0, y, '|');
+            buffer.set_char(2 * WIDTH + 1, y, '|');
 
             for x in 0..WIDTH {
                 let upoint = (x as i8, y as i8);
                 if let Some(content) = square_contents.get(&upoint) {
-                    buffer.set_char(2 * x + 1, y, content.text[0], content.colors);
-                    buffer.set_char(2 * x + 2, y, content.text[1], content.colors);
+                    buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.colors);
+                    buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.colors);
                 }
             }
         }

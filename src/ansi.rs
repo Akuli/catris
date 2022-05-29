@@ -16,14 +16,15 @@ pub fn move_cursor(x: usize, y: usize) -> String {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-pub struct Colors {
+pub struct Color {
     pub fg: u8,
     pub bg: u8,
 }
-pub const DEFAULT_COLORS: Colors = Colors { fg: 0, bg: 0 };
-pub const RED_FG: Colors = Colors { fg: 31, bg: 0 };
+pub const DEFAULT_COLOR: Color = Color { fg: 0, bg: 0 };
+pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
+pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
 
-impl Colors {
+impl Color {
     pub fn escape_sequence(self) -> String {
         let mut result = RESET_COLORS.to_string();
         if self.fg != 0 {

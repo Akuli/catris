@@ -32,7 +32,7 @@ const ASCII_ART: &str = r"
 fn add_ascii_art(buffer: &mut render::Buffer) {
     let mut y = 0;
     for line in ASCII_ART.lines() {
-        buffer.add_text(0, y, line.to_string(), ansi::DEFAULT_COLORS);
+        buffer.add_text(0, y, line.to_string());
         y += 1;
     }
 }
@@ -40,7 +40,6 @@ fn add_ascii_art(buffer: &mut render::Buffer) {
 async fn prompt(
     client: &mut client::Client,
     prompt: String,
-    end_lines: Vec<String>,
     validator: fn(&String) -> Option<String>,
     add_extra_text: Option<fn(&mut render::Buffer)>,
 ) -> Result<String, io::Error> {
@@ -54,17 +53,15 @@ async fn prompt(
             render_data.buffer.resize(80, 24);
 
             add_ascii_art(&mut render_data.buffer);
-            let mut x =
-                render_data
-                    .buffer
-                    .add_text(20, 10, prompt.clone(), ansi::DEFAULT_COLORS);
-            x = render_data
-                .buffer
-                .add_text(x, 10, current_text.clone(), ansi::DEFAULT_COLORS);
+            let mut x = render_data.buffer.add_text(20, 10, prompt.clone());
+            x = render_data.buffer.add_text(x, 10, current_text.clone());
             render_data.cursor_pos = Some((x, 10));
-            render_data
-                .buffer
-                .add_text(2, 13, error.clone().unwrap_or_default(), ansi::RED_FG);
+            render_data.buffer.add_text_with_color(
+                2,
+                13,
+                error.clone().unwrap_or_default(),
+                ansi::RED_FOREGROUND,
+            );
             match add_extra_text {
                 Some(f) => f(&mut render_data.buffer),
                 None => {}
@@ -120,27 +117,17 @@ fn name_validator(name: &String) -> Option<String> {
 }
 
 fn add_name_asking_notes(buffer: &mut render::Buffer) {
-    buffer.add_centered_text(
-        17,
-        "If you play well, your name will be".to_string(),
-        ansi::DEFAULT_COLORS,
-    );
-    buffer.add_centered_text(
-        18,
-        "visible to everyone in the high scores.".to_string(),
-        ansi::DEFAULT_COLORS,
-    );
+    buffer.add_centered_text(17, "If you play well, your name will be".to_string());
+    buffer.add_centered_text(18, "visible to everyone in the high scores.".to_string());
 
     // FIXME: ip logging is currently a false claim, always printed
     buffer.add_centered_text(
         20,
         "Your IP will be logged on the server only if you".to_string(),
-        ansi::DEFAULT_COLORS,
     );
     buffer.add_centered_text(
         21,
         "connect 5 or more times within the same minute.".to_string(),
-        ansi::DEFAULT_COLORS,
     );
 }
 
@@ -148,7 +135,6 @@ pub async fn ask_name(client: &mut client::Client) -> Result<String, io::Error> 
     return prompt(
         client,
         "Name: ".to_string(),
-        vec![],
         name_validator,
         Some(add_name_asking_notes),
     )

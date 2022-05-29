@@ -23,7 +23,7 @@ pub struct Buffer {
     pub width: usize,
     pub height: usize,
     chars: Vec<Vec<char>>,
-    colors: Vec<Vec<ansi::Colors>>,
+    colors: Vec<Vec<ansi::Color>>,
 }
 
 impl Buffer {
@@ -44,7 +44,7 @@ impl Buffer {
                 row.resize(width, ' ');
             }
             for row in &mut self.colors {
-                row.resize(width, ansi::Colors { fg: 0, bg: 0 });
+                row.resize(width, ansi::DEFAULT_COLOR);
             }
         }
 
@@ -52,7 +52,7 @@ impl Buffer {
             let mut blank_chars_row = vec![];
             let mut blank_colors_row = vec![];
             blank_chars_row.resize(width, ' ');
-            blank_colors_row.resize(width, ansi::Colors { fg: 0, bg: 0 });
+            blank_colors_row.resize(width, ansi::DEFAULT_COLOR);
             self.chars.resize(height, blank_chars_row);
             self.colors.resize(height, blank_colors_row);
         }
@@ -61,30 +61,45 @@ impl Buffer {
         self.height = height;
     }
 
-    pub fn set_char(&mut self, x: usize, y: usize, ch: char, colors: ansi::Colors) {
+    pub fn set_char(&mut self, x: usize, y: usize, ch: char) {
+        self.set_char_with_color(x, y, ch, ansi::DEFAULT_COLOR);
+    }
+    pub fn set_char_with_color(&mut self, x: usize, y: usize, ch: char, colors: ansi::Color) {
         self.chars[y][x] = ch;
         self.colors[y][x] = colors;
     }
 
-    pub fn add_text(&mut self, x: usize, y: usize, text: String, colors: ansi::Colors) -> usize {
+    pub fn add_text(&mut self, x: usize, y: usize, text: String) -> usize {
+        self.add_text_with_color(x, y, text, ansi::DEFAULT_COLOR)
+    }
+    pub fn add_text_with_color(
+        &mut self,
+        x: usize,
+        y: usize,
+        text: String,
+        colors: ansi::Color,
+    ) -> usize {
         let mut x = x;
         for ch in text.chars() {
-            self.set_char(x, y, ch, colors.clone());
+            self.set_char_with_color(x, y, ch, colors);
             x += 1;
         }
         return x;
     }
 
-    pub fn add_centered_text(&mut self, y: usize, text: String, colors: ansi::Colors) {
+    pub fn add_centered_text(&mut self, y: usize, text: String) {
+        self.add_centered_text_with_color(y, text, ansi::DEFAULT_COLOR);
+    }
+    pub fn add_centered_text_with_color(&mut self, y: usize, text: String, colors: ansi::Color) {
         let n = text.chars().count();
-        let mut x = self.width / 2 - n / 2;
-        self.add_text(x, y, text, colors);
+        let x = self.width / 2 - n / 2;
+        self.add_text_with_color(x, y, text, colors);
     }
 
     pub fn clear(&mut self) {
         for y in 0..self.height {
             for x in 0..self.width {
-                self.add_text(x, y, " ".to_string(), ansi::Colors { fg: 0, bg: 0 });
+                self.set_char(x, y, ' ');
             }
         }
     }
@@ -99,79 +114,104 @@ impl Buffer {
         }
     }
 
-    // If cursor pos is given, re-renders everything after the cursor on same line
-    pub fn get_updates_as_ansi_codes(
+    fn clear_and_render_entire_screen(&self) -> String {
+        let mut current_color = ansi::DEFAULT_COLOR;
+        let mut result = "".to_string();
+
+        result.push_str(&ansi::resize_terminal(self.width, self.height));
+        result.push_str(&ansi::CLEAR_SCREEN);
+        for y in 0..self.height {
+            result.push_str(&ansi::move_cursor(0, y));
+            for x in 0..self.width {
+                if self.colors[y][x] != current_color {
+                    current_color = self.colors[y][x];
+                    result.push_str(&current_color.escape_sequence());
+                }
+                result.push(self.chars[y][x]);
+            }
+        }
+        if current_color != ansi::DEFAULT_COLOR {
+            result.push_str(&ansi::RESET_COLORS);
+        }
+        result
+    }
+
+    fn get_updates_for_what_changed(
         &self,
         old: &Buffer,
         cursor_pos: Option<(usize, usize)>,
     ) -> String {
         let mut result = "".to_string();
 
-        if self.width != old.width || self.height != old.height {
-            // re-render everything
-            let mut current_color = ansi::DEFAULT_COLORS;
-            result.push_str(&ansi::resize_terminal(self.width, self.height));
-            result.push_str(&ansi::CLEAR_SCREEN);
-            for y in 0..self.height {
-                result.push_str(&ansi::move_cursor(0, y));
-                for x in 0..self.width {
+        for y in 0..self.height {
+            // Output nothing for unchanged lines, but consider cursor line potentially changed.
+            // This way we wipe away the character typed by user.
+            if self.chars[y] == old.chars[y]
+                && self.colors[y] == old.colors[y]
+                && cursor_pos.map(|(_, cursor_y)| cursor_y) != Some(y)
+            {
+                continue;
+            }
+
+            // Use ansi::CLEAR_TO_END_OF_LINE instead of spaces when possible
+            let mut end = self.width;
+            while end > 0
+                && self.chars[y][end - 1] == ' '
+                && self.colors[y][end - 1] == ansi::DEFAULT_COLOR
+            {
+                end -= 1;
+            }
+
+            let mut current_color = ansi::DEFAULT_COLOR;
+            let mut cursor_at_xy = false;
+            for x in 0..end {
+                if self.colors[y][x] == old.colors[y][x] && self.chars[y][x] == old.chars[y][x] {
+                    // skip redrawing this charater
+                    cursor_at_xy = false;
+                } else {
+                    if !cursor_at_xy {
+                        result.push_str(&ansi::move_cursor(x, y));
+                        cursor_at_xy = true;
+                    }
                     if self.colors[y][x] != current_color {
+                        result.push_str(&self.colors[y][x].escape_sequence());
                         current_color = self.colors[y][x];
-                        result.push_str(&current_color.escape_sequence());
                     }
                     result.push(self.chars[y][x]);
                 }
             }
-            if current_color != ansi::DEFAULT_COLORS {
+            if current_color != ansi::DEFAULT_COLOR {
                 result.push_str(&ansi::RESET_COLORS);
             }
+            if !cursor_at_xy {
+                result.push_str(&ansi::move_cursor(end, y));
+            }
+            result.push_str(ansi::CLEAR_TO_END_OF_LINE);
+        }
+        result
+    }
+
+    pub fn get_updates_as_ansi_codes(
+        &self,
+        old: &Buffer,
+        cursor_pos: Option<(usize, usize)>,
+    ) -> String {
+        let mut result;
+
+        if self.width != old.width || self.height != old.height {
+            result = self.clear_and_render_entire_screen();
         } else {
-            // re-render changed part
-            for y in 0..self.height {
-                // Output nothing for unchanged lines, but consider cursor line potentially changed.
-                // This way we wipe away the character typed by user.
-                if self.chars[y] == old.chars[y]
-                    && self.colors[y] == old.colors[y]
-                    && cursor_pos.map(|(_, cursor_y)| cursor_y) != Some(y)
-                {
-                    continue;
-                }
+            result = self.get_updates_for_what_changed(old, cursor_pos);
+        }
 
-                // Use ansi::CLEAR_TO_END_OF_LINE instead of spaces when possible
-                let mut end = self.width;
-                while end > 0
-                    && self.chars[y][end - 1] == ' '
-                    && self.colors[y][end - 1] == ansi::DEFAULT_COLORS
-                {
-                    end -= 1;
-                }
-
-                let mut current_color = ansi::DEFAULT_COLORS;
-                let mut cursor_at_xy = false;
-                for x in 0..end {
-                    if self.colors[y][x] == old.colors[y][x] && self.chars[y][x] == old.chars[y][x]
-                    {
-                        // skip redrawing this charater
-                        cursor_at_xy = false;
-                    } else {
-                        if !cursor_at_xy {
-                            result.push_str(&ansi::move_cursor(x, y));
-                            cursor_at_xy = true;
-                        }
-                        if self.colors[y][x] != current_color {
-                            result.push_str(&self.colors[y][x].escape_sequence());
-                            current_color = self.colors[y][x];
-                        }
-                        result.push(self.chars[y][x]);
-                    }
-                }
-                if current_color != ansi::DEFAULT_COLORS {
-                    result.push_str(&ansi::RESET_COLORS);
-                }
-                if !cursor_at_xy {
-                    result.push_str(&ansi::move_cursor(end, y));
-                }
-                result.push_str(ansi::CLEAR_TO_END_OF_LINE);
+        match cursor_pos {
+            None => {
+                result.push_str(&ansi::move_cursor(0, self.height - 1));
+                result.push_str(ansi::HIDE_CURSOR);
+            }
+            Some((x, y)) => {
+                result.push_str(&ansi::move_cursor(x, y));
+                result.push_str(ansi::SHOW_CURSOR);
             }
         }
 

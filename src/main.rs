@@ -40,7 +40,6 @@ async fn handle_sending(
     // pseudo optimization: double buffering to prevent copying between buffers
     let mut buffers = [render::Buffer::new(), render::Buffer::new()];
     let mut next_idx = 0;
-    let mut cursor_showing: Option<bool> = None; // None = unknown
 
     loop {
         let cursor_pos;
@@ -52,26 +51,11 @@ async fn handle_sending(
 
         // In the beginning of a connection, the buffer isn't ready yet
         if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
-            let mut to_send =
+            let to_send =
                 buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
-            match cursor_pos {
-                None => {
-                    to_send.push_str(&ansi::move_cursor(0, buffers[next_idx].height - 1));
-                    if cursor_showing != Some(false) {
-                        to_send.push_str(ansi::HIDE_CURSOR);
-                        cursor_showing = Some(false);
-                    }
-                }
-                Some((x, y)) => {
-                    to_send.push_str(&ansi::move_cursor(x, y));
-                    if cursor_showing != Some(true) {
-                        to_send.push_str(ansi::SHOW_CURSOR);
-                        cursor_showing = Some(true);
-                    }
-                }
-            }
             writer.write_all(to_send.as_bytes()).await?;
         }
+
         next_idx = 1 - next_idx;
         let change_notify = render_data.lock().unwrap().changed.clone();
         change_notify.notified().await;
