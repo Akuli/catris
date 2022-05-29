@@ -142,13 +142,17 @@ impl Buffer {
         cursor_pos: Option<(usize, usize)>,
     ) -> String {
         let mut result = "".to_string();
+        let cursor_y = match cursor_pos {
+            Some((_, y)) => y,
+            None => self.height - 1,
+        };
 
         for y in 0..self.height {
             // Output nothing for unchanged lines, but consider cursor line potentially changed.
             // This way we wipe away the character typed by user.
             if self.chars[y] == old.chars[y]
                 && self.colors[y] == old.colors[y]
-                && cursor_pos.map(|(_, cursor_y)| cursor_y) != Some(y)
+                && y != cursor_y
             {
                 continue;
             }

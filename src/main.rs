@@ -36,6 +36,9 @@ async fn handle_receiving(
     client.logger().log(&format!("Name asking done: {}", name));
     client.mark_name_as_used(&name, used_names);
 
+    let want_new_lobby = views::ask_if_new_lobby(&mut client).await?;
+    println!("Asdf asd {}", want_new_lobby);
+
     loop {
         client.receive_key_press().await?;
     }

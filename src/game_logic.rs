@@ -3,6 +3,12 @@ use std::collections::HashMap;
 use crate::ansi;
 use crate::render::Buffer;
 
+pub enum GameMode {
+    Traditional,
+    Bottle,
+    Ring,
+}
+
 struct SquareContent {
     text: [char; 2],
     colors: ansi::Color,

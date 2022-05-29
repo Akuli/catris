@@ -140,3 +140,114 @@ pub async fn ask_name(
     )
     .await;
 }
+
+struct Menu {
+    items: Vec<Option<String>>, // None is a separator
+    selected_index: usize,
+}
+
+fn case_insensitive_starts_with(s: &str, prefix: char) -> bool {
+    return s.chars().next().unwrap().to_lowercase().to_string()
+        == prefix.to_lowercase().to_string();
+}
+
+impl Menu {
+    fn selected_text(&self) -> &str {
+        &self.items[self.selected_index].as_ref().unwrap()
+    }
+
+    fn render(&self, buffer: &mut render::Buffer, top_y: usize) {
+        for i in 0..self.items.len() {
+            if let Some(text) = &self.items[i] {
+                let centered_text = format!("{:^35}", text);
+                if i == self.selected_index {
+                    buffer.add_centered_text_with_color(
+                        top_y + i,
+                        &centered_text,
+                        ansi::BLACK_ON_WHITE,
+                    );
+                } else {
+                    buffer.add_centered_text(top_y + i, &centered_text);
+                }
+            }
+        }
+    }
+
+    // true means enter pressed
+    fn handle_key_press(&mut self, key: ansi::KeyPress) -> bool {
+        let last = self.items.len() - 1;
+        match key {
+            ansi::KeyPress::Up if self.selected_index != 0 => {
+                self.selected_index -= 1;
+                while self.items[self.selected_index].is_none() {
+                    self.selected_index -= 1;
+                }
+            }
+            ansi::KeyPress::Down if self.selected_index != last => {
+                self.selected_index += 1;
+                while self.items[self.selected_index].is_none() {
+                    self.selected_index += 1;
+                }
+            }
+            ansi::KeyPress::Character(ch) => {
+                // pressing r selects Ring Game
+                for i in 0..self.items.len() {
+                    if let Some(text) = &self.items[i] {
+                        if case_insensitive_starts_with(text, ch) {
+                            self.selected_index = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            ansi::KeyPress::Enter => {
+                return true;
+            }
+            _ => {}
+        }
+        return false;
+    }
+}
+
+pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::Error> {
+    let mut menu = Menu {
+        items: vec![
+            Some("New lobby".to_string()),
+            Some("Join an existing lobby".to_string()),
+            Some("Quit".to_string()),
+        ],
+        selected_index: 0,
+    };
+    loop {
+        {
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.buffer.clear();
+            render_data.buffer.resize(80, 24);
+            render_data.cursor_pos = None;
+
+            add_ascii_art(&mut render_data.buffer);
+            menu.render(&mut render_data.buffer, 10);
+            render_data
+                .buffer
+                .add_centered_text(18, "If you want to play alone, just make a new lobby.");
+            render_data.buffer.add_centered_text(
+                20,
+                "For multiplayer, one player makes a lobby and others join it.",
+            );
+            render_data.changed.notify_one();
+        }
+
+        let key = client.receive_key_press().await?;
+        if menu.handle_key_press(key) {
+            return match menu.selected_text() {
+                "New lobby" => Ok(true),
+                "Join an existing lobby" => Ok(false),
+                "Quit" => Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    "user selected \"Quit\" in menu",
+                )),
+                _ => panic!(),
+            };
+        }
+    }
+}
