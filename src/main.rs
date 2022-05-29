@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::io::Write;
 use std::net::IpAddr;
@@ -27,10 +28,15 @@ mod views;
 async fn handle_receiving(
     mut client: client::Client,
     lobbies: lobby::Lobbies,
+    used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
-    let s = views::ask_name(&mut client).await?;
-    println!("run() -> {}", s);
-    Ok(())
+    let name = views::ask_name(&mut client, used_names.clone()).await?;
+    client.logger().log(format!("Name asking done: {}", name));
+    client.mark_name_as_used(name, used_names);
+
+    loop {
+        client.receive_key_press().await?;
+    }
 }
 
 async fn handle_sending(
@@ -62,14 +68,19 @@ async fn handle_sending(
     }
 }
 
-pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lobbies) {
+pub async fn handle_connection(
+    socket: TcpStream,
+    ip: IpAddr,
+    lobbies: lobby::Lobbies,
+    used_names: Arc<Mutex<HashSet<String>>>,
+) {
     let (reader, writer) = socket.into_split();
     let client = client::Client::new(ip, reader);
     let logger = client.logger();
     let render_data = client.render_data.clone();
 
     let result: Result<(), io::Error> = tokio::select! {
-        res = handle_receiving(client, lobbies) => res,
+        res = handle_receiving(client, lobbies, used_names) => res,
         res = handle_sending(writer, render_data) => res,
     };
     logger.log(format!("Disconnected: {}", result.unwrap_err()));
@@ -79,11 +90,17 @@ pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lo
 async fn main() {
     let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
 
+    let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
 
     loop {
         let (socket, sockaddr) = listener.accept().await.unwrap();
         let lobbies = lobbies.clone();
-        tokio::spawn(handle_connection(socket, sockaddr.ip(), lobbies.clone()));
+        tokio::spawn(handle_connection(
+            socket,
+            sockaddr.ip(),
+            lobbies.clone(),
+            used_names.clone(),
+        ));
     }
 }

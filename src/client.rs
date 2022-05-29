@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashSet;
 use std::io;
 use std::io::Write;
 use std::net::IpAddr;
@@ -43,6 +44,7 @@ pub struct Client {
     recv_buffer_size: usize,
     reader: OwnedReadHalf,
     lobby: Option<Arc<Mutex<lobby::Lobby>>>,
+    remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -62,6 +64,7 @@ impl Client {
             recv_buffer_size: 0,
             reader: reader,
             lobby: None,
+            remove_name_on_disconnect_data: None,
         };
         // TODO: don't log all IPs
         result.logger().log(format!("New connection from {}", ip));
@@ -70,6 +73,12 @@ impl Client {
 
     pub fn logger(&self) -> ClientLogger {
         ClientLogger { client_id: self.id }
+    }
+
+    pub fn mark_name_as_used(&mut self, name: String, used_names: Arc<Mutex<HashSet<String>>>) {
+        used_names.lock().unwrap().insert(name.clone());
+        assert!(self.remove_name_on_disconnect_data.is_none());
+        self.remove_name_on_disconnect_data = Some((name, used_names));
     }
 
     pub async fn receive_key_press(&mut self) -> Result<ansi::KeyPress, io::Error> {
@@ -122,6 +131,9 @@ impl Drop for Client {
     fn drop(&mut self) {
         if let Some(lobby) = &self.lobby {
             lobby.lock().unwrap().remove_client(self.id);
+        }
+        if let Some((name, name_set)) = &self.remove_name_on_disconnect_data {
+            name_set.lock().unwrap().remove(name);
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::io::Write;
 use std::net::IpAddr;
@@ -37,12 +38,15 @@ fn add_ascii_art(buffer: &mut render::Buffer) {
     }
 }
 
-async fn prompt(
+async fn prompt<F>(
     client: &mut client::Client,
     prompt: String,
-    validator: fn(&String) -> Option<String>,
+    mut validator: F,
     add_extra_text: Option<fn(&mut render::Buffer)>,
-) -> Result<String, io::Error> {
+) -> Result<String, io::Error>
+where
+    F: FnMut(&String) -> Option<String>,
+{
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
 
@@ -103,18 +107,6 @@ const VALID_NAME_CHARS: &str = concat!(
     "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ",
 );
 
-fn name_validator(name: &String) -> Option<String> {
-    if name.len() == 0 {
-        return Some("Please write a name before pressing Enter.".to_string());
-    }
-    for ch in name.chars() {
-        if !VALID_NAME_CHARS.contains(ch) {
-            return Some(format!("The name can't contain a '{}' character.", ch));
-        }
-    }
-    None
-}
-
 fn add_name_asking_notes(buffer: &mut render::Buffer) {
     buffer.add_centered_text(17, "If you play well, your name will be".to_string());
     buffer.add_centered_text(18, "visible to everyone in the high scores.".to_string());
@@ -130,11 +122,27 @@ fn add_name_asking_notes(buffer: &mut render::Buffer) {
     );
 }
 
-pub async fn ask_name(client: &mut client::Client) -> Result<String, io::Error> {
+pub async fn ask_name(
+    client: &mut client::Client,
+    used_names: Arc<Mutex<HashSet<String>>>,
+) -> Result<String, io::Error> {
     return prompt(
         client,
         "Name: ".to_string(),
-        name_validator,
+        |name| {
+            if name.len() == 0 {
+                return Some("Please write a name before pressing Enter.".to_string());
+            }
+            for ch in name.chars() {
+                if !VALID_NAME_CHARS.contains(ch) {
+                    return Some(format!("The name can't contain a '{}' character.", ch));
+                }
+            }
+            if used_names.lock().unwrap().contains(name) {
+                return Some("This name is in use. Try a different name.".to_string());
+            }
+            None
+        },
         Some(add_name_asking_notes),
     )
     .await;
