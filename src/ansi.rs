@@ -88,6 +88,6 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
                     .unwrap();
                 Some((KeyPress::Character(ch), ch.to_string().len()))
             }
-        }
+        },
     }
 }

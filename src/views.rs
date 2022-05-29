@@ -47,31 +47,34 @@ pub async fn prompt(
 
     loop {
         {
-            let mut rd = client.render_data.lock().unwrap();
-            rd.buffer.clear();
-            rd.buffer.resize(80, 24);
-            add_ascii_art(&mut rd.buffer);
-            let mut x = rd
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.buffer.clear();
+            render_data.buffer.resize(80, 24);
+            add_ascii_art(&mut render_data.buffer);
+            let mut x = render_data
                 .buffer
                 .add_text(20, 10, prompt.clone(), ansi::DEFAULT_COLORS);
-            x = rd
+            x = render_data
                 .buffer
                 .add_text(x, 10, current_text.clone(), ansi::DEFAULT_COLORS);
-            rd.cursor_pos = Some((x, 10));
-            rd.changed.notify_one();
+            render_data.cursor_pos = Some((x, 10));
+            render_data.changed.notify_one();
         }
 
         match client.receive_key_press().await? {
-            ansi::KeyPress::Enter => {
-                return Ok(current_text);
-            }
             ansi::KeyPress::Character(ch) => {
-                current_text.push(ch);
+                // 15 chars is enough for names and lobby IDs
+                if current_text.chars().count() < 15 {
+                    current_text.push(ch);
+                }
             }
             ansi::KeyPress::BackSpace => {
                 if current_text.len() > 0 {
                     current_text.pop();
                 }
+            }
+            ansi::KeyPress::Enter => {
+                return Ok(current_text);
             }
             _ => {}
         }
