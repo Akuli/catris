@@ -93,7 +93,7 @@ async fn prompt(
     }
 }
 
-// latin-1 chars, aka bytes(range(256)).decode("latin-1"), with some removed
+// I started with all 256 latin-1 chars and removed some of them.
 // It's important to ban characters that are more than 1 unit wide on terminal.
 const VALID_NAME_CHARS: &str = concat!(
     " !\"#$%&'()*+-./:;<=>?@\\^_`{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷",
