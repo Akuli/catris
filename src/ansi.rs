@@ -1,6 +1,7 @@
 use std::cmp::min;
 
 pub const CLEAR_SCREEN: &str = "\x1b[2J";
+pub const CLEAR_TO_END_OF_LINE: &str = "\x1b[0K";
 pub const RESET_COLORS: &str = "\x1b[0m";
 pub const SHOW_CURSOR: &str = "\x1b[?25h";
 pub const HIDE_CURSOR: &str = "\x1b[?25l";
@@ -16,10 +17,10 @@ pub fn move_cursor(x: usize, y: usize) -> String {
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Colors {
-    // 0 means use default color
     pub fg: u8,
     pub bg: u8,
 }
+pub const DEFAULT_COLORS: Colors = Colors { fg: 0, bg: 0 };
 
 impl Colors {
     pub fn escape_sequence(self) -> String {
@@ -30,7 +31,7 @@ impl Colors {
         if self.bg != 0 {
             result.push_str(&format!("\x1b[1;{}m", self.bg));
         }
-        return result;
+        result
     }
 }
 
@@ -41,6 +42,7 @@ pub enum KeyPress {
     Right,
     Left,
     BackSpace,
+    Enter,
     Quit,
     RefreshRequest,
     Character(char),
@@ -63,6 +65,7 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
         b"\x1b[B" => Some((KeyPress::Down, 3)),
         b"\x1b[C" => Some((KeyPress::Right, 3)),
         b"\x1b[D" => Some((KeyPress::Left, 3)),
+        b"\r" => Some((KeyPress::Enter, 1)),
         NORMAL_BACKSPACE | WINDOWS_BACKSPACE => Some((KeyPress::BackSpace, 1)),
         CTRL_C | CTRL_D | CTRL_Q => Some((KeyPress::Quit, 1)),
         CTRL_R => Some((KeyPress::RefreshRequest, 1)),
@@ -85,6 +88,6 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
                     .unwrap();
                 Some((KeyPress::Character(ch), ch.to_string().len()))
             }
-        },
+        }
     }
 }

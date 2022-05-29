@@ -66,12 +66,13 @@ impl Buffer {
         self.colors[y][x] = colors;
     }
 
-    pub fn add_text(&mut self, x: usize, y: usize, text: String, colors: ansi::Colors) {
+    pub fn add_text(&mut self, x: usize, y: usize, text: String, colors: ansi::Colors) -> usize {
         let mut x = x;
         for ch in text.chars() {
             self.set_char(x, y, ch, colors.clone());
             x += 1;
         }
+        return x;
     }
 
     pub fn clear(&mut self) {
@@ -92,12 +93,17 @@ impl Buffer {
         }
     }
 
-    pub fn get_updates_as_ansi_codes(&self, old: &Buffer) -> String {
+    // If cursor pos is given, re-renders everything after the cursor on same line
+    pub fn get_updates_as_ansi_codes(
+        &self,
+        old: &Buffer,
+        cursor_pos: Option<(usize, usize)>,
+    ) -> String {
         let mut result = "".to_string();
-        let mut current_color = ansi::Colors { fg: 0, bg: 0 };
 
         if self.width != old.width || self.height != old.height {
             // re-render everything
+            let mut current_color = ansi::DEFAULT_COLORS;
             result.push_str(&ansi::resize_terminal(self.width, self.height));
             result.push_str(&ansi::CLEAR_SCREEN);
             for y in 0..self.height {
@@ -110,11 +116,33 @@ impl Buffer {
                     result.push(self.chars[y][x]);
                 }
             }
+            if current_color != ansi::DEFAULT_COLORS {
+                result.push_str(&ansi::RESET_COLORS);
+            }
         } else {
             // re-render changed part
             for y in 0..self.height {
+                // Output nothing for unchanged lines, but consider cursor line potentially changed.
+                // This way we wipe away the character typed by user.
+                if self.chars[y] == old.chars[y]
+                    && self.colors[y] == old.colors[y]
+                    && cursor_pos.map(|(_, cursor_y)| cursor_y) != Some(y)
+                {
+                    continue;
+                }
+
+                // Use ansi::CLEAR_TO_END_OF_LINE instead of spaces when possible
+                let mut end = self.width;
+                while end > 0
+                    && self.chars[y][end - 1] == ' '
+                    && self.colors[y][end - 1] == ansi::DEFAULT_COLORS
+                {
+                    end -= 1;
+                }
+
+                let mut current_color = ansi::DEFAULT_COLORS;
                 let mut cursor_at_xy = false;
-                for x in 0..self.width {
+                for x in 0..end {
                     if self.colors[y][x] == old.colors[y][x] && self.chars[y][x] == old.chars[y][x]
                     {
                         // skip redrawing this charater
@@ -131,12 +159,16 @@ impl Buffer {
                         result.push(self.chars[y][x]);
                     }
                 }
+                if current_color != ansi::DEFAULT_COLORS {
+                    result.push_str(&ansi::RESET_COLORS);
+                }
+                if !cursor_at_xy {
+                    result.push_str(&ansi::move_cursor(end, y));
+                }
+                result.push_str(ansi::CLEAR_TO_END_OF_LINE);
             }
         }
 
-        if current_color != (ansi::Colors { fg: 0, bg: 0 }) {
-            result.push_str(&ansi::RESET_COLORS);
-        }
         result
     }
 }

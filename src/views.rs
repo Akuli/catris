@@ -32,7 +32,7 @@ const ASCII_ART: &str = r"
 fn add_ascii_art(buffer: &mut render::Buffer) {
     let mut y = 0;
     for line in ASCII_ART.lines() {
-        buffer.add_text(0, y, line.to_string(), ansi::Colors { fg: 0, bg: 0 });
+        buffer.add_text(0, y, line.to_string(), ansi::DEFAULT_COLORS);
         y += 1;
     }
 }
@@ -51,10 +51,29 @@ pub async fn prompt(
             rd.buffer.clear();
             rd.buffer.resize(80, 24);
             add_ascii_art(&mut rd.buffer);
-            rd.cursor_pos = Some((1, 2));
+            let mut x = rd
+                .buffer
+                .add_text(20, 10, prompt.clone(), ansi::DEFAULT_COLORS);
+            x = rd
+                .buffer
+                .add_text(x, 10, current_text.clone(), ansi::DEFAULT_COLORS);
+            rd.cursor_pos = Some((x, 10));
             rd.changed.notify_one();
         }
 
-        println!("prompt() got {:?}", client.receive_key_press().await?);
+        match client.receive_key_press().await? {
+            ansi::KeyPress::Enter => {
+                return Ok(current_text);
+            }
+            ansi::KeyPress::Character(ch) => {
+                current_text.push(ch);
+            }
+            ansi::KeyPress::BackSpace => {
+                if current_text.len() > 0 {
+                    current_text.pop();
+                }
+            }
+            _ => {}
+        }
     }
 }

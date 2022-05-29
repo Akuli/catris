@@ -52,7 +52,8 @@ async fn handle_sending(
 
         // In the beginning of a connection, the buffer isn't ready yet
         if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
-            let mut to_send = buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx]);
+            let mut to_send =
+                buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
             match cursor_pos {
                 None => {
                     to_send.push_str(&ansi::move_cursor(0, buffers[next_idx].height - 1));
@@ -84,8 +85,8 @@ pub async fn handle_connection(socket: TcpStream, ip: IpAddr, lobbies: lobby::Lo
     let render_data = client.render_data.clone();
 
     let error: Result<(), io::Error> = tokio::select! {
-        e = handle_receiving(client, lobbies) => {e},
-        e = handle_sending(writer, render_data) => {e},
+        e = handle_receiving(client, lobbies) => e,
+        e = handle_sending(writer, render_data) => e,
     };
     logger.log(format!("Disconnected: {:?}", error));
 }
