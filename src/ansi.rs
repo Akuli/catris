@@ -21,6 +21,7 @@ pub struct Colors {
     pub bg: u8,
 }
 pub const DEFAULT_COLORS: Colors = Colors { fg: 0, bg: 0 };
+pub const RED_FG: Colors = Colors { fg: 31, bg: 0 };
 
 impl Colors {
     pub fn escape_sequence(self) -> String {

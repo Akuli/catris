@@ -75,6 +75,12 @@ impl Buffer {
         return x;
     }
 
+    pub fn add_centered_text(&mut self, y: usize, text: String, colors: ansi::Colors) {
+        let n = text.chars().count();
+        let mut x = self.width / 2 - n / 2;
+        self.add_text(x, y, text, colors);
+    }
+
     pub fn clear(&mut self) {
         for y in 0..self.height {
             for x in 0..self.width {

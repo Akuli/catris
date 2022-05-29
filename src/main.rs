@@ -28,7 +28,7 @@ async fn handle_receiving(
     mut client: client::Client,
     lobbies: lobby::Lobbies,
 ) -> Result<(), io::Error> {
-    let s = views::prompt(&mut client, "Name: ".to_string(), vec![]).await?;
+    let s = views::ask_name(&mut client).await?;
     println!("run() -> {}", s);
     Ok(())
 }
