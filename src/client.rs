@@ -54,7 +54,7 @@ static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 impl Client {
     pub fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
-        let result = Client {
+        Client {
             ip: ip,
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
@@ -69,10 +69,7 @@ impl Client {
             reader: reader,
             lobby: None,
             remove_name_on_disconnect_data: None,
-        };
-        // TODO: don't log all IPs
-        result.logger().log(format!("New connection from {}", ip));
-        result
+        }
     }
 
     pub fn logger(&self) -> ClientLogger {

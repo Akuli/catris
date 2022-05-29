@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::io;
 use std::io::Write;
 use std::net::IpAddr;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
@@ -68,15 +70,45 @@ async fn handle_sending(
     }
 }
 
+fn log_ip_if_connects_a_lot(
+    logger: &client::ClientLogger,
+    ip: IpAddr,
+    recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
+) {
+    let n;
+    {
+        let mut recent_ips = recent_ips.lock().unwrap();
+        recent_ips.push_back((Instant::now(), ip));
+        while recent_ips.len() != 0 && recent_ips[0].0.elapsed().as_secs_f32() > 60.0 {
+            recent_ips.pop_front();
+        }
+        n = recent_ips
+            .iter()
+            .filter(|(_, recent_ip)| *recent_ip == ip)
+            .count();
+    }
+
+    if n >= 5 {
+        logger.log(format!(
+            "This is the {}th connection from IP address {} within the last minute",
+            n, ip
+        ));
+    }
+}
+
 pub async fn handle_connection(
     socket: TcpStream,
     ip: IpAddr,
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
+    recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
 ) {
+    // TODO: max concurrent connections from same ip?
     let (reader, writer) = socket.into_split();
     let client = client::Client::new(ip, reader);
     let logger = client.logger();
+    logger.log("New connection".to_string());
+    log_ip_if_connects_a_lot(&logger, ip, recent_ips);
     let render_data = client.render_data.clone();
 
     let result: Result<(), io::Error> = tokio::select! {
@@ -92,6 +124,7 @@ async fn main() {
 
     let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
+    let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
 
     loop {
         let (socket, sockaddr) = listener.accept().await.unwrap();
@@ -101,6 +134,7 @@ async fn main() {
             sockaddr.ip(),
             lobbies.clone(),
             used_names.clone(),
+            recent_ips.clone(),
         ));
     }
 }

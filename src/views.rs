@@ -111,7 +111,6 @@ fn add_name_asking_notes(buffer: &mut render::Buffer) {
     buffer.add_centered_text(17, "If you play well, your name will be".to_string());
     buffer.add_centered_text(18, "visible to everyone in the high scores.".to_string());
 
-    // FIXME: ip logging is currently a false claim, always printed
     buffer.add_centered_text(
         20,
         "Your IP will be logged on the server only if you".to_string(),
