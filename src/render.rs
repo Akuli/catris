@@ -1,8 +1,8 @@
 use crate::ansi;
 
 pub struct Buffer {
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
     chars: Vec<Vec<char>>,
     colors: Vec<Vec<ansi::Colors>>,
 }
@@ -18,6 +18,8 @@ impl Buffer {
     }
 
     pub fn resize(&mut self, width: usize, height: usize) {
+        assert!(width >= 80 && height >= 24);
+
         if self.width != width {
             for row in &mut self.chars {
                 row.resize(width, ' ');
@@ -40,17 +42,15 @@ impl Buffer {
         self.height = height;
     }
 
-    pub fn set_text(
-        &mut self,
-        x: usize,
-        y: usize,
-        chars: &mut dyn Iterator<Item = char>,
-        colors: ansi::Colors,
-    ) {
+    pub fn set_char(&mut self, x: usize, y: usize, ch: char, colors: ansi::Colors) {
+        self.chars[y][x] = ch;
+        self.colors[y][x] = colors;
+    }
+
+    pub fn add_text(&mut self, x: usize, y: usize, text: String, colors: ansi::Colors) {
         let mut x = x;
-        for ch in chars {
-            self.chars[y][x] = ch;
-            self.colors[y][x] = colors.clone();
+        for ch in text.chars() {
+            self.set_char(x, y, ch, colors.clone());
             x += 1;
         }
     }
@@ -58,7 +58,7 @@ impl Buffer {
     pub fn clear(&mut self) {
         for y in 0..self.height {
             for x in 0..self.width {
-                self.set_text(x, y, &mut " ".chars(), ansi::Colors { fg: 0, bg: 0 });
+                self.add_text(x, y, " ".to_string(), ansi::Colors { fg: 0, bg: 0 });
             }
         }
     }

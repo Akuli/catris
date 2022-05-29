@@ -30,7 +30,7 @@ struct ClientInfo {
     name: String,
     color: u8,
     need_render_sender: Arc<Notify>,
-    view: Arc<Mutex<dyn views::View>>,
+    view: views::ViewRef,
 }
 
 pub struct Lobby {
@@ -80,7 +80,7 @@ impl Lobby {
         logger: client::ClientLogger,
         name: String,
         need_render_sender: Arc<Notify>,
-        view: Arc<Mutex<dyn views::View>>,
+        view: views::ViewRef,
     ) {
         let unused_color = *ALL_COLORS
             .iter()
@@ -103,7 +103,9 @@ impl Lobby {
             .iter()
             .position(|c| c.client_id == client_id)
             .unwrap();
-        self.clients[i].logger.log(format!("Leaving lobby: {}", self.id));
+        self.clients[i]
+            .logger
+            .log(format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
     }
 }

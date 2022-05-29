@@ -95,18 +95,14 @@ impl Game {
         let square_contents = self.get_square_contents();
 
         for y in 0..HEIGHT {
-            buffer.set_text(0, y, &mut "|".chars(), ansi::Colors { fg: 0, bg: 0 });
-            buffer.set_text(
-                2 * WIDTH + 1,
-                y,
-                &mut "|".chars(),
-                ansi::Colors { fg: 0, bg: 0 },
-            );
+            buffer.set_char(0, y, '|', ansi::Colors { fg: 0, bg: 0 });
+            buffer.set_char(2 * WIDTH + 1, y, '|', ansi::Colors { fg: 0, bg: 0 });
 
             for x in 0..WIDTH {
                 let upoint = (x as i8, y as i8);
                 if let Some(content) = square_contents.get(&upoint) {
-                    buffer.set_text(2 * x + 1, y, &mut content.text.into_iter(), content.colors);
+                    buffer.set_char(2 * x + 1, y, content.text[0], content.colors);
+                    buffer.set_char(2 * x + 2, y, content.text[1], content.colors);
                 }
             }
         }

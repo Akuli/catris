@@ -2,6 +2,8 @@ use std::cmp::min;
 
 pub const CLEAR_SCREEN: &str = "\x1b[2J";
 pub const RESET_COLORS: &str = "\x1b[0m";
+pub const SHOW_CURSOR: &str = "\x1b[?25h";
+pub const HIDE_CURSOR: &str = "\x1b[?25l";
 
 pub fn resize_terminal(width: usize, height: usize) -> String {
     // https://apple.stackexchange.com/a/47841

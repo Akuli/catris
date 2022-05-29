@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::MutexGuard;
 use std::sync::Weak;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
@@ -54,7 +55,7 @@ impl Client {
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             need_render_notify: Arc::new(Notify::new()),
-            view: Arc::new(Mutex::new(views::DummyView {})),
+            view: Arc::new(Mutex::new(Arc::new(Mutex::new(views::DummyView {})))),
             recv_buffer: [0 as u8; 100],
             recv_buffer_size: 0,
             reader: reader,
@@ -63,6 +64,10 @@ impl Client {
         // TODO: don't log all IPs
         result.logger().log(format!("New connection from {}", ip));
         result
+    }
+
+    pub fn set_view(&mut self, view: impl views::View + 'static) {
+        *self.view.lock().unwrap() = Arc::new(Mutex::new(view));
     }
 
     pub fn logger(&self) -> ClientLogger {
@@ -104,19 +109,19 @@ impl Client {
     }
 
     pub fn make_lobby(&mut self, lobbies: lobby::Lobbies) {
-                let mut lobbies = lobbies.lock().unwrap();
-                let mut lobby = lobby::Lobby::new(&*lobbies);
-                let id = lobby.id.clone();
-                self.logger().log(format!("Created lobby: {}", id));
-                lobby.add_client(
-                    self.logger(),
-                    "John".to_string(),
-                    self.need_render_notify.clone(),
-                    self.view.clone(),
-                );
-                let lobby = Arc::new(Mutex::new(lobby));
-                lobbies.insert(id, lobby.clone());
-                self.lobby = Some(lobby);
+        let mut lobbies = lobbies.lock().unwrap();
+        let mut lobby = lobby::Lobby::new(&*lobbies);
+        let id = lobby.id.clone();
+        self.logger().log(format!("Created lobby: {}", id));
+        lobby.add_client(
+            self.logger(),
+            "John".to_string(),
+            self.need_render_notify.clone(),
+            self.view.clone(),
+        );
+        let lobby = Arc::new(Mutex::new(lobby));
+        lobbies.insert(id, lobby.clone());
+        self.lobby = Some(lobby);
     }
 }
 
