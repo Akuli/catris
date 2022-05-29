@@ -62,9 +62,8 @@ async fn prompt(
                 error.clone().unwrap_or_default(),
                 ansi::RED_FOREGROUND,
             );
-            match add_extra_text {
-                Some(f) => f(&mut render_data.buffer),
-                None => {}
+            if let Some(f) = add_extra_text {
+                f(&mut render_data.buffer);
             }
 
             render_data.changed.notify_one();
