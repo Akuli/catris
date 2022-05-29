@@ -50,46 +50,61 @@ pub enum KeyPress {
     Character(char),
 }
 
-const NORMAL_BACKSPACE: &[u8] = b"\x7f";
-const WINDOWS_BACKSPACE: &[u8] = b"\x08";
+const NORMAL_BACKSPACE: u8 = b'\x7f';
+const WINDOWS_BACKSPACE: u8 = b'\x08';
 
-const CTRL_C: &[u8] = b"\x03";
-const CTRL_D: &[u8] = b"\x04";
-const CTRL_Q: &[u8] = b"\x11";
-const CTRL_R: &[u8] = b"\x12";
+const CTRL_C: u8 = b'\x03';
+const CTRL_D: u8 = b'\x04';
+const CTRL_Q: u8 = b'\x11';
+const CTRL_R: u8 = b'\x12';
 
-// Returning None means need to receive more data.
 // The usize is how many bytes were consumed.
 pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
-    match data {
-        b"" | b"\x1b" | b"\x1b[" => None,
-        b"\x1b[A" => Some((KeyPress::Up, 3)),
-        b"\x1b[B" => Some((KeyPress::Down, 3)),
-        b"\x1b[C" => Some((KeyPress::Right, 3)),
-        b"\x1b[D" => Some((KeyPress::Left, 3)),
-        b"\r" => Some((KeyPress::Enter, 1)),
-        NORMAL_BACKSPACE | WINDOWS_BACKSPACE => Some((KeyPress::BackSpace, 1)),
-        CTRL_C | CTRL_D | CTRL_Q => Some((KeyPress::Quit, 1)),
-        CTRL_R => Some((KeyPress::RefreshRequest, 1)),
-        // utf-8 chars are never >4 bytes long
-        _ => match std::str::from_utf8(&data[0..min(data.len(), 4)]) {
-            Ok(s) => {
-                let ch = s.chars().next().unwrap();
-                Some((KeyPress::Character(ch), ch.to_string().len()))
-            }
-            // error_len() == None means unexpected end of input, i.e. need more data
-            Err(e) if e.valid_up_to() == 0 && e.error_len() == None => None,
-            Err(e) if e.valid_up_to() == 0 => {
-                Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1))
-            }
-            Err(e) => {
-                let ch = std::str::from_utf8(&data[..e.valid_up_to()])
-                    .unwrap()
-                    .chars()
-                    .next()
-                    .unwrap();
-                Some((KeyPress::Character(ch), ch.to_string().len()))
-            }
-        },
+    if data == b"" || data == b"\x1b" || data == b"\x1b[" {
+        // Incomplete data: need to receive more
+        return None;
+    }
+
+    // Arrow keys are 3 bytes each
+    if data.len() >= 3 {
+        match &data[..3] {
+            b"\x1b[A" => return Some((KeyPress::Up, 3)),
+            b"\x1b[B" => return Some((KeyPress::Down, 3)),
+            b"\x1b[C" => return Some((KeyPress::Right, 3)),
+            b"\x1b[D" => return Some((KeyPress::Left, 3)),
+            _ => {}
+        }
+    }
+
+    // Other special things are 1 byte each
+    match data[0] {
+        b'\r' => return Some((KeyPress::Enter, 1)),
+        NORMAL_BACKSPACE | WINDOWS_BACKSPACE => return Some((KeyPress::BackSpace, 1)),
+        CTRL_C | CTRL_D | CTRL_Q => return Some((KeyPress::Quit, 1)),
+        CTRL_R => return Some((KeyPress::RefreshRequest, 1)),
+        _ => {}
+    }
+
+    // Extract UTF-8 character, they are never >4 bytes long
+    match std::str::from_utf8(&data[0..min(data.len(), 4)]) {
+        Ok(s) => {
+            let ch = s.chars().next().unwrap();
+            return Some((KeyPress::Character(ch), ch.to_string().len()));
+        }
+        Err(e) if e.valid_up_to() == 0 && e.error_len() == None => {
+            // unexpected end of input, need more data to get valid utf-8
+            return None;
+        }
+        Err(e) if e.valid_up_to() == 0 => {
+            return Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1))
+        }
+        Err(e) => {
+            let ch = std::str::from_utf8(&data[..e.valid_up_to()])
+                .unwrap()
+                .chars()
+                .next()
+                .unwrap();
+            return Some((KeyPress::Character(ch), ch.to_string().len()));
+        }
     }
 }
