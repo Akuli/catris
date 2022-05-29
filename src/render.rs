@@ -1,3 +1,22 @@
+use std::io;
+use std::io::Write;
+use std::net::IpAddr;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::Weak;
+use std::time::Duration;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::tcp::OwnedReadHalf;
+use tokio::net::tcp::OwnedWriteHalf;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+use tokio::sync::Notify;
+use tokio::time::sleep;
+use weak_table::WeakValueHashMap;
+
 use crate::ansi;
 
 pub struct Buffer {
@@ -18,7 +37,7 @@ impl Buffer {
     }
 
     pub fn resize(&mut self, width: usize, height: usize) {
-        assert!(width >= 80 && height >= 24);
+        assert!((width == 0 && height == 0) || (width >= 80 && height >= 24));
 
         if self.width != width {
             for row in &mut self.chars {
@@ -120,4 +139,10 @@ impl Buffer {
         }
         result
     }
+}
+
+pub struct RenderData {
+    pub buffer: Buffer,
+    pub cursor_pos: Option<(usize, usize)>,
+    pub changed: Arc<Notify>,
 }

@@ -29,8 +29,7 @@ struct ClientInfo {
     logger: client::ClientLogger,
     name: String,
     color: u8,
-    need_render_sender: Arc<Notify>,
-    view: views::ViewRef,
+    render_data: Arc<Mutex<render::RenderData>>,
 }
 
 pub struct Lobby {
@@ -79,12 +78,12 @@ impl Lobby {
         &mut self,
         logger: client::ClientLogger,
         name: String,
-        need_render_sender: Arc<Notify>,
-        view: views::ViewRef,
+        render_data: Arc<Mutex<render::RenderData>>,
     ) {
+        let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
-            .filter(|color| !self.clients.iter().any(|client| client.color == **color))
+            .filter(|color| !used_colors.contains(*color))
             .next()
             .unwrap();
         self.clients.push(ClientInfo {
@@ -92,8 +91,7 @@ impl Lobby {
             logger: logger,
             name: name,
             color: unused_color,
-            need_render_sender: need_render_sender,
-            view: view,
+            render_data: render_data,
         });
     }
 
