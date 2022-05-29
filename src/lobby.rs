@@ -77,7 +77,7 @@ impl Lobby {
     pub fn add_client(
         &mut self,
         logger: client::ClientLogger,
-        name: String,
+        name: &str,
         render_data: Arc<Mutex<render::RenderData>>,
     ) {
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
@@ -89,7 +89,7 @@ impl Lobby {
         self.clients.push(ClientInfo {
             client_id: logger.client_id,
             logger: logger,
-            name: name,
+            name: name.to_string(),
             color: unused_color,
             render_data: render_data,
         });
@@ -103,7 +103,7 @@ impl Lobby {
             .unwrap();
         self.clients[i]
             .logger
-            .log(format!("Leaving lobby: {}", self.id));
+            .log(&format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
     }
 }

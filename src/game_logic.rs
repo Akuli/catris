@@ -45,9 +45,9 @@ const WIDTH: usize = 10;
 const HEIGHT: usize = 20;
 
 impl Game {
-    pub fn new(player_name: String) -> Game {
+    pub fn new(player_name: &str) -> Game {
         let player = Player {
-            name: player_name,
+            name: player_name.to_string(),
             block: MovingBlock::new(0),
         };
         Game {

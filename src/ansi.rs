@@ -88,14 +88,15 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
     match std::str::from_utf8(data) {
         Ok(s) => {
             let ch = s.chars().next().unwrap();
-            return Some((KeyPress::Character(ch), ch.to_string().len()));
+            return Some((KeyPress::Character(ch), ch.len_utf8()));
         }
         Err(e) if e.valid_up_to() == 0 && e.error_len() == None => {
             // unexpected end of input, need more data to get valid utf-8
             return None;
         }
         Err(e) if e.valid_up_to() == 0 => {
-            return Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1))
+            // data[0] can't possibly be the first byte of utf-8 character, skip it
+            return Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1));
         }
         Err(e) => {
             let ch = std::str::from_utf8(&data[..e.valid_up_to()])
@@ -103,7 +104,7 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
                 .chars()
                 .next()
                 .unwrap();
-            return Some((KeyPress::Character(ch), ch.to_string().len()));
+            return Some((KeyPress::Character(ch), ch.len_utf8()));
         }
     }
 }

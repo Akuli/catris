@@ -33,7 +33,7 @@ pub struct ClientLogger {
     pub client_id: u64,
 }
 impl ClientLogger {
-    pub fn log(&self, message: String) {
+    pub fn log(&self, message: &str) {
         println!("[client {}] {}", self.client_id, message);
     }
 }
@@ -76,10 +76,10 @@ impl Client {
         ClientLogger { client_id: self.id }
     }
 
-    pub fn mark_name_as_used(&mut self, name: String, used_names: Arc<Mutex<HashSet<String>>>) {
-        used_names.lock().unwrap().insert(name.clone());
+    pub fn mark_name_as_used(&mut self, name: &str, used_names: Arc<Mutex<HashSet<String>>>) {
+        used_names.lock().unwrap().insert(name.to_string());
         assert!(self.remove_name_on_disconnect_data.is_none());
-        self.remove_name_on_disconnect_data = Some((name, used_names));
+        self.remove_name_on_disconnect_data = Some((name.to_string(), used_names));
     }
 
     fn check_key_press_frequency(&mut self) -> Result<(), io::Error> {
@@ -137,8 +137,8 @@ impl Client {
         let mut lobbies = lobbies.lock().unwrap();
         let mut lobby = lobby::Lobby::new(&*lobbies);
         let id = lobby.id.clone();
-        self.logger().log(format!("Created lobby: {}", id));
-        lobby.add_client(self.logger(), "John".to_string(), self.render_data.clone());
+        self.logger().log(&format!("Created lobby: {}", id));
+        lobby.add_client(self.logger(), "John", self.render_data.clone());
         let lobby = Arc::new(Mutex::new(lobby));
         lobbies.insert(id, lobby.clone());
         self.lobby = Some(lobby);

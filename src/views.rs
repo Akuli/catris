@@ -33,19 +33,19 @@ const ASCII_ART: &str = r"
 fn add_ascii_art(buffer: &mut render::Buffer) {
     let mut y = 0;
     for line in ASCII_ART.lines() {
-        buffer.add_text(0, y, line.to_string());
+        buffer.add_text(0, y, line);
         y += 1;
     }
 }
 
 async fn prompt<F>(
     client: &mut client::Client,
-    prompt: String,
+    prompt: &str,
     mut validator: F,
     add_extra_text: Option<fn(&mut render::Buffer)>,
 ) -> Result<String, io::Error>
 where
-    F: FnMut(&String) -> Option<String>,
+    F: FnMut(&str) -> Option<String>,
 {
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
@@ -57,13 +57,13 @@ where
             render_data.buffer.resize(80, 24);
 
             add_ascii_art(&mut render_data.buffer);
-            let mut x = render_data.buffer.add_text(20, 10, prompt.clone());
-            x = render_data.buffer.add_text(x, 10, current_text.clone());
+            let mut x = render_data.buffer.add_text(20, 10, prompt);
+            x = render_data.buffer.add_text(x, 10, &current_text);
             render_data.cursor_pos = Some((x, 10));
             render_data.buffer.add_text_with_color(
                 2,
                 13,
-                error.clone().unwrap_or_default(),
+                &error.clone().unwrap_or_default(),
                 ansi::RED_FOREGROUND,
             );
             if let Some(f) = add_extra_text {
@@ -108,17 +108,11 @@ const VALID_NAME_CHARS: &str = concat!(
 );
 
 fn add_name_asking_notes(buffer: &mut render::Buffer) {
-    buffer.add_centered_text(17, "If you play well, your name will be".to_string());
-    buffer.add_centered_text(18, "visible to everyone in the high scores.".to_string());
+    buffer.add_centered_text(17, "If you play well, your name will be");
+    buffer.add_centered_text(18, "visible to everyone in the high scores.");
 
-    buffer.add_centered_text(
-        20,
-        "Your IP will be logged on the server only if you".to_string(),
-    );
-    buffer.add_centered_text(
-        21,
-        "connect 5 or more times within the same minute.".to_string(),
-    );
+    buffer.add_centered_text(20, "Your IP will be logged on the server only if you");
+    buffer.add_centered_text(21, "connect 5 or more times within the same minute.");
 }
 
 pub async fn ask_name(
@@ -127,7 +121,7 @@ pub async fn ask_name(
 ) -> Result<String, io::Error> {
     return prompt(
         client,
-        "Name: ".to_string(),
+        "Name: ",
         |name| {
             if name.len() == 0 {
                 return Some("Please write a name before pressing Enter.".to_string());

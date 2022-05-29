@@ -33,8 +33,8 @@ async fn handle_receiving(
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
     let name = views::ask_name(&mut client, used_names.clone()).await?;
-    client.logger().log(format!("Name asking done: {}", name));
-    client.mark_name_as_used(name, used_names);
+    client.logger().log(&format!("Name asking done: {}", name));
+    client.mark_name_as_used(&name, used_names);
 
     loop {
         client.receive_key_press().await?;
@@ -89,7 +89,7 @@ fn log_ip_if_connects_a_lot(
     }
 
     if n >= 5 {
-        logger.log(format!(
+        logger.log(&format!(
             "This is the {}th connection from IP address {} within the last minute",
             n, ip
         ));
@@ -107,7 +107,7 @@ pub async fn handle_connection(
     let (reader, writer) = socket.into_split();
     let client = client::Client::new(ip, reader);
     let logger = client.logger();
-    logger.log("New connection".to_string());
+    logger.log("New connection");
     log_ip_if_connects_a_lot(&logger, ip, recent_ips);
     let render_data = client.render_data.clone();
 
@@ -115,7 +115,7 @@ pub async fn handle_connection(
         res = handle_receiving(client, lobbies, used_names) => res,
         res = handle_sending(writer, render_data) => res,
     };
-    logger.log(format!("Disconnected: {}", result.unwrap_err()));
+    logger.log(&format!("Disconnected: {}", result.unwrap_err()));
 }
 
 #[tokio::main]
