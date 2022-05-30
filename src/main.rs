@@ -45,8 +45,10 @@ async fn handle_receiving(
         views::ask_lobby_id_and_join_lobby(&mut client, lobbies).await?;
     }
 
+    let mut selected_index = 0 as usize;
     loop {
-        client.receive_key_press().await?;
+        let game_mode = views::choose_game_mode(&mut client, &mut selected_index).await?;
+        println!("game_mode = {:?}", game_mode);
     }
 }
 

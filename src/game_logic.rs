@@ -1,12 +1,32 @@
 use std::collections::HashMap;
 
 use crate::ansi;
-use crate::render::Buffer;
+use crate::lobby;
+use crate::render;
 
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum GameMode {
     Traditional,
     Bottle,
     Ring,
+}
+pub const ALL_GAME_MODES: &[GameMode] = &[GameMode::Traditional, GameMode::Bottle, GameMode::Ring];
+
+impl GameMode {
+    pub fn name(self) -> &'static str {
+        match self {
+            GameMode::Traditional => "Traditional game",
+            GameMode::Bottle => "Bottle game",
+            GameMode::Ring => "Ring game",
+        }
+    }
+
+    pub fn max_players(self) -> usize {
+        match self {
+            GameMode::Traditional | GameMode::Bottle => lobby::MAX_CLIENTS_PER_LOBBY,
+            GameMode::Ring => 4,
+        }
+    }
 }
 
 struct SquareContent {
@@ -96,7 +116,7 @@ impl Game {
         result
     }
 
-    pub fn render_to_buf(&self, buffer: &mut Buffer) {
+    pub fn render_to_buf(&self, buffer: &mut render::Buffer) {
         buffer.resize(2 * WIDTH + 2, HEIGHT);
         let square_contents = self.get_square_contents();
 

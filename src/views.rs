@@ -21,6 +21,7 @@ use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::client;
+use crate::game_logic;
 use crate::lobby;
 use crate::render;
 
@@ -301,6 +302,57 @@ pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::E
                     "user selected \"Quit\" in menu",
                 )),
                 _ => panic!(),
+            };
+        }
+    }
+}
+
+// None return value means show gameplay tips
+pub async fn choose_game_mode(
+    client: &mut client::Client,
+    selected_index: &mut usize,
+) -> Result<Option<game_logic::GameMode>, io::Error> {
+    let mut items = vec![];
+    items.resize(game_logic::ALL_GAME_MODES.len(), Some("".to_string()));
+    items.push(None);
+    items.push(Some("Gameplay tips".to_string()));
+    items.push(Some("Quit".to_string()));
+    let mut menu = Menu {
+        items: items,
+        selected_index: *selected_index,
+    };
+
+    loop {
+        for i in 0..game_logic::ALL_GAME_MODES.len() {
+            let mode = game_logic::ALL_GAME_MODES[i];
+            menu.items[i] = Some(format!(
+                "{} (0/{} players)",
+                mode.name(),
+                mode.max_players()
+            ));
+        }
+
+        {
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.buffer.clear();
+            render_data.buffer.resize(80, 24);
+            render_data.cursor_pos = None;
+
+            add_ascii_art(&mut render_data.buffer);
+            menu.render(&mut render_data.buffer, 13);
+            render_data.changed.notify_one();
+        }
+
+        let key = client.receive_key_press().await?;
+        if menu.handle_key_press(key) {
+            *selected_index = menu.selected_index;
+            return match menu.selected_text() {
+                "Gameplay tips" => Ok(None),
+                "Quit" => Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    "user selected \"Quit\" in menu",
+                )),
+                _ => Ok(Some(game_logic::ALL_GAME_MODES[menu.selected_index])),
             };
         }
     }
