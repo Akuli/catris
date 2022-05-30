@@ -117,17 +117,31 @@ impl Client {
                 }
                 None => {
                     // Receive more data
-                    let n = self
-                        .reader
-                        .read(&mut self.recv_buffer[self.recv_buffer_size..])
-                        .await?;
-                    if n == 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::ConnectionAborted,
-                            "connection closed",
-                        ));
+                    let read_target = &mut self.recv_buffer[self.recv_buffer_size..];
+                    let result = tokio::select! {
+                        res = self.reader.read(read_target) => Some(res),
+                        _ = sleep(Duration::from_secs(10*60)) => None,
+                    };
+                    match result {
+                        Some(Ok(0)) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::ConnectionAborted,
+                                "connection closed",
+                            ));
+                        }
+                        Some(Ok(n)) => {
+                            self.recv_buffer_size += n;
+                        }
+                        Some(Err(e)) => {
+                            return Err(e);
+                        }
+                        None => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::ConnectionAborted,
+                                "nothing received for 10 minutes",
+                            ));
+                        }
                     }
-                    self.recv_buffer_size += n;
                 }
             }
         }

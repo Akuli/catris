@@ -38,7 +38,7 @@ pub struct Lobby {
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
-const ALL_COLORS: [u8; 6] = [31, 32, 33, 34, 35, 36];
+const ALL_COLORS: [u8; MAX_CLIENTS_PER_LOBBY] = [31, 32, 33, 34, 35, 36];
 
 /*
 I started with A-Z0-9 and removed chars that look confusingly similar
