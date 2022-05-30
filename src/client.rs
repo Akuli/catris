@@ -20,6 +20,7 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::Notify;
 use tokio::time::sleep;
+use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
 use crate::ansi;
@@ -118,30 +119,15 @@ impl Client {
                 None => {
                     // Receive more data
                     let read_target = &mut self.recv_buffer[self.recv_buffer_size..];
-                    let result = tokio::select! {
-                        res = self.reader.read(read_target) => Some(res),
-                        _ = sleep(Duration::from_secs(10*60)) => None,
-                    };
-                    match result {
-                        Some(Ok(0)) => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::ConnectionAborted,
-                                "connection closed",
-                            ));
-                        }
-                        Some(Ok(n)) => {
-                            self.recv_buffer_size += n;
-                        }
-                        Some(Err(e)) => {
-                            return Err(e);
-                        }
-                        None => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::ConnectionAborted,
-                                "nothing received for 10 minutes",
-                            ));
-                        }
+                    let n = timeout(Duration::from_secs(10 * 60), self.reader.read(read_target))
+                        .await??;
+                    if n == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::ConnectionAborted,
+                            "connection closed",
+                        ));
                     }
+                    self.recv_buffer_size += n;
                 }
             }
         }

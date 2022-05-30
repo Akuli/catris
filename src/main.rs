@@ -18,6 +18,7 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::Notify;
 use tokio::time::sleep;
+use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
 mod ansi;
@@ -124,10 +125,11 @@ pub async fn handle_connection(
     let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
         + &ansi::move_cursor_horizontally(0)
         + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
-    tokio::select! {
-        _ = writer.write_all(cleanup_ansi_codes.as_bytes()) => {},
-        _ = sleep(Duration::from_millis(500)) => {},
-    }
+    _ = timeout(
+        Duration::from_millis(500),
+        writer.write_all(cleanup_ansi_codes.as_bytes()),
+    )
+    .await;
 
     logger.log(&format!("Disconnected: {}", result.unwrap_err()));
 }
