@@ -311,6 +311,56 @@ pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::E
     }
 }
 
+fn render_lobby_status(
+    client: &client::Client,
+    render_data: &mut render::RenderData,
+    lobby: &lobby::Lobby,
+) {
+    let mut x = 3;
+    x = render_data.buffer.add_text(x, 2, "Lobby ID: ");
+    if client.lobby_id_hidden {
+        x = render_data.buffer.add_text(x, 2, "******");
+        x = render_data.buffer.add_text_with_color(
+            x,
+            2,
+            " (press i to show)",
+            ansi::GRAY_FOREGROUND,
+        );
+    } else {
+        x = render_data.buffer.add_text(x, 2, &lobby.id);
+        x = render_data.buffer.add_text_with_color(
+            x,
+            2,
+            " (press i to hide)",
+            ansi::GRAY_FOREGROUND,
+        );
+    }
+
+    for i in 0..lobby.clients.len() {
+        let info = &lobby.clients[i];
+        let y = 5 + i;
+
+        x = 6;
+        x = render_data.buffer.add_text(x, y, &format!("{}. ", i + 1));
+        x = render_data.buffer.add_text_with_color(
+            x,
+            y,
+            &info.name,
+            ansi::Color {
+                fg: info.color,
+                bg: 0,
+            },
+        );
+        if info.client_id == client.id {
+            render_data
+                .buffer
+                .add_text_with_color(x, y, " (you)", ansi::GRAY_FOREGROUND);
+        }
+    }
+
+    _ = x; // silence compiler warning
+}
+
 // None return value means show gameplay tips
 pub async fn choose_game_mode(
     client: &mut client::Client,
@@ -346,57 +396,10 @@ pub async fn choose_game_mode(
         {
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
-
             {
                 let idk_why_i_need_this = client.lobby.clone().unwrap();
                 let lobby = idk_why_i_need_this.lock().unwrap();
-
-                let mut x = 3;
-                x = render_data.buffer.add_text(x, 2, "Lobby ID: ");
-                if client.lobby_id_hidden {
-                    x = render_data.buffer.add_text(x, 2, "******");
-                    x = render_data.buffer.add_text_with_color(
-                        x,
-                        2,
-                        " (press i to show)",
-                        ansi::GRAY_FOREGROUND,
-                    );
-                } else {
-                    x = render_data.buffer.add_text(x, 2, &lobby.id);
-                    x = render_data.buffer.add_text_with_color(
-                        x,
-                        2,
-                        " (press i to hide)",
-                        ansi::GRAY_FOREGROUND,
-                    );
-                }
-
-                for i in 0..lobby.clients.len() {
-                    let info = &lobby.clients[i];
-                    let y = 5 + i;
-
-                    x = 6;
-                    x = render_data.buffer.add_text(x, y, &format!("{}. ", i + 1));
-                    x = render_data.buffer.add_text_with_color(
-                        x,
-                        y,
-                        &info.name,
-                        ansi::Color {
-                            fg: info.color,
-                            bg: 0,
-                        },
-                    );
-                    if info.client_id == client.id {
-                        render_data.buffer.add_text_with_color(
-                            x,
-                            y,
-                            " (you)",
-                            ansi::GRAY_FOREGROUND,
-                        );
-                    }
-                }
-
-                _ = x; // silence compiler warning
+                render_lobby_status(client, &mut *render_data, &lobby);
             }
             menu.render(&mut render_data.buffer, 13);
             render_data.changed.notify_one();
