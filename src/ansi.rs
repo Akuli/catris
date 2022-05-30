@@ -25,10 +25,14 @@ pub struct Color {
     pub fg: u8,
     pub bg: u8,
 }
+
 pub const DEFAULT_COLOR: Color = Color { fg: 0, bg: 0 };
-pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
-pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
 pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
+
+pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
+pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
+
+pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
 
 impl Color {
     pub fn escape_sequence(self) -> String {

@@ -14,6 +14,7 @@ use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
+use tokio::sync::watch;
 use tokio::sync::Notify;
 use tokio::time::sleep;
 use weak_table::WeakValueHashMap;
@@ -24,17 +25,19 @@ use crate::game_logic;
 use crate::render;
 use crate::views;
 
-struct ClientInfo {
-    client_id: u64,
+pub struct ClientInfo {
+    pub client_id: u64,
     logger: client::ClientLogger,
-    name: String,
-    color: u8,
-    render_data: Arc<Mutex<render::RenderData>>,
+    pub name: String,
+    pub color: u8,
 }
 
 pub struct Lobby {
     pub id: String,
-    clients: Vec<ClientInfo>,
+    pub clients: Vec<ClientInfo>,
+    // change triggers when people join/leave the lobby or a game, and ui must refresh
+    changed_sender: watch::Sender<()>,
+    pub changed_receiver: watch::Receiver<()>,
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
@@ -42,18 +45,20 @@ const ALL_COLORS: [u8; MAX_CLIENTS_PER_LOBBY] = [31, 32, 33, 34, 35, 36];
 
 impl Lobby {
     pub fn new(id: &str) -> Lobby {
+        let (sender, receiver) = watch::channel(());
         Lobby {
             id: id.to_string(),
             clients: vec![],
+            changed_sender: sender,
+            changed_receiver: receiver,
         }
     }
 
-    pub fn add_client(
-        &mut self,
-        logger: client::ClientLogger,
-        name: &str,
-        render_data: Arc<Mutex<render::RenderData>>,
-    ) {
+    pub fn is_full(&self) -> bool {
+        self.clients.len() == MAX_CLIENTS_PER_LOBBY
+    }
+
+    pub fn add_client(&mut self, logger: client::ClientLogger, name: &str) {
         logger.log(&format!("Joining lobby: {}", self.id));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
@@ -66,8 +71,8 @@ impl Lobby {
             logger: logger,
             name: name.to_string(),
             color: unused_color,
-            render_data: render_data,
         });
+        self.changed_sender.send(()).unwrap();
     }
 
     pub fn remove_client(&mut self, client_id: u64) {
@@ -80,6 +85,7 @@ impl Lobby {
             .logger
             .log(&format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
+        self.changed_sender.send(()).unwrap();
     }
 }
 

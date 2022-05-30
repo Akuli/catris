@@ -41,13 +41,14 @@ impl ClientLogger {
 
 pub struct Client {
     ip: IpAddr,
-    id: u64,
+    pub id: u64,
     pub render_data: Arc<Mutex<render::RenderData>>,
     recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
     recv_buffer_size: usize,
     key_press_times: VecDeque<Instant>,
     reader: OwnedReadHalf,
-    lobby: Option<Arc<Mutex<lobby::Lobby>>>,
+    pub lobby: Option<Arc<Mutex<lobby::Lobby>>>,
+    pub lobby_id_hidden: bool,
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
 
@@ -69,6 +70,7 @@ impl Client {
             key_press_times: VecDeque::new(),
             reader: reader,
             lobby: None,
+            lobby_id_hidden: false,
             remove_name_on_disconnect_data: None,
         }
     }
@@ -152,7 +154,7 @@ impl Client {
         let id = lobby::generate_unused_id(&*lobbies);
         let mut lobby = lobby::Lobby::new(&id);
         self.logger().log(&format!("Created lobby: {}", id));
-        lobby.add_client(self.logger(), "John", self.render_data.clone());
+        lobby.add_client(self.logger(), self.get_name());
 
         let lobby = Arc::new(Mutex::new(lobby));
         lobbies.insert(id, lobby.clone());
@@ -161,13 +163,17 @@ impl Client {
         self.lobby = Some(lobby);
     }
 
-    pub fn join_lobby(&mut self, lobby: Arc<Mutex<lobby::Lobby>>) {
-        lobby
-            .lock()
-            .unwrap()
-            .add_client(self.logger(), "John", self.render_data.clone());
+    pub fn join_lobby(&mut self, lobby: Arc<Mutex<lobby::Lobby>>) -> bool {
+        {
+            let mut lobby = lobby.lock().unwrap();
+            if lobby.is_full() {
+                return false;
+            }
+            lobby.add_client(self.logger(), self.get_name());
+        }
         assert!(self.lobby.is_none());
         self.lobby = Some(lobby);
+        true
     }
 }
 

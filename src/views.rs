@@ -181,12 +181,19 @@ pub async fn ask_lobby_id_and_join_lobby(
             }
 
             let lobbies = lobbies.lock().unwrap();
-            if let Some(lobby) = lobbies.get(&id) {
-                client.join_lobby(lobby);
-                return None;
-            }
-
-            return Some(format!("There is no lobby with ID '{}'.", id));
+            return if let Some(lobby) = lobbies.get(&id) {
+                if client.join_lobby(lobby) {
+                    None
+                } else {
+                    Some(format!(
+                        "Lobby '{}' is full. It already has {} players.",
+                        id,
+                        lobby::MAX_CLIENTS_PER_LOBBY
+                    ))
+                }
+            } else {
+                Some(format!("There is no lobby with ID '{}'.", id))
+            };
         },
         None,
         // prevent brute-force-guessing lobby IDs, max 1 attempt per second
@@ -313,7 +320,7 @@ pub async fn choose_game_mode(
     selected_index: &mut usize,
 ) -> Result<Option<game_logic::GameMode>, io::Error> {
     let mut items = vec![];
-    items.resize(game_logic::ALL_GAME_MODES.len(), Some("".to_string()));
+    items.resize(game_logic::ALL_GAME_MODES.len(), None);
     items.push(None);
     items.push(Some("Gameplay tips".to_string()));
     items.push(Some("Quit".to_string()));
@@ -321,6 +328,13 @@ pub async fn choose_game_mode(
         items: items,
         selected_index: *selected_index,
     };
+
+    let mut changed_receiver;
+    {
+        let idk_why_i_need_this = client.lobby.clone().unwrap();
+        let lobby = idk_why_i_need_this.lock().unwrap();
+        changed_receiver = lobby.changed_receiver.clone();
+    }
 
     loop {
         for i in 0..game_logic::ALL_GAME_MODES.len() {
@@ -338,22 +352,88 @@ pub async fn choose_game_mode(
             render_data.buffer.resize(80, 24);
             render_data.cursor_pos = None;
 
-            add_ascii_art(&mut render_data.buffer);
+            {
+                let idk_why_i_need_this = client.lobby.clone().unwrap();
+                let lobby = idk_why_i_need_this.lock().unwrap();
+
+                let mut x = 3;
+                x = render_data.buffer.add_text(x, 2, "Lobby ID: ");
+                if client.lobby_id_hidden {
+                    x = render_data.buffer.add_text(x, 2, "******");
+                    x = render_data.buffer.add_text_with_color(
+                        x,
+                        2,
+                        " (press i to show)",
+                        ansi::GRAY_FOREGROUND,
+                    );
+                } else {
+                    x = render_data.buffer.add_text(x, 2, &lobby.id);
+                    x = render_data.buffer.add_text_with_color(
+                        x,
+                        2,
+                        " (press i to hide)",
+                        ansi::GRAY_FOREGROUND,
+                    );
+                }
+
+                for i in 0..lobby.clients.len() {
+                    let info = &lobby.clients[i];
+                    let y = 5 + i;
+
+                    x = 6;
+                    x = render_data.buffer.add_text(x, y, &format!("{}. ", i + 1));
+                    x = render_data.buffer.add_text_with_color(
+                        x,
+                        y,
+                        &info.name,
+                        ansi::Color {
+                            fg: info.color,
+                            bg: 0,
+                        },
+                    );
+                    if info.client_id == client.id {
+                        render_data.buffer.add_text_with_color(
+                            x,
+                            y,
+                            " (you)",
+                            ansi::GRAY_FOREGROUND,
+                        );
+                    }
+                }
+
+                _ = x; // silence compiler warning
+            }
             menu.render(&mut render_data.buffer, 13);
             render_data.changed.notify_one();
         }
 
-        let key = client.receive_key_press().await?;
-        if menu.handle_key_press(key) {
-            *selected_index = menu.selected_index;
-            return match menu.selected_text() {
-                "Gameplay tips" => Ok(None),
-                "Quit" => Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    "user selected \"Quit\" in menu",
-                )),
-                _ => Ok(Some(game_logic::ALL_GAME_MODES[menu.selected_index])),
-            };
+        tokio::select! {
+            key_or_error = client.receive_key_press() => {
+                match key_or_error? {
+                    ansi::KeyPress::Character('I') | ansi::KeyPress::Character('i') => {
+                        client.lobby_id_hidden = !client.lobby_id_hidden;
+                    }
+                    key => {
+                        if menu.handle_key_press(key) {
+                            *selected_index = menu.selected_index;
+                            return match menu.selected_text() {
+                                "Gameplay tips" => Ok(None),
+                                "Quit" => Err(io::Error::new(
+                                    io::ErrorKind::ConnectionAborted,
+                                    "user selected \"Quit\" in menu",
+                                )),
+                                _ => Ok(Some(game_logic::ALL_GAME_MODES[menu.selected_index])),
+                            };
+                        }
+                    }
+                }
+            }
+            res = changed_receiver.changed() => {
+                // It errors if the sender no longer exists.
+                // But the sender is in the lobby which exists as long as there are clients.
+                // So this should never fail.
+                res.unwrap();
+            }
         }
     }
 }
