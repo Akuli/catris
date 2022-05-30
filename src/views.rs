@@ -58,8 +58,7 @@ where
     loop {
         {
             let mut render_data = client.render_data.lock().unwrap();
-            render_data.buffer.clear();
-            render_data.buffer.resize(80, 24);
+            render_data.clear(80, 24);
 
             add_ascii_art(&mut render_data.buffer);
             let mut x = render_data.buffer.add_text(20, 10, prompt);
@@ -283,9 +282,7 @@ pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::E
     loop {
         {
             let mut render_data = client.render_data.lock().unwrap();
-            render_data.buffer.clear();
-            render_data.buffer.resize(80, 24);
-            render_data.cursor_pos = None;
+            render_data.clear(80, 24);
 
             add_ascii_art(&mut render_data.buffer);
             menu.render(&mut render_data.buffer, 10);
@@ -348,9 +345,7 @@ pub async fn choose_game_mode(
 
         {
             let mut render_data = client.render_data.lock().unwrap();
-            render_data.buffer.clear();
-            render_data.buffer.resize(80, 24);
-            render_data.cursor_pos = None;
+            render_data.clear(80, 24);
 
             {
                 let idk_why_i_need_this = client.lobby.clone().unwrap();
@@ -436,4 +431,71 @@ pub async fn choose_game_mode(
             }
         }
     }
+}
+
+const GAMEPLAY_TIPS: &[&str] = &[
+    "",
+    "Keys:",
+    "  [W]/[A]/[S]/[D] or [↑]/[←]/[↓]/[→]: move and rotate (don't hold down [S] or [↓])",
+    "  [H]: hold (aka save) block for later, switch to previously held block if any",
+    "  [R]: change rotating direction",
+    "  [P]: pause/unpause (affects all players)",
+    "  [F]: flip the game upside down (only available in ring mode with 1 player)",
+    "",
+    "There's only one score. {You play together}, not against other players. Try to",
+    "work together and make good use of everyone's blocks.",
+    "",
+    "With multiple players, when your playing area fills all the way to the top,",
+    "you need to wait 30 seconds before you can continue playing. The game ends",
+    "when all players are simultaneously on their 30 seconds waiting time. This",
+    "means that if other players are doing well, you can {intentionally fill your",
+    "playing area} to do your waiting time before others mess up.",
+];
+
+pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::Error> {
+    let mut menu = Menu {
+        items: vec![Some("Back to menu".to_string())],
+        selected_index: 0,
+    };
+
+    {
+        let mut render_data = client.render_data.lock().unwrap();
+        render_data.clear(80, 24);
+
+        let mut color = ansi::DEFAULT_COLOR;
+        for y in 0..GAMEPLAY_TIPS.len() {
+            let mut x = 2;
+            let mut string = GAMEPLAY_TIPS[y];
+            loop {
+                match string.chars().next() {
+                    Some('[') => {
+                        color = ansi::CYAN_FOREGROUND;
+                        string = &string[1..];
+                    }
+                    Some('{') => {
+                        color = ansi::PURPLE_FOREGROUND;
+                        string = &string[1..];
+                    }
+                    Some(']') | Some('}') => {
+                        color = ansi::DEFAULT_COLOR;
+                        string = &string[1..];
+                    }
+                    Some(_) => {
+                        let i = string.find(|c| "[]{}".contains(c)).unwrap_or(string.len());
+                        x = render_data
+                            .buffer
+                            .add_text_with_color(x, y, &string[..i], color);
+                        string = &string[i..];
+                    }
+                    None => break,
+                }
+            }
+        }
+
+        menu.render(&mut render_data.buffer, 19);
+        render_data.changed.notify_one();
+    }
+
+    while !menu.handle_key_press(client.receive_key_press().await?) {}
+    Ok(())
 }

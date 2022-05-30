@@ -225,3 +225,11 @@ pub struct RenderData {
     pub cursor_pos: Option<(usize, usize)>,
     pub changed: Arc<Notify>,
 }
+
+impl RenderData {
+    pub fn clear(&mut self, width: usize, height: usize) {
+        self.buffer.clear();
+        self.buffer.resize(width, height);
+        self.cursor_pos = None;
+    }
+}

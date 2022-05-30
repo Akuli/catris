@@ -48,7 +48,14 @@ async fn handle_receiving(
     let mut selected_index = 0 as usize;
     loop {
         let game_mode = views::choose_game_mode(&mut client, &mut selected_index).await?;
-        println!("game_mode = {:?}", game_mode);
+        match game_mode {
+            None => {
+                views::show_gameplay_tips(&mut client).await?;
+            }
+            Some(mode) => {
+                println!("mode = {:?}", mode);
+            }
+        }
     }
 }
 

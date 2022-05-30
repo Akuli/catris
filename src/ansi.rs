@@ -31,6 +31,8 @@ pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
 
 pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
 pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
+pub const PURPLE_FOREGROUND: Color = Color { fg: 36, bg: 0 };
+pub const CYAN_FOREGROUND: Color = Color { fg: 35, bg: 0 };
 
 pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
 
