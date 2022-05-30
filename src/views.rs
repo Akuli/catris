@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
 use std::time::Duration;
+use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
@@ -44,12 +45,14 @@ async fn prompt<F>(
     prompt: &str,
     mut enter_pressed_callback: F,
     add_extra_text: Option<fn(&mut render::Buffer)>,
+    min_duration_between_enter_presses: Duration,
 ) -> Result<(), io::Error>
 where
     F: FnMut(&str, &mut client::Client) -> Option<String>,
 {
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
+    let mut last_enter_press: Option<Instant> = None;
 
     loop {
         {
@@ -87,9 +90,14 @@ where
                 }
             }
             ansi::KeyPress::Enter => {
-                error = enter_pressed_callback(current_text.trim(), client);
-                if error == None {
-                    return Ok(());
+                if last_enter_press == None
+                    || last_enter_press.unwrap().elapsed() > min_duration_between_enter_presses
+                {
+                    last_enter_press = Some(Instant::now());
+                    error = enter_pressed_callback(current_text.trim(), client);
+                    if error == None {
+                        return Ok(());
+                    }
                 }
             }
             _ => {}
@@ -137,6 +145,7 @@ pub async fn ask_name(
             None
         },
         Some(add_name_asking_notes),
+        Duration::ZERO,
     )
     .await?;
     Ok(())
@@ -146,7 +155,6 @@ pub async fn ask_lobby_id_and_join_lobby(
     client: &mut client::Client,
     lobbies: lobby::Lobbies,
 ) -> Result<(), io::Error> {
-    // TODO: prevent trial-and-error joining a random lobby
     prompt(
         client,
         "Lobby ID (6 characters): ",
@@ -165,6 +173,8 @@ pub async fn ask_lobby_id_and_join_lobby(
             return Some(format!("There is no lobby with ID '{}'.", id));
         },
         None,
+        // prevent brute-force-guessing lobby IDs, max 1 attempt per second
+        Duration::from_secs(1),
     )
     .await?;
     Ok(())
