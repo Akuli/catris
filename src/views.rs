@@ -208,8 +208,9 @@ struct Menu {
 }
 
 fn case_insensitive_starts_with(s: &str, prefix: char) -> bool {
-    return s.chars().next().unwrap().to_lowercase().to_string()
-        == prefix.to_lowercase().to_string();
+    return s.len() != 0
+        && s.chars().next().unwrap().to_lowercase().to_string()
+            == prefix.to_lowercase().to_string();
 }
 
 impl Menu {
@@ -218,8 +219,8 @@ impl Menu {
     }
 
     fn render(&self, buffer: &mut render::Buffer, top_y: usize) {
-        for i in 0..self.items.len() {
-            if let Some(text) = &self.items[i] {
+        for (i, item) in self.items.iter().enumerate() {
+            if let Some(text) = item {
                 let centered_text = format!("{:^35}", text);
                 if i == self.selected_index {
                     buffer.add_centered_text_with_color(
@@ -252,12 +253,10 @@ impl Menu {
             }
             ansi::KeyPress::Character(ch) => {
                 // pressing r selects Ring Game
-                for i in 0..self.items.len() {
-                    if let Some(text) = &self.items[i] {
-                        if case_insensitive_starts_with(text, ch) {
-                            self.selected_index = i;
-                            break;
-                        }
+                for (i, item) in self.items.iter().enumerate() {
+                    if case_insensitive_starts_with(item.as_ref().unwrap_or(&"".to_string()), ch) {
+                        self.selected_index = i;
+                        break;
                     }
                 }
             }
@@ -336,8 +335,7 @@ fn render_lobby_status(
         );
     }
 
-    for i in 0..lobby.clients.len() {
-        let info = &lobby.clients[i];
+    for (i, info) in lobby.clients.iter().enumerate() {
         let y = 5 + i;
 
         x = 6;
@@ -384,8 +382,7 @@ pub async fn choose_game_mode(
     }
 
     loop {
-        for i in 0..game_logic::ALL_GAME_MODES.len() {
-            let mode = game_logic::ALL_GAME_MODES[i];
+        for (i, mode) in game_logic::ALL_GAME_MODES.iter().enumerate() {
             // TODO: game full error
             menu.items[i] = Some(format!(
                 "{} (0/{} players)",
