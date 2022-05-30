@@ -20,6 +20,7 @@ use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::client;
+use crate::lobby;
 use crate::render;
 
 const ASCII_ART: &str = r"
@@ -41,11 +42,11 @@ fn add_ascii_art(buffer: &mut render::Buffer) {
 async fn prompt<F>(
     client: &mut client::Client,
     prompt: &str,
-    mut validator: F,
+    mut enter_pressed_callback: F,
     add_extra_text: Option<fn(&mut render::Buffer)>,
-) -> Result<String, io::Error>
+) -> Result<(), io::Error>
 where
-    F: FnMut(&str) -> Option<String>,
+    F: FnMut(&str, &mut client::Client) -> Option<String>,
 {
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
@@ -86,10 +87,9 @@ where
                 }
             }
             ansi::KeyPress::Enter => {
-                let text = current_text.trim().to_string();
-                error = validator(&text);
+                error = enter_pressed_callback(current_text.trim(), client);
                 if error == None {
-                    return Ok(text);
+                    return Ok(());
                 }
             }
             _ => {}
@@ -118,11 +118,11 @@ fn add_name_asking_notes(buffer: &mut render::Buffer) {
 pub async fn ask_name(
     client: &mut client::Client,
     used_names: Arc<Mutex<HashSet<String>>>,
-) -> Result<String, io::Error> {
-    return prompt(
+) -> Result<(), io::Error> {
+    prompt(
         client,
         "Name: ",
-        |name| {
+        |name, client| {
             if name.len() == 0 {
                 return Some("Please write a name before pressing Enter.".to_string());
             }
@@ -131,14 +131,43 @@ pub async fn ask_name(
                     return Some(format!("The name can't contain a '{}' character.", ch));
                 }
             }
-            if used_names.lock().unwrap().contains(name) {
+            if !client.set_name(name, used_names.clone()) {
                 return Some("This name is in use. Try a different name.".to_string());
             }
             None
         },
         Some(add_name_asking_notes),
     )
-    .await;
+    .await?;
+    Ok(())
+}
+
+pub async fn ask_lobby_id_and_join_lobby(
+    client: &mut client::Client,
+    lobbies: lobby::Lobbies,
+) -> Result<(), io::Error> {
+    // TODO: prevent trial-and-error joining a random lobby
+    prompt(
+        client,
+        "Lobby ID (6 characters): ",
+        |id, client| {
+            let id = id.to_uppercase();
+            if !lobby::looks_like_lobby_id(&id) {
+                return Some("The text you entered doesn't look like a lobby ID.".to_string());
+            }
+
+            let lobbies = lobbies.lock().unwrap();
+            if let Some(lobby) = lobbies.get(&id) {
+                client.join_lobby(lobby);
+                return None;
+            }
+
+            return Some(format!("There is no lobby with ID '{}'.", id));
+        },
+        None,
+    )
+    .await?;
+    Ok(())
 }
 
 struct Menu {

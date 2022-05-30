@@ -33,12 +33,17 @@ async fn handle_receiving(
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
-    let name = views::ask_name(&mut client, used_names.clone()).await?;
-    client.logger().log(&format!("Name asking done: {}", name));
-    client.mark_name_as_used(&name, used_names);
+    views::ask_name(&mut client, used_names.clone()).await?;
+    client
+        .logger()
+        .log(&format!("Name asking done: {}", client.get_name()));
 
     let want_new_lobby = views::ask_if_new_lobby(&mut client).await?;
-    println!("Asdf asd {}", want_new_lobby);
+    if want_new_lobby {
+        client.make_lobby(lobbies);
+    } else {
+        views::ask_lobby_id_and_join_lobby(&mut client, lobbies).await?;
+    }
 
     loop {
         client.receive_key_press().await?;

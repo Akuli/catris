@@ -40,37 +40,11 @@ pub struct Lobby {
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
 const ALL_COLORS: [u8; MAX_CLIENTS_PER_LOBBY] = [31, 32, 33, 34, 35, 36];
 
-/*
-I started with A-Z0-9 and removed chars that look confusingly similar
-in small font:
-
-  A and 4
-  B and 8
-  C and G and 6
-  E and F
-  I and 1
-  O and 0 and Q
-  S and 5
-  U and V
-  Z and 2
-*/
-const ID_ALPHABET: [char; 16] = [
-    'D', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'T', 'W', 'X', 'Y', '3', '7', '9',
-];
-
 impl Lobby {
-    pub fn new(existing_lobbies: &WeakValueHashMap<String, Weak<Mutex<Lobby>>>) -> Lobby {
-        loop {
-            let id = (0..6)
-                .into_iter()
-                .map(|_| ID_ALPHABET[rand::thread_rng().gen_range(0..ID_ALPHABET.len())])
-                .collect::<String>();
-            if !existing_lobbies.contains_key(&id) {
-                return Lobby {
-                    id: id,
-                    clients: vec![],
-                };
-            }
+    pub fn new(id: &str) -> Lobby {
+        Lobby {
+            id: id.to_string(),
+            clients: vec![],
         }
     }
 
@@ -80,6 +54,7 @@ impl Lobby {
         name: &str,
         render_data: Arc<Mutex<render::RenderData>>,
     ) {
+        logger.log(&format!("Joining lobby: {}", self.id));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
@@ -116,3 +91,39 @@ impl Drop for Lobby {
 }
 
 pub type Lobbies = Arc<Mutex<WeakValueHashMap<String, Weak<Mutex<Lobby>>>>>;
+
+/*
+I started with A-Z0-9 and removed chars that look confusingly similar
+in small font:
+
+  A and 4
+  B and 8
+  C and G and 6
+  E and F
+  I and 1
+  O and 0 and Q
+  S and 5
+  U and V
+  Z and 2
+*/
+const ID_ALPHABET: [char; 16] = [
+    'D', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'T', 'W', 'X', 'Y', '3', '7', '9',
+];
+
+pub fn looks_like_lobby_id(string: &str) -> bool {
+    return string.len() == 6 && string.chars().all(|ch| ID_ALPHABET.contains(&ch));
+}
+
+pub fn generate_unused_id(
+    existing_lobbies: &WeakValueHashMap<String, Weak<Mutex<Lobby>>>,
+) -> String {
+    loop {
+        let id = (0..6)
+            .into_iter()
+            .map(|_| ID_ALPHABET[rand::thread_rng().gen_range(0..ID_ALPHABET.len())])
+            .collect::<String>();
+        if !existing_lobbies.contains_key(&id) {
+            return id;
+        }
+    }
+}

@@ -77,10 +77,24 @@ impl Client {
         ClientLogger { client_id: self.id }
     }
 
-    pub fn mark_name_as_used(&mut self, name: &str, used_names: Arc<Mutex<HashSet<String>>>) {
-        used_names.lock().unwrap().insert(name.to_string());
+    pub fn get_name(&self) -> &str {
+        let (name, _) = self.remove_name_on_disconnect_data.as_ref().unwrap();
+        name
+    }
+
+    // returns false if name is in use already
+    pub fn set_name(&mut self, name: &str, used_names: Arc<Mutex<HashSet<String>>>) -> bool {
+        {
+            let mut used_names = used_names.lock().unwrap();
+            if used_names.contains(name) {
+                return false;
+            }
+            used_names.insert(name.to_string());
+        }
+
         assert!(self.remove_name_on_disconnect_data.is_none());
         self.remove_name_on_disconnect_data = Some((name.to_string(), used_names));
+        true
     }
 
     fn check_key_press_frequency(&mut self) -> Result<(), io::Error> {
@@ -135,12 +149,24 @@ impl Client {
 
     pub fn make_lobby(&mut self, lobbies: lobby::Lobbies) {
         let mut lobbies = lobbies.lock().unwrap();
-        let mut lobby = lobby::Lobby::new(&*lobbies);
-        let id = lobby.id.clone();
+        let id = lobby::generate_unused_id(&*lobbies);
+        let mut lobby = lobby::Lobby::new(&id);
         self.logger().log(&format!("Created lobby: {}", id));
         lobby.add_client(self.logger(), "John", self.render_data.clone());
+
         let lobby = Arc::new(Mutex::new(lobby));
         lobbies.insert(id, lobby.clone());
+
+        assert!(self.lobby.is_none());
+        self.lobby = Some(lobby);
+    }
+
+    pub fn join_lobby(&mut self, lobby: Arc<Mutex<lobby::Lobby>>) {
+        lobby
+            .lock()
+            .unwrap()
+            .add_client(self.logger(), "John", self.render_data.clone());
+        assert!(self.lobby.is_none());
         self.lobby = Some(lobby);
     }
 }
