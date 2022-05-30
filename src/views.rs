@@ -25,19 +25,19 @@ use crate::game_logic;
 use crate::lobby;
 use crate::render;
 
-const ASCII_ART: &str = r"
-                   __     ___    _____   _____   _____   ___
-                  / _)   / _ \  |_   _| |  __ \ |_   _| / __)
-                 | (_   / /_\ \   | |   |  _  /  _| |_  \__ \
-                  \__) /_/   \_\  |_|   |_| \_\ |_____| (___/
-                        https://github.com/Akuli/catris
-";
+const ASCII_ART: &[&str] = &[
+    "",
+    r"  __     ___    _____   _____   _____   ___ ",
+    r" / _)   / _ \  |_   _| |  __ \ |_   _| / __)",
+    r"| (_   / /_\ \   | |   |  _  /  _| |_  \__ \",
+    r" \__) /_/   \_\  |_|   |_| \_\ |_____| (___/",
+    "https://github.com/Akuli/catris",
+    "",
+];
 
 fn add_ascii_art(buffer: &mut render::Buffer) {
-    let mut y = 0;
-    for line in ASCII_ART.lines() {
-        buffer.add_text(0, y, line);
-        y += 1;
+    for (y, line) in ASCII_ART.iter().enumerate() {
+        buffer.add_centered_text(y, line);
     }
 }
 
@@ -386,6 +386,7 @@ pub async fn choose_game_mode(
     loop {
         for i in 0..game_logic::ALL_GAME_MODES.len() {
             let mode = game_logic::ALL_GAME_MODES[i];
+            // TODO: game full error
             menu.items[i] = Some(format!(
                 "{} (0/{} players)",
                 mode.name(),
