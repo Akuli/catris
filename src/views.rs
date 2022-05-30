@@ -78,8 +78,23 @@ where
         }
 
         match client.receive_key_press().await? {
+            /*
+            \r\n: Enter press in windows cmd.exe
+            \r:   Enter press in other os with raw mode
+            \n:   Enter press in other os without raw mode (bad)
+
+            \r is also known as KeyPress::Enter. If we haven't gotten that
+            yet, and we get \n, it means someone forgot to set raw mode.
+            */
+            ansi::KeyPress::Character('\n') if last_enter_press == None => {
+                error = Some(
+                    "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
+                        .to_string(),
+                );
+            }
             ansi::KeyPress::Character(ch) => {
                 // 15 chars is enough for names and lobby IDs
+                // It's important to have limit (potential out of mem dos attack otherwise)
                 if current_text.chars().count() < 15 {
                     current_text.push(ch);
                 }
