@@ -370,7 +370,7 @@ pub async fn choose_game_mode(
     items.push(Some("Gameplay tips".to_string()));
     items.push(Some("Quit".to_string()));
     let mut menu = Menu {
-        items: items,
+        items,
         selected_index: *selected_index,
     };
 
@@ -382,15 +382,6 @@ pub async fn choose_game_mode(
     }
 
     loop {
-        for (i, mode) in game_logic::ALL_GAME_MODES.iter().enumerate() {
-            // TODO: game full error
-            menu.items[i] = Some(format!(
-                "{} (0/{} players)",
-                mode.name(),
-                mode.max_players()
-            ));
-        }
-
         {
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
@@ -398,6 +389,16 @@ pub async fn choose_game_mode(
                 let idk_why_i_need_this = client.lobby.clone().unwrap();
                 let lobby = idk_why_i_need_this.lock().unwrap();
                 render_lobby_status(client, &mut *render_data, &lobby);
+
+                for (i, mode) in game_logic::ALL_GAME_MODES.iter().enumerate() {
+                    // TODO: game full error
+                    menu.items[i] = Some(format!(
+                        "{} ({}/{} players)",
+                        mode.name(),
+                        lobby.get_player_count(*mode),
+                        mode.max_players()
+                    ));
+                }
             }
             menu.render(&mut render_data.buffer, 13);
             render_data.changed.notify_one();
@@ -499,4 +500,38 @@ pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::E
 
     while !menu.handle_key_press(client.receive_key_press().await?) {}
     Ok(())
+}
+
+pub async fn play_game(client: &mut client::Client) -> Result<(), io::Error> {
+    let game_wrapper = client
+        .lobby
+        .as_ref()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .join_game(client.id);
+    let mut changed_receiver = game_wrapper.changed_receiver.clone();
+    loop {
+        {
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.clear(80, 24);
+            game_wrapper
+                .game
+                .lock()
+                .unwrap()
+                .render_to_buf(&mut render_data.buffer);
+            render_data.changed.notify_one();
+        }
+
+        tokio::select! {
+            result = changed_receiver.changed() => {
+                result.unwrap();  // should not be an error
+            }
+            key = client.receive_key_press() => {
+                if game_wrapper.game.lock().unwrap().handle_key_press(client.id, key?) {
+                    game_wrapper.mark_changed();
+                }
+            }
+        }
+    }
 }

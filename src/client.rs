@@ -57,7 +57,7 @@ static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 impl Client {
     pub fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
         Client {
-            ip: ip,
+            ip,
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             render_data: Arc::new(Mutex::new(render::RenderData {
@@ -68,7 +68,7 @@ impl Client {
             recv_buffer: [0 as u8; 100],
             recv_buffer_size: 0,
             key_press_times: VecDeque::new(),
-            reader: reader,
+            reader,
             lobby: None,
             lobby_id_hidden: false,
             remove_name_on_disconnect_data: None,
@@ -166,7 +166,7 @@ impl Client {
     pub fn join_lobby(&mut self, lobby: Arc<Mutex<lobby::Lobby>>) -> bool {
         {
             let mut lobby = lobby.lock().unwrap();
-            if lobby.is_full() {
+            if lobby.lobby_is_full() {
                 return false;
             }
             lobby.add_client(self.logger(), self.get_name());

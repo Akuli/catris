@@ -32,12 +32,42 @@ pub struct ClientInfo {
     pub color: u8,
 }
 
+pub struct GameWrapper {
+    pub game: Mutex<game_logic::Game>,
+    // change event triggers when re-rendering might be needed
+    changed_sender: watch::Sender<()>,
+    pub changed_receiver: watch::Receiver<()>,
+}
+
+impl GameWrapper {
+    pub fn mark_changed(&self) {
+        self.changed_sender.send(()).unwrap();
+    }
+}
+
+async fn move_blocks_down(wrapper: Weak<GameWrapper>) {
+    loop {
+        sleep(Duration::from_millis(400)).await;
+        match wrapper.upgrade() {
+            Some(wrapper) => {
+                {
+                    let mut game = wrapper.game.lock().unwrap();
+                    game.move_blocks_down();
+                }
+                wrapper.mark_changed();
+            }
+            None => return,
+        }
+    }
+}
+
 pub struct Lobby {
     pub id: String,
     pub clients: Vec<ClientInfo>,
     // change triggers when people join/leave the lobby or a game, and ui must refresh
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
+    game_wrapper: Weak<GameWrapper>,
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
@@ -51,14 +81,38 @@ impl Lobby {
             clients: vec![],
             changed_sender: sender,
             changed_receiver: receiver,
+            game_wrapper: Weak::new(),
         }
     }
 
-    pub fn is_full(&self) -> bool {
+    pub fn get_player_count(&self, mode: game_logic::GameMode) -> usize {
+        match mode {
+            game_logic::GameMode::Traditional => match self.game_wrapper.upgrade() {
+                Some(wrapper) => {
+                    let n = wrapper.game.lock().unwrap().player_count();
+                    assert!(n > 0);
+                    n
+                }
+                None => 0,
+            },
+            _ => 0, // TODO
+        }
+    }
+
+    pub fn lobby_is_full(&self) -> bool {
         self.clients.len() == MAX_CLIENTS_PER_LOBBY
     }
 
+    pub fn game_is_full(&self, mode: game_logic::GameMode) -> bool {
+        self.get_player_count(mode) == mode.max_players()
+    }
+
+    fn mark_changed(&self) {
+        self.changed_sender.send(()).unwrap();
+    }
+
     pub fn add_client(&mut self, logger: client::ClientLogger, name: &str) {
+        assert!(!self.lobby_is_full());
         logger.log(&format!("Joining lobby: {}", self.id));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
@@ -68,14 +122,25 @@ impl Lobby {
             .unwrap();
         self.clients.push(ClientInfo {
             client_id: logger.client_id,
-            logger: logger,
+            logger,
             name: name.to_string(),
             color: unused_color,
         });
-        self.changed_sender.send(()).unwrap();
+        self.mark_changed();
     }
 
     pub fn remove_client(&mut self, client_id: u64) {
+        if let Some(wrapper) = self.game_wrapper.upgrade() {
+            if wrapper
+                .game
+                .lock()
+                .unwrap()
+                .remove_player_if_exists(client_id)
+            {
+                wrapper.mark_changed();
+            }
+        }
+
         let i = self
             .clients
             .iter()
@@ -85,7 +150,39 @@ impl Lobby {
             .logger
             .log(&format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
-        self.changed_sender.send(()).unwrap();
+        self.mark_changed();
+    }
+
+    pub fn join_game(&mut self, client_id: u64) -> Arc<GameWrapper> {
+        let client_info = self
+            .clients
+            .iter()
+            .find(|info| info.client_id == client_id)
+            .unwrap();
+
+        let wrapper = if let Some(wrapper) = self.game_wrapper.upgrade() {
+            wrapper
+                .game
+                .lock()
+                .unwrap()
+                .add_player(client_id, &client_info.name);
+            wrapper.mark_changed();
+            wrapper
+        } else {
+            assert!(self.game_wrapper.upgrade().is_none()); // TODO
+            let (sender, receiver) = watch::channel(());
+            let wrapper = Arc::new(GameWrapper {
+                game: Mutex::new(game_logic::Game::new(client_id, &client_info.name)),
+                changed_sender: sender,
+                changed_receiver: receiver,
+            });
+            tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper)));
+            self.game_wrapper = Arc::downgrade(&wrapper);
+            wrapper
+        };
+
+        self.mark_changed();
+        wrapper
     }
 }
 

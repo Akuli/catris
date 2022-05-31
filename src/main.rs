@@ -52,6 +52,9 @@ async fn handle_receiving(
             None => {
                 views::show_gameplay_tips(&mut client).await?;
             }
+            Some(game_logic::GameMode::Traditional) => {
+                views::play_game(&mut client).await?;
+            }
             Some(mode) => {
                 println!("mode = {:?}", mode);
             }

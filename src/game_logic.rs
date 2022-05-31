@@ -59,25 +59,47 @@ impl MovingBlock {
 }
 
 pub struct Player {
-    pub name: String,
-    pub block: MovingBlock,
+    client_id: u64,
+    name: String,
+    block: MovingBlock,
 }
 
 pub struct Game {
-    pub players: Vec<Player>,
+    players: Vec<Player>,
 }
 
 const WIDTH: usize = 10;
 const HEIGHT: usize = 20;
 
 impl Game {
-    pub fn new(player_name: &str) -> Game {
-        let player = Player {
-            name: player_name.to_string(),
+    pub fn new(client_id: u64, player_name: &str) -> Game {
+        let mut result = Game { players: vec![] };
+        result.add_player(client_id, player_name);
+        result
+    }
+
+    pub fn player_count(&self) -> usize {
+        self.players.len()
+    }
+
+    pub fn add_player(&mut self, client_id: u64, name: &str) {
+        self.players.push(Player {
+            client_id,
+            name: name.to_string(),
             block: MovingBlock::new(0),
-        };
-        Game {
-            players: vec![player],
+        });
+    }
+
+    pub fn remove_player_if_exists(&mut self, client_id: u64) -> bool {
+        if let Some(i) = self
+            .players
+            .iter()
+            .position(|info| info.client_id == client_id)
+        {
+            self.players.remove(i);
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -117,7 +139,6 @@ impl Game {
     }
 
     pub fn render_to_buf(&self, buffer: &mut render::Buffer) {
-        buffer.resize(2 * WIDTH + 2, HEIGHT);
         let square_contents = self.get_square_contents();
 
         for y in 0..HEIGHT {
@@ -132,5 +153,17 @@ impl Game {
                 }
             }
         }
+    }
+
+    pub fn handle_key_press(&mut self, client_id: u64, key: ansi::KeyPress) -> bool {
+        println!("client {} pressed {:?}", client_id, key);
+        false
+    }
+}
+
+// TODO: this is for debugging, remove eventually
+impl Drop for Game {
+    fn drop(&mut self) {
+        println!("Game ends!!! All players left");
     }
 }
