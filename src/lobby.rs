@@ -22,6 +22,9 @@ use weak_table::WeakValueHashMap;
 use crate::ansi;
 use crate::client;
 use crate::game_logic;
+use crate::game_logic_base::Game;
+use crate::game_logic_base::Player;
+use crate::game_logic_base::GameMode;
 use crate::render;
 use crate::views;
 
@@ -33,7 +36,7 @@ pub struct ClientInfo {
 }
 
 pub struct GameWrapper {
-    pub game: Mutex<game_logic::Game>,
+    pub game: Mutex<game_logic::TraditionalGame>,
     // change event triggers when re-rendering might be needed
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
@@ -85,9 +88,9 @@ impl Lobby {
         }
     }
 
-    pub fn get_player_count(&self, mode: game_logic::GameMode) -> usize {
+    pub fn get_player_count(&self, mode: GameMode) -> usize {
         match mode {
-            game_logic::GameMode::Traditional => match self.game_wrapper.upgrade() {
+            GameMode::Traditional => match self.game_wrapper.upgrade() {
                 Some(wrapper) => {
                     let n = wrapper.game.lock().unwrap().player_count();
                     assert!(n > 0);
@@ -103,7 +106,7 @@ impl Lobby {
         self.clients.len() == MAX_CLIENTS_PER_LOBBY
     }
 
-    pub fn game_is_full(&self, mode: game_logic::GameMode) -> bool {
+    pub fn game_is_full(&self, mode: GameMode) -> bool {
         self.get_player_count(mode) == mode.max_players()
     }
 
@@ -113,7 +116,7 @@ impl Lobby {
 
     pub fn add_client(&mut self, logger: client::ClientLogger, name: &str) {
         assert!(!self.lobby_is_full());
-        logger.log(&format!("Joining lobby: {}", self.id));
+        logger.log(&format!("Joining lobby with {} existing clients: {}", self.clients.len(), self.id));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
@@ -131,14 +134,12 @@ impl Lobby {
 
     pub fn remove_client(&mut self, client_id: u64) {
         if let Some(wrapper) = self.game_wrapper.upgrade() {
-            if wrapper
+            wrapper
                 .game
                 .lock()
                 .unwrap()
-                .remove_player_if_exists(client_id)
-            {
-                wrapper.mark_changed();
-            }
+                .remove_player_if_exists(client_id);
+            wrapper.mark_changed();
         }
 
         let i = self
@@ -153,7 +154,9 @@ impl Lobby {
         self.mark_changed();
     }
 
-    pub fn join_game(&mut self, client_id: u64) -> Arc<GameWrapper> {
+    pub fn join_game(&mut self, client_id: u64, mode: GameMode) -> Arc<GameWrapper> {
+        assert!(mode == GameMode::Traditional);  // FIXME
+
         let client_info = self
             .clients
             .iter()
@@ -165,14 +168,18 @@ impl Lobby {
                 .game
                 .lock()
                 .unwrap()
-                .add_player(client_id, &client_info.name);
+                .add_player(Player::new(client_id, &client_info.name));
             wrapper.mark_changed();
             wrapper
         } else {
             assert!(self.game_wrapper.upgrade().is_none()); // TODO
             let (sender, receiver) = watch::channel(());
             let wrapper = Arc::new(GameWrapper {
-                game: Mutex::new(game_logic::Game::new(client_id, &client_info.name)),
+                game: Mutex::new(game_logic::TraditionalGame::new(
+                    Player::new(
+                    client_id,
+                    &client_info.name)
+                )),
                 changed_sender: sender,
                 changed_receiver: receiver,
             });
@@ -189,7 +196,7 @@ impl Lobby {
 // TODO: remove this eventually once i trust that it works
 impl Drop for Lobby {
     fn drop(&mut self) {
-        println!("Destroying lobby: {}", self.id);
+        println!("[lobby {}] Destroying lobby", self.id);
     }
 }
 

@@ -24,6 +24,7 @@ use weak_table::WeakValueHashMap;
 mod ansi;
 mod client;
 mod game_logic;
+mod game_logic_base;
 mod lobby;
 mod render;
 mod views;
@@ -49,15 +50,8 @@ async fn handle_receiving(
     loop {
         let game_mode = views::choose_game_mode(&mut client, &mut selected_index).await?;
         match game_mode {
-            None => {
-                views::show_gameplay_tips(&mut client).await?;
-            }
-            Some(game_logic::GameMode::Traditional) => {
-                views::play_game(&mut client).await?;
-            }
-            Some(mode) => {
-                println!("mode = {:?}", mode);
-            }
+            Some(mode) => views::play_game(&mut client, mode).await?,
+            None => views::show_gameplay_tips(&mut client).await?,
         }
     }
 }
