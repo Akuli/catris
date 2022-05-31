@@ -97,9 +97,9 @@ impl Game {
             .position(|info| info.client_id == client_id)
         {
             self.players.remove(i);
-            return true;
+            true
         } else {
-            return false;
+            false
         }
     }
 
@@ -117,7 +117,7 @@ impl Game {
 
     fn player_to_world(&self, player_point: (i32, i32)) -> (i8, i8) {
         let (x, y) = player_point;
-        (i8::try_from(x).unwrap(), i8::try_from(y).unwrap())
+        (x as i8, y as i8)
     }
 
     fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
