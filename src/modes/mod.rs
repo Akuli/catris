@@ -1,11 +1,15 @@
 mod traditional;
 use crate::ansi::KeyPress;
+use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
 use crate::logic_base::Game;
 use crate::logic_base::Player;
+use crate::logic_base::PlayerPoint;
 use crate::logic_base::SquareContent;
+use crate::logic_base::WorldPoint;
 use crate::modes::traditional::TraditionalGame;
 use crate::render;
+use impl_enum;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
@@ -35,14 +39,28 @@ impl GameMode {
     }
 }
 
+#[impl_enum::with_methods {
+    pub fn get_players(&self) -> &Vec<Player> {}
+    pub fn add_player(&mut self, client_info: &ClientInfo) {}
+    pub fn remove_player_if_exists(&mut self, client_id: u64) {}
+    pub fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {}
+    pub fn world_to_player(&self, player_idx: usize, point: WorldPoint) -> (i32, i32) {}
+    pub fn player_to_world(&self, player_idx: usize, point: PlayerPoint) -> (i8, i8) {}
+    pub fn is_valid_moving_block_coords(&self, player_idx: usize, point: PlayerPoint) -> bool {}
+    pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {}
+    pub fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool {}
+    pub fn render_to_buf(&self, buffer: &mut render::Buffer) {}
+    pub fn move_blocks_down(&mut self) {}
+    pub fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {}
+}]
 pub enum AnyGame {
     Traditional(TraditionalGame),
 }
 
 impl AnyGame {
-    pub fn new(mode: GameMode, player: Player) -> AnyGame {
+    pub fn new(mode: GameMode) -> AnyGame {
         match mode {
-            GameMode::Traditional => AnyGame::Traditional(TraditionalGame::new(player)),
+            GameMode::Traditional => AnyGame::Traditional(TraditionalGame::new()),
             _ => panic!("not implemented"),
         }
     }
@@ -50,44 +68,6 @@ impl AnyGame {
     pub fn mode(&self) -> GameMode {
         match self {
             AnyGame::Traditional(_) => GameMode::Traditional,
-        }
-    }
-}
-
-impl Game for AnyGame {
-    fn add_player(&mut self, player: Player) {
-        match self {
-            AnyGame::Traditional(g) => g.add_player(player),
-        }
-    }
-    fn remove_player_if_exists(&mut self, client_id: u64) {
-        match self {
-            AnyGame::Traditional(g) => g.remove_player_if_exists(client_id),
-        }
-    }
-    fn player_count(&self) -> usize {
-        match self {
-            AnyGame::Traditional(g) => g.player_count(),
-        }
-    }
-    fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
-        match self {
-            AnyGame::Traditional(g) => g.get_square_contents(),
-        }
-    }
-    fn render_to_buf(&self, buffer: &mut render::Buffer) {
-        match self {
-            AnyGame::Traditional(g) => g.render_to_buf(buffer),
-        }
-    }
-    fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {
-        match self {
-            AnyGame::Traditional(g) => g.handle_key_press(client_id, key),
-        }
-    }
-    fn move_blocks_down(&mut self) {
-        match self {
-            AnyGame::Traditional(g) => g.move_blocks_down(),
         }
     }
 }

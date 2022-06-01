@@ -91,7 +91,7 @@ impl Lobby {
     pub fn get_player_count(&self, mode: GameMode) -> usize {
         match self.game_wrappers.get(&mode) {
             Some(wrapper) => {
-                let n = wrapper.game.lock().unwrap().player_count();
+                let n = wrapper.game.lock().unwrap().get_players().len();
                 assert!(n > 0);
                 n
             }
@@ -163,20 +163,15 @@ impl Lobby {
             .unwrap();
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
-            wrapper
-                .game
-                .lock()
-                .unwrap()
-                .add_player(Player::new(client_id, &client_info.name));
+            wrapper.game.lock().unwrap().add_player(&client_info);
             wrapper.mark_changed();
             wrapper
         } else {
             let (sender, receiver) = watch::channel(());
+            let mut game = AnyGame::new(mode);
+            game.add_player(&client_info);
             let wrapper = Arc::new(GameWrapper {
-                game: Mutex::new(AnyGame::new(
-                    mode,
-                    Player::new(client_id, &client_info.name),
-                )),
+                game: Mutex::new(game),
                 changed_sender: sender,
                 changed_receiver: receiver,
             });

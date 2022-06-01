@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::ansi;
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::lobby;
+use crate::lobby::ClientInfo;
 use crate::render;
 
 pub struct SquareContent {
@@ -11,18 +11,18 @@ pub struct SquareContent {
     pub colors: Color,
 }
 
-pub struct MovingBlock {
-    // Relatively big ints. In ring mode (not implemented yet) these just grow as the blocks wrap around.
-    pub center_x: i32,
-    pub center_y: i32,
-    pub relative_coords: Vec<(i8, i8)>,
-}
+// Relatively big ints in player coords because in ring mode they just grow as blocks wrap around.
+pub type PlayerPoint = (i32, i32);
+pub type WorldPoint = (i8, i8);
 
+pub struct MovingBlock {
+    pub center: PlayerPoint,
+    pub relative_coords: Vec<PlayerPoint>,
+}
 impl MovingBlock {
-    pub fn new(player_index: usize) -> MovingBlock {
+    pub fn new(spawn_location: PlayerPoint) -> MovingBlock {
         MovingBlock {
-            center_x: (10 * player_index + 5) as i32,
-            center_y: -1,
+            center: spawn_location,
             relative_coords: vec![(0, 0), (0, -1), (-1, 0), (-1, -1)],
         }
     }
@@ -38,24 +38,43 @@ impl MovingBlock {
 pub struct Player {
     pub client_id: u64,
     pub name: String,
+    color: u8,
     pub block: MovingBlock,
 }
 impl Player {
-    pub fn new(client_id: u64, name: &str) -> Player {
+    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo) -> Player {
         Player {
-            client_id,
-            name: name.to_string(),
-            block: MovingBlock::new(0),
+            client_id: client_info.client_id,
+            name: client_info.name.to_string(),
+            color: client_info.color,
+            block: MovingBlock::new(spawn_point),
         }
     }
 }
 
 pub trait Game {
-    fn add_player(&mut self, player: Player);
+    fn get_players(&self) -> &Vec<Player>;
+    fn add_player(&mut self, client_info: &ClientInfo);
     fn remove_player_if_exists(&mut self, client_id: u64);
-    fn player_count(&self) -> usize;
     fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent>;
+    fn world_to_player(&self, player_idx: usize, point: WorldPoint) -> (i32, i32);
+    fn player_to_world(&self, player_idx: usize, point: PlayerPoint) -> (i8, i8);
+    fn is_valid_moving_block_coords(&self, player_idx: usize, point: PlayerPoint) -> bool;
+    fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool;
+    fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool;
     fn render_to_buf(&self, buffer: &mut render::Buffer);
     fn move_blocks_down(&mut self);
     fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool;
+}
+
+fn new_block(game: &mut impl Game) {
+    panic!("not impl");
+}
+
+fn wipe_vertical_slice(game: &mut impl Game) {
+    panic!("not impl");
+}
+
+fn delete_points(game: &mut impl Game, points_to_delete: impl Iterator<Item = (i8, i8)>) {
+    panic!("not impl");
 }
