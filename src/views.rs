@@ -21,11 +21,9 @@ use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::client;
-use crate::game_logic;
-use crate::game_logic_base::Game;
-use crate::game_logic_base::GameMode;
-use crate::game_logic_base::ALL_GAME_MODES;
 use crate::lobby;
+use crate::logic_base::Game;
+use crate::modes::GameMode;
 use crate::render;
 
 const ASCII_ART: &[&str] = &[
@@ -368,7 +366,7 @@ pub async fn choose_game_mode(
     selected_index: &mut usize,
 ) -> Result<Option<GameMode>, io::Error> {
     let mut items = vec![];
-    items.resize(ALL_GAME_MODES.len(), None);
+    items.resize(GameMode::ALL_MODES.len(), None);
     items.push(None);
     items.push(Some("Gameplay tips".to_string()));
     items.push(Some("Quit".to_string()));
@@ -393,7 +391,7 @@ pub async fn choose_game_mode(
                 let lobby = idk_why_i_need_this.lock().unwrap();
                 render_lobby_status(client, &mut *render_data, &lobby);
 
-                for (i, mode) in ALL_GAME_MODES.iter().enumerate() {
+                for (i, mode) in GameMode::ALL_MODES.iter().enumerate() {
                     // TODO: game full error
                     menu.items[i] = Some(format!(
                         "{} ({}/{} players)",
@@ -422,7 +420,7 @@ pub async fn choose_game_mode(
                                     io::ErrorKind::ConnectionAborted,
                                     "user selected \"Quit\" in menu",
                                 )),
-                                _ => Ok(Some(ALL_GAME_MODES[menu.selected_index])),
+                                _ => Ok(Some(GameMode::ALL_MODES[menu.selected_index])),
                             };
                         }
                     }

@@ -1,19 +1,17 @@
-// TODO: rename to something like game_modes/traditional.rs
 use std::collections::HashMap;
 
 use crate::ansi;
-use crate::game_logic_base;
-use crate::game_logic_base::Game;
-use crate::game_logic_base::GameMode;
-use crate::game_logic_base::Player;
 use crate::lobby;
+use crate::logic_base::Game;
+use crate::logic_base::Player;
+use crate::logic_base::SquareContent;
 use crate::render;
 
 const WIDTH: usize = 10;
 const HEIGHT: usize = 20;
 
 pub struct TraditionalGame {
-    players: Vec<game_logic_base::Player>,
+    players: Vec<Player>,
 }
 
 impl TraditionalGame {
@@ -35,25 +33,13 @@ impl TraditionalGame {
         self.get_width_per_player() * self.players.len()
     }
 
-    pub fn move_blocks_down(&mut self) {
-        for player in &mut self.players {
-            for pair in &mut player.block.relative_coords {
-                // TODO: remove weird wrapping
-                if pair.1 > 25 {
-                    pair.1 = -5;
-                }
-                pair.1 += 1;
-            }
-        }
-    }
-
     fn player_to_world(&self, player_point: (i32, i32)) -> (i8, i8) {
         let (x, y) = player_point;
         (x as i8, y as i8)
     }
 }
 
-impl game_logic_base::Game for TraditionalGame {
+impl Game for TraditionalGame {
     fn add_player(&mut self, player: Player) {
         self.players.push(player);
     }
@@ -73,7 +59,7 @@ impl game_logic_base::Game for TraditionalGame {
         self.players.len()
     }
 
-    fn get_square_contents(&self) -> HashMap<(i8, i8), game_logic_base::SquareContent> {
+    fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
         let mut result = HashMap::new();
         for player in &self.players {
             for (x, y) in &player.block.relative_coords {
@@ -104,6 +90,18 @@ impl game_logic_base::Game for TraditionalGame {
                     buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.colors);
                     buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.colors);
                 }
+            }
+        }
+    }
+
+    fn move_blocks_down(&mut self) {
+        for player in &mut self.players {
+            for pair in &mut player.block.relative_coords {
+                // TODO: remove weird wrapping
+                if pair.1 > 25 {
+                    pair.1 = -5;
+                }
+                pair.1 += 1;
             }
         }
     }

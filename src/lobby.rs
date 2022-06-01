@@ -21,10 +21,10 @@ use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::client;
-use crate::game_logic;
-use crate::game_logic_base::Game;
-use crate::game_logic_base::Player;
-use crate::game_logic_base::GameMode;
+use crate::logic_base::Game;
+use crate::logic_base::Player;
+use crate::modes::AnyGame;
+use crate::modes::GameMode;
 use crate::render;
 use crate::views;
 
@@ -36,7 +36,7 @@ pub struct ClientInfo {
 }
 
 pub struct GameWrapper {
-    pub game: Mutex<game_logic::TraditionalGame>,
+    pub game: Mutex<AnyGame>,
     // change event triggers when re-rendering might be needed
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
@@ -70,7 +70,7 @@ pub struct Lobby {
     // change triggers when people join/leave the lobby or a game, and ui must refresh
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
-    game_wrapper: Weak<GameWrapper>,
+    game_wrappers: WeakValueHashMap<GameMode, Weak<GameWrapper>>,
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
@@ -84,21 +84,18 @@ impl Lobby {
             clients: vec![],
             changed_sender: sender,
             changed_receiver: receiver,
-            game_wrapper: Weak::new(),
+            game_wrappers: WeakValueHashMap::new(),
         }
     }
 
     pub fn get_player_count(&self, mode: GameMode) -> usize {
-        match mode {
-            GameMode::Traditional => match self.game_wrapper.upgrade() {
-                Some(wrapper) => {
-                    let n = wrapper.game.lock().unwrap().player_count();
-                    assert!(n > 0);
-                    n
-                }
-                None => 0,
-            },
-            _ => 0, // TODO
+        match self.game_wrappers.get(&mode) {
+            Some(wrapper) => {
+                let n = wrapper.game.lock().unwrap().player_count();
+                assert!(n > 0);
+                n
+            }
+            None => 0,
         }
     }
 
@@ -116,7 +113,11 @@ impl Lobby {
 
     pub fn add_client(&mut self, logger: client::ClientLogger, name: &str) {
         assert!(!self.lobby_is_full());
-        logger.log(&format!("Joining lobby with {} existing clients: {}", self.clients.len(), self.id));
+        logger.log(&format!(
+            "Joining lobby with {} existing clients: {}",
+            self.clients.len(),
+            self.id
+        ));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
@@ -133,7 +134,7 @@ impl Lobby {
     }
 
     pub fn remove_client(&mut self, client_id: u64) {
-        if let Some(wrapper) = self.game_wrapper.upgrade() {
+        for wrapper in self.game_wrappers.values() {
             wrapper
                 .game
                 .lock()
@@ -155,15 +156,13 @@ impl Lobby {
     }
 
     pub fn join_game(&mut self, client_id: u64, mode: GameMode) -> Arc<GameWrapper> {
-        assert!(mode == GameMode::Traditional);  // FIXME
-
         let client_info = self
             .clients
             .iter()
             .find(|info| info.client_id == client_id)
             .unwrap();
 
-        let wrapper = if let Some(wrapper) = self.game_wrapper.upgrade() {
+        let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             wrapper
                 .game
                 .lock()
@@ -172,19 +171,17 @@ impl Lobby {
             wrapper.mark_changed();
             wrapper
         } else {
-            assert!(self.game_wrapper.upgrade().is_none()); // TODO
             let (sender, receiver) = watch::channel(());
             let wrapper = Arc::new(GameWrapper {
-                game: Mutex::new(game_logic::TraditionalGame::new(
-                    Player::new(
-                    client_id,
-                    &client_info.name)
+                game: Mutex::new(AnyGame::new(
+                    mode,
+                    Player::new(client_id, &client_info.name),
                 )),
                 changed_sender: sender,
                 changed_receiver: receiver,
             });
             tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper)));
-            self.game_wrapper = Arc::downgrade(&wrapper);
+            self.game_wrappers.insert(mode, wrapper.clone());
             wrapper
         };
 
