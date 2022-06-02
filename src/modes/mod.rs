@@ -164,10 +164,10 @@ impl AnyGame {
             .iter()
             .position(|cell| cell.borrow().client_id == client_id)
             .unwrap();
-        let mut player = self.get_players()[player_idx].borrow_mut();
 
         let need_render = match key {
             KeyPress::Down | KeyPress::Character('S') | KeyPress::Character('s') => {
+                let mut player = self.get_players()[player_idx].borrow_mut();
                 player.fast_down = true;
                 return false;
             }
@@ -183,6 +183,7 @@ impl AnyGame {
             }
         };
 
+        let mut player = self.get_players()[player_idx].borrow_mut();
         player.fast_down = false;
         need_render
     }
