@@ -209,12 +209,6 @@ struct Menu {
     selected_index: usize,
 }
 
-fn case_insensitive_starts_with(s: &str, prefix: char) -> bool {
-    return s.len() != 0
-        && s.chars().next().unwrap().to_lowercase().to_string()
-            == prefix.to_lowercase().to_string();
-}
-
 impl Menu {
     fn selected_text(&self) -> &str {
         &self.items[self.selected_index].as_ref().unwrap()
@@ -256,7 +250,12 @@ impl Menu {
             ansi::KeyPress::Character(ch) => {
                 // pressing r selects Ring Game
                 for (i, item) in self.items.iter().enumerate() {
-                    if case_insensitive_starts_with(item.as_ref().unwrap_or(&"".to_string()), ch) {
+                    if item
+                        .as_ref()
+                        .unwrap_or(&"".to_string())
+                        .to_lowercase()
+                        .starts_with(&ch.to_lowercase().to_string())
+                    {
                         self.selected_index = i;
                         break;
                     }
