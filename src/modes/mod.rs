@@ -136,19 +136,22 @@ impl AnyGame {
         }
     }
 
-    pub fn move_blocks_down(&mut self) {
+    pub fn move_blocks_down(&mut self, fast: bool) {
         let mut landing = vec![];
 
         for (player_idx, player) in self.get_players().iter().enumerate() {
-            if !self.move_if_possible(player_idx, 0, 1) {
-                // land
-                let player_coords = player.borrow().block.get_player_coords();
-                for player_point in player_coords {
-                    let world_point = player.borrow().player_to_world(player_point);
-                    let square_contents = player.borrow().block.get_square_contents();
-                    landing.push((world_point, square_contents));
+            if player.borrow().fast_down == fast {
+                if !self.move_if_possible(player_idx, 0, 1) {
+                    // land
+                    let player_coords = player.borrow().block.get_player_coords();
+                    for player_point in player_coords {
+                        let world_point = player.borrow().player_to_world(player_point);
+                        let square_contents = player.borrow().block.get_square_contents();
+                        landing.push((world_point, square_contents));
+                    }
+                    player.borrow_mut().fast_down = false;
+                    player.borrow_mut().new_block();
                 }
-                player.borrow_mut().new_block();
             }
         }
 
@@ -156,21 +159,31 @@ impl AnyGame {
     }
 
     pub fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {
-        println!("Key Press!! {:?}", key);
         let player_idx = self
             .get_players()
             .iter()
             .position(|cell| cell.borrow().client_id == client_id)
             .unwrap();
+        let mut player = self.get_players()[player_idx].borrow_mut();
 
-        match key {
+        let need_render = match key {
+            KeyPress::Down | KeyPress::Character('S') | KeyPress::Character('s') => {
+                player.fast_down = true;
+                return false;
+            }
             KeyPress::Left | KeyPress::Character('A') | KeyPress::Character('a') => {
                 self.move_if_possible(player_idx, -1, 0)
             }
             KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') => {
                 self.move_if_possible(player_idx, 1, 0)
             }
-            _ => false,
-        }
+            _ => {
+                println!("Unhandled Key Press!! {:?}", key);
+                false
+            }
+        };
+
+        player.fast_down = false;
+        need_render
     }
 }

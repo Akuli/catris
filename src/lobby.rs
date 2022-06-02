@@ -48,13 +48,13 @@ impl GameWrapper {
     }
 }
 
-async fn move_blocks_down(wrapper: Weak<GameWrapper>) {
+async fn move_blocks_down(wrapper: Weak<GameWrapper>, fast: bool) {
     loop {
-        sleep(Duration::from_millis(400)).await;
+        sleep(Duration::from_millis(if fast { 25 } else { 400 })).await;
         match wrapper.upgrade() {
             Some(wrapper) => {
                 let mut game = wrapper.game.lock().unwrap();
-                game.move_blocks_down();
+                game.move_blocks_down(fast);
                 wrapper.mark_changed();
             }
             None => return,
@@ -173,7 +173,8 @@ impl Lobby {
                 changed_sender: sender,
                 changed_receiver: receiver,
             });
-            tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper)));
+            tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
+            tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
             self.game_wrappers.insert(mode, wrapper.clone());
             wrapper
         };

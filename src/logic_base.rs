@@ -53,6 +53,7 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block: MovingBlock,
+    pub fast_down: bool,
 }
 impl Player {
     pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo) -> Player {
@@ -62,6 +63,7 @@ impl Player {
             color: client_info.color,
             spawn_point: spawn_point,
             block: MovingBlock::new(spawn_point),
+            fast_down: false,
         }
     }
 
