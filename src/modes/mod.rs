@@ -83,7 +83,12 @@ impl AnyGame {
         }
     }
 
-    fn get_moved_relative_coords(&self, player_idx: usize, dx: i32, dy: i32) -> Option<Vec<PlayerPoint>> {
+    fn get_moved_relative_coords(
+        &self,
+        player_idx: usize,
+        dx: i32,
+        dy: i32,
+    ) -> Option<Vec<PlayerPoint>> {
         let square_contents = self.get_square_contents(Some(player_idx));
         let player = self.get_players()[player_idx].borrow();
 
@@ -121,10 +126,14 @@ impl AnyGame {
 
     fn move_if_possible(&self, player_idx: usize, dx: i32, dy: i32) -> bool {
         if let Some(coords) = self.get_moved_relative_coords(player_idx, dx, dy) {
-            self.get_players()[player_idx].borrow_mut().block.relative_coords = coords;
+            self.get_players()[player_idx]
+                .borrow_mut()
+                .block
+                .relative_coords = coords;
             true
+        } else {
+            false
         }
-        else {false}
     }
 
     pub fn move_blocks_down(&mut self) {
@@ -158,9 +167,13 @@ impl AnyGame {
             .unwrap();
 
         match key {
-            KeyPress::Left | KeyPress::Character('A') | KeyPress::Character('a') =>self.move_if_possible(player_idx, -1, 0),
-            KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') =>self.move_if_possible(player_idx, 1, 0),
-            _ =>false,
+            KeyPress::Left | KeyPress::Character('A') | KeyPress::Character('a') => {
+                self.move_if_possible(player_idx, -1, 0)
+            }
+            KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') => {
+                self.move_if_possible(player_idx, 1, 0)
+            }
+            _ => false,
         }
     }
 }
