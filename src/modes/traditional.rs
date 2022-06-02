@@ -62,8 +62,12 @@ impl Game for TraditionalGame {
         }
     }
 
-    fn get_players(&mut self) -> &mut [Player] {
-        &mut self.players
+    fn get_players(&mut self) -> Vec<&mut Player> {
+        let mut result = vec![];
+        for player in &mut self.players {
+            result.push(player);
+        }
+        result
     }
 
     fn get_landed_squares(&mut self) -> &mut HashMap<WorldPoint, SquareContent> {
@@ -97,7 +101,8 @@ impl Game for TraditionalGame {
     }
 
     fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
-        let mut result = HashMap::new();
+        let mut result: HashMap<(i8, i8), SquareContent> = HashMap::new();
+        result.extend(&self.landed_squares);
         for player in &self.players {
             let (center_x, center_y) = player.block.center;
             for (x, y) in &player.block.relative_coords {

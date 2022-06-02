@@ -57,7 +57,7 @@ impl AnyGame {
 }
 
 impl Game for AnyGame {
-    fn get_players(&mut self) -> &mut [Player] {
+    fn get_players(&mut self) -> Vec<&mut Player> {
         match self {
             AnyGame::Traditional(game) => game.get_players(),
         }
