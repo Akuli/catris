@@ -140,11 +140,8 @@ impl AnyGame {
         let mut landing = vec![];
 
         for (player_idx, player) in self.get_players().iter().enumerate() {
-            if let Some(coords) = self.get_moved_relative_coords(player_idx, 0, 1) {
-                // Move down
-                player.borrow_mut().block.relative_coords = coords;
-            } else {
-                // Can't move down, give new block
+            if !self.move_if_possible(player_idx, 0, 1) {
+                // land
                 let player_coords = player.borrow().block.get_player_coords();
                 for player_point in player_coords {
                     let world_point = player.borrow().player_to_world(player_point);
