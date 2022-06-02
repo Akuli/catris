@@ -82,11 +82,14 @@ impl Game for TraditionalGame {
             && x < ((player_idx + 1) * self.get_width_per_player()) as i8
     }
 
-    fn get_square_contents(&self, exclude: Option<&Player>) -> HashMap<(i8, i8), SquareContent> {
+    fn get_square_contents(
+        &self,
+        exclude_player_idx: Option<usize>,
+    ) -> HashMap<(i8, i8), SquareContent> {
         let mut result: HashMap<(i8, i8), SquareContent> = HashMap::new();
         result.extend(&self.landed_squares);
-        for player in &self.players {
-            if exclude.map(|p| p.client_id) == Some(player.borrow().client_id) {
+        for (i, player) in self.players.iter().enumerate() {
+            if Some(i) == exclude_player_idx {
                 continue;
             }
 

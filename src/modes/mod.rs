@@ -75,9 +75,12 @@ impl Game for AnyGame {
             AnyGame::Traditional(game) => game.remove_player_if_exists(client_id),
         }
     }
-    fn get_square_contents(&self, exclude: Option<&Player>) -> HashMap<(i8, i8), SquareContent> {
+    fn get_square_contents(
+        &self,
+        exclude_player_idx: Option<usize>,
+    ) -> HashMap<(i8, i8), SquareContent> {
         match self {
-            AnyGame::Traditional(game) => game.get_square_contents(exclude),
+            AnyGame::Traditional(game) => game.get_square_contents(exclude_player_idx),
         }
     }
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {

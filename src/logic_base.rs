@@ -17,6 +17,7 @@ pub struct SquareContent {
 pub type PlayerPoint = (i32, i32);
 pub type WorldPoint = (i8, i8);
 
+#[derive(Debug)]
 pub struct MovingBlock {
     pub center: PlayerPoint,
     pub relative_coords: Vec<PlayerPoint>,
@@ -45,6 +46,7 @@ impl MovingBlock {
     }
 }
 
+#[derive(Debug)]
 pub struct Player {
     pub client_id: u64,
     pub name: String,
@@ -86,7 +88,10 @@ pub trait Game {
     fn get_landed_squares(&mut self) -> &mut HashMap<WorldPoint, SquareContent>;
     fn add_player(&mut self, client_info: &ClientInfo);
     fn remove_player_if_exists(&mut self, client_id: u64);
-    fn get_square_contents(&self, exclude: Option<&Player>) -> HashMap<(i8, i8), SquareContent>;
+    fn get_square_contents(
+        &self,
+        exclude_player_idx: Option<usize>,
+    ) -> HashMap<(i8, i8), SquareContent>;
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool;
     fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool;
     fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool;
@@ -102,10 +107,12 @@ pub fn delete_points(_: &mut impl Game, _: impl Iterator<Item = (i8, i8)>) {
 }
 
 pub fn move_blocks_down(game: &mut impl Game) {
-    let square_contents = game.get_square_contents(None); // FIXME
+    let square_contents: Vec<HashMap<(i8, i8), SquareContent>> = (0..game.get_players().len())
+        .map(|i| game.get_square_contents(Some(i)))
+        .collect();
     let mut landing = vec![];
 
-    for player in game.get_players() {
+    for (player, square_contents) in game.get_players().iter().zip(square_contents) {
         let new_relative_coords: Vec<PlayerPoint> = player
             .borrow()
             .block
