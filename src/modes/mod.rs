@@ -1,4 +1,6 @@
-mod traditional;
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use crate::ansi::KeyPress;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
@@ -9,7 +11,8 @@ use crate::logic_base::SquareContent;
 use crate::logic_base::WorldPoint;
 use crate::modes::traditional::TraditionalGame;
 use crate::render;
-use std::collections::HashMap;
+
+mod traditional;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum GameMode {
@@ -57,7 +60,7 @@ impl AnyGame {
 }
 
 impl Game for AnyGame {
-    fn get_players(&mut self) -> Vec<&mut Player> {
+    fn get_players(&self) -> &[RefCell<Player>] {
         match self {
             AnyGame::Traditional(game) => game.get_players(),
         }
@@ -72,24 +75,14 @@ impl Game for AnyGame {
             AnyGame::Traditional(game) => game.remove_player_if_exists(client_id),
         }
     }
-    fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
+    fn get_square_contents(&self, exclude: Option<&Player>) -> HashMap<(i8, i8), SquareContent> {
         match self {
-            AnyGame::Traditional(game) => game.get_square_contents(),
+            AnyGame::Traditional(game) => game.get_square_contents(exclude),
         }
     }
-    fn world_to_player(&self, player_idx: usize, point: WorldPoint) -> (i32, i32) {
+    fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
         match self {
-            AnyGame::Traditional(game) => game.world_to_player(player_idx, point),
-        }
-    }
-    fn player_to_world(&self, player_idx: usize, point: PlayerPoint) -> (i8, i8) {
-        match self {
-            AnyGame::Traditional(game) => game.player_to_world(player_idx, point),
-        }
-    }
-    fn is_valid_moving_block_coords(&self, player_idx: usize, point: PlayerPoint) -> bool {
-        match self {
-            AnyGame::Traditional(game) => game.is_valid_moving_block_coords(player_idx, point),
+            AnyGame::Traditional(game) => game.is_valid_moving_block_coords(point),
         }
     }
     fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::ansi;
@@ -12,7 +13,7 @@ use crate::render;
 const HEIGHT: usize = 20;
 
 pub struct TraditionalGame {
-    players: Vec<Player>,
+    players: Vec<RefCell<Player>>,
     landed_squares: HashMap<WorldPoint, SquareContent>,
 }
 
@@ -35,11 +36,6 @@ impl TraditionalGame {
     fn get_width(&self) -> usize {
         self.get_width_per_player() * self.players.len()
     }
-
-    fn player_to_world(&self, player_point: (i32, i32)) -> (i8, i8) {
-        let (x, y) = player_point;
-        (x as i8, y as i8)
-    }
 }
 
 impl Game for TraditionalGame {
@@ -47,7 +43,7 @@ impl Game for TraditionalGame {
         let new_width_per_player = if self.players.len() == 0 { 10 } else { 7 };
         let spawn_x = self.players.len() * new_width_per_player + new_width_per_player / 2;
         self.players
-            .push(Player::new((spawn_x as i32, -1), client_info));
+            .push(RefCell::new(Player::new((spawn_x as i32, -1), client_info)));
         assert!(self.get_width_per_player() == new_width_per_player);
     }
 
@@ -56,35 +52,21 @@ impl Game for TraditionalGame {
         if let Some(i) = self
             .players
             .iter()
-            .position(|info| info.client_id == client_id)
+            .position(|info| info.borrow().client_id == client_id)
         {
             self.players.remove(i);
         }
     }
 
-    fn get_players(&mut self) -> Vec<&mut Player> {
-        let mut result = vec![];
-        for player in &mut self.players {
-            result.push(player);
-        }
-        result
+    fn get_players(&self) -> &[RefCell<Player>] {
+        &self.players
     }
 
     fn get_landed_squares(&mut self) -> &mut HashMap<WorldPoint, SquareContent> {
         &mut self.landed_squares
     }
 
-    fn world_to_player(&self, _player_idx: usize, point: WorldPoint) -> PlayerPoint {
-        let (x, y) = point;
-        (x as i32, y as i32)
-    }
-
-    fn player_to_world(&self, _player_idx: usize, point: PlayerPoint) -> WorldPoint {
-        let (x, y) = point;
-        (x as i8, y as i8)
-    }
-
-    fn is_valid_moving_block_coords(&self, _player_idx: usize, point: PlayerPoint) -> bool {
+    fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, y) = point;
         0 <= x && x < (self.get_width() as i32) && y < (HEIGHT as i32)
     }
@@ -100,16 +82,20 @@ impl Game for TraditionalGame {
             && x < ((player_idx + 1) * self.get_width_per_player()) as i8
     }
 
-    fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent> {
+    fn get_square_contents(&self, exclude: Option<&Player>) -> HashMap<(i8, i8), SquareContent> {
         let mut result: HashMap<(i8, i8), SquareContent> = HashMap::new();
         result.extend(&self.landed_squares);
         for player in &self.players {
-            let (center_x, center_y) = player.block.center;
-            for (x, y) in &player.block.relative_coords {
+            if exclude.map(|p| p.client_id) == Some(player.borrow().client_id) {
+                continue;
+            }
+
+            let (center_x, center_y) = player.borrow().block.center;
+            for (x, y) in &player.borrow().block.relative_coords {
                 let player_point: PlayerPoint = (*x + center_x, *y + center_y);
                 result.insert(
-                    self.player_to_world(player_point),
-                    player.block.get_square_contents(),
+                    player.borrow().player_to_world(player_point),
+                    player.borrow().block.get_square_contents(),
                 );
             }
         }
@@ -118,7 +104,7 @@ impl Game for TraditionalGame {
     }
 
     fn render_to_buf(&self, buffer: &mut render::Buffer) {
-        let square_contents = self.get_square_contents();
+        let square_contents = self.get_square_contents(None);
 
         for y in 0..HEIGHT {
             buffer.set_char(0, y, '|');
