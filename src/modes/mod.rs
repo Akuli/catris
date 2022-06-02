@@ -73,7 +73,9 @@ impl AnyGame {
         }
     }
 
-    pub fn get_player_count(&self) -> usize { self.get_players().len()}
+    pub fn get_player_count(&self) -> usize {
+        self.get_players().len()
+    }
 
     fn get_landed_squares(&mut self) -> &mut HashMap<(i8, i8), SquareContent> {
         match self {
@@ -81,42 +83,59 @@ impl AnyGame {
         }
     }
 
-    pub fn move_blocks_down(&mut self) {
-        let square_contents: Vec<HashMap<(i8, i8), SquareContent>> = (0..self.get_players().len())
-            .map(|i| self.get_square_contents(Some(i)))
+    fn get_moved_relative_coords(&self, player_idx: usize, dx: i32, dy: i32) -> Option<Vec<PlayerPoint>> {
+        let square_contents = self.get_square_contents(Some(player_idx));
+        let player = self.get_players()[player_idx].borrow();
+
+        let new_relative_coords: Vec<PlayerPoint> = player
+            .block
+            .relative_coords
+            .iter()
+            .map(|(x, y)| (x + dx, y + dy))
             .collect();
+        let (spawn_x, spawn_y) = player.spawn_point;
+        let new_player_coords: Vec<PlayerPoint> = new_relative_coords
+            .iter()
+            .map(|(relative_x, relative_y)| (spawn_x + relative_x, spawn_y + relative_y))
+            .collect();
+
+        let can_move = new_player_coords.iter().all(|p| {
+            let stays_in_bounds = self.is_valid_moving_block_coords(*p);
+            let goes_on_top_of_something =
+                square_contents.contains_key(&player.player_to_world(*p));
+            if !stays_in_bounds {
+                println!("out uf bounds");
+            }
+            if goes_on_top_of_something {
+                println!("goes on top of something");
+            }
+            stays_in_bounds && !goes_on_top_of_something
+        });
+
+        if can_move {
+            Some(new_relative_coords)
+        } else {
+            None
+        }
+    }
+
+    fn move_if_possible(&self, player_idx: usize, dx: i32, dy: i32) -> bool {
+        if let Some(coords) = self.get_moved_relative_coords(player_idx, dx, dy) {
+            self.get_players()[player_idx].borrow_mut().block.relative_coords = coords;
+            true
+        }
+        else {false}
+    }
+
+    pub fn move_blocks_down(&mut self) {
         let mut landing = vec![];
 
-        for (player, square_contents) in self.get_players().iter().zip(square_contents) {
-            let new_relative_coords: Vec<PlayerPoint> = player
-                .borrow()
-                .block
-                .relative_coords
-                .iter()
-                .map(|(x, y)| (*x, y + 1))
-                .collect();
-            let (spawn_x, spawn_y) = player.borrow().spawn_point;
-            let new_player_coords: Vec<PlayerPoint> = new_relative_coords
-                .iter()
-                .map(|(dx, dy)| (spawn_x + dx, spawn_y + dy))
-                .collect();
-
-            let can_move = new_player_coords.iter().all(|p| {
-                let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-                let goes_on_top_of_something =
-                    square_contents.contains_key(&player.borrow().player_to_world(*p));
-                if !stays_in_bounds {
-                    println!("out uf bounds");
-                }
-                if goes_on_top_of_something {
-                    println!("goes on top of something");
-                }
-                stays_in_bounds && !goes_on_top_of_something
-            });
-
-            if can_move {
-                player.borrow_mut().block.relative_coords = new_relative_coords;
+        for (player_idx, player) in self.get_players().iter().enumerate() {
+            if let Some(coords) = self.get_moved_relative_coords(player_idx, 0, 1) {
+                // Move down
+                player.borrow_mut().block.relative_coords = coords;
             } else {
+                // Can't move down, give new block
                 let player_coords = player.borrow().block.get_player_coords();
                 for player_point in player_coords {
                     let world_point = player.borrow().player_to_world(player_point);
@@ -130,8 +149,18 @@ impl AnyGame {
         self.get_landed_squares().extend(landing);
     }
 
-    pub fn handle_key_press(&mut self, _client_id: u64, key: KeyPress) -> bool {
+    pub fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {
         println!("Key Press!! {:?}", key);
-        false
+        let player_idx = self
+            .get_players()
+            .iter()
+            .position(|cell| cell.borrow().client_id == client_id)
+            .unwrap();
+
+        match key {
+            KeyPress::Left | KeyPress::Character('A') | KeyPress::Character('a') =>self.move_if_possible(player_idx, -1, 0),
+            KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') =>self.move_if_possible(player_idx, 1, 0),
+            _ =>false,
+        }
     }
 }
