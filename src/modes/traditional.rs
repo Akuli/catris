@@ -13,12 +13,14 @@ const HEIGHT: usize = 20;
 
 pub struct TraditionalGame {
     players: Vec<Player>,
+    landed_squares: HashMap<WorldPoint, SquareContent>,
 }
 
 impl TraditionalGame {
     pub fn new() -> TraditionalGame {
         TraditionalGame {
             players: vec![],
+            landed_squares: HashMap::new(),
         }
     }
 
@@ -60,8 +62,12 @@ impl Game for TraditionalGame {
         }
     }
 
-    fn get_players(&self) -> &Vec<Player> {
-        &self.players
+    fn get_players(&mut self) -> &mut [Player] {
+        &mut self.players
+    }
+
+    fn get_landed_squares(&mut self) -> &mut HashMap<WorldPoint, SquareContent> {
+        &mut self.landed_squares
     }
 
     fn world_to_player(&self, _player_idx: usize, point: WorldPoint) -> PlayerPoint {
@@ -120,22 +126,5 @@ impl Game for TraditionalGame {
                 }
             }
         }
-    }
-
-    fn move_blocks_down(&mut self) {
-        for player in &mut self.players {
-            for pair in &mut player.block.relative_coords {
-                // TODO: remove weird wrapping
-                if pair.1 > 25 {
-                    pair.1 = -5;
-                }
-                pair.1 += 1;
-            }
-        }
-    }
-
-    fn handle_key_press(&mut self, client_id: u64, key: ansi::KeyPress) -> bool {
-        println!("client {} pressed {:?}", client_id, key);
-        false
     }
 }

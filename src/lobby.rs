@@ -21,6 +21,7 @@ use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::client;
+use crate::logic_base;
 use crate::logic_base::Game;
 use crate::logic_base::Player;
 use crate::modes::AnyGame;
@@ -53,10 +54,8 @@ async fn move_blocks_down(wrapper: Weak<GameWrapper>) {
         sleep(Duration::from_millis(400)).await;
         match wrapper.upgrade() {
             Some(wrapper) => {
-                {
-                    let mut game = wrapper.game.lock().unwrap();
-                    game.move_blocks_down();
-                }
+                let mut game = wrapper.game.lock().unwrap();
+                logic_base::move_blocks_down(&mut *game);
                 wrapper.mark_changed();
             }
             None => return,

@@ -24,7 +24,6 @@ checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
 name = "catris-rs"
 version = "0.1.0"
 dependencies = [
- "impl-enum",
  "rand",
  "tokio",
  "weak-table",
@@ -54,16 +53,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "impl-enum"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcf669990de016afa11e8cf922127c3ea8e817c0f0639aee9ad2906539e8a5bb"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]

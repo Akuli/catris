@@ -53,7 +53,8 @@ impl Player {
 }
 
 pub trait Game {
-    fn get_players(&self) -> &Vec<Player>;
+    fn get_players(&mut self) -> &mut [Player];
+    fn get_landed_squares(&mut self) -> &mut HashMap<WorldPoint, SquareContent>;
     fn add_player(&mut self, client_info: &ClientInfo);
     fn remove_player_if_exists(&mut self, client_id: u64);
     fn get_square_contents(&self) -> HashMap<(i8, i8), SquareContent>;
@@ -63,18 +64,33 @@ pub trait Game {
     fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool;
     fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool;
     fn render_to_buf(&self, buffer: &mut render::Buffer);
-    fn move_blocks_down(&mut self);
-    fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool;
 }
 
 fn new_block(game: &mut impl Game) {
     panic!("not impl");
 }
 
-fn wipe_vertical_slice(game: &mut impl Game) {
+pub fn wipe_vertical_slice(game: &mut impl Game) {
     panic!("not impl");
 }
 
-fn delete_points(game: &mut impl Game, points_to_delete: impl Iterator<Item = (i8, i8)>) {
+pub fn delete_points(game: &mut impl Game, points_to_delete: impl Iterator<Item = (i8, i8)>) {
     panic!("not impl");
+}
+
+pub fn move_blocks_down(game: &mut impl Game) {
+    // TODO: rewrite the whole func
+    for player in game.get_players() {
+        for pair in &mut player.block.relative_coords {
+            if pair.1 > 25 {
+                pair.1 = -5;
+            }
+            pair.1 += 1;
+        }
+    }
+}
+
+pub fn handle_key_press(game: &mut impl Game, client_id: u64, key: KeyPress) -> bool {
+    println!("Key Press!! {:?}", key);
+    false
 }

@@ -9,4 +9,3 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 weak-table = "*"
 rand = "*"
-impl-enum = "*"
