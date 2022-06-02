@@ -23,7 +23,6 @@ use crate::ansi;
 use crate::client;
 use crate::lobby;
 use crate::logic_base;
-use crate::logic_base::Game;
 use crate::modes::GameMode;
 use crate::render;
 
@@ -529,7 +528,7 @@ pub async fn play_game(client: &mut client::Client, mode: GameMode) -> Result<()
                 result.unwrap();  // should not be an error
             }
             key = client.receive_key_press() => {
-                if logic_base::handle_key_press(&mut *game_wrapper.game.lock().unwrap(), client.id, key?) {
+                if game_wrapper.game.lock().unwrap().handle_key_press(client.id, key?) {
                     game_wrapper.mark_changed();
                 }
             }

@@ -22,7 +22,6 @@ use weak_table::WeakValueHashMap;
 use crate::ansi;
 use crate::client;
 use crate::logic_base;
-use crate::logic_base::Game;
 use crate::logic_base::Player;
 use crate::modes::AnyGame;
 use crate::modes::GameMode;
@@ -55,7 +54,7 @@ async fn move_blocks_down(wrapper: Weak<GameWrapper>) {
         match wrapper.upgrade() {
             Some(wrapper) => {
                 let mut game = wrapper.game.lock().unwrap();
-                logic_base::move_blocks_down(&mut *game);
+                game.move_blocks_down();
                 wrapper.mark_changed();
             }
             None => return,
@@ -90,7 +89,7 @@ impl Lobby {
     pub fn get_player_count(&self, mode: GameMode) -> usize {
         match self.game_wrappers.get(&mode) {
             Some(wrapper) => {
-                let n = wrapper.game.lock().unwrap().get_players().len();
+                let n = wrapper.game.lock().unwrap().get_player_count();
                 assert!(n > 0);
                 n
             }
