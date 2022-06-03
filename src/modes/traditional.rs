@@ -116,7 +116,7 @@ impl TraditionalGame {
                 *point,
                 SquareContent {
                     text: [' ', ' '],
-                    colors: Color { fg: 0, bg: *color },
+                    color: Color { fg: 0, bg: *color },
                 },
             );
         }
@@ -133,8 +133,8 @@ impl TraditionalGame {
 
             for x in 0..self.get_width() {
                 if let Some(content) = square_contents.get(&(x as i8, y as i8)) {
-                    buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.colors);
-                    buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.colors);
+                    buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.color);
+                    buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.color);
                 }
             }
         }

@@ -20,7 +20,7 @@ pub fn move_cursor_horizontally(x: usize) -> String {
     format!("\x1b[{}G", x + 1)
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Color {
     pub fg: u8,
     pub bg: u8,
@@ -35,7 +35,12 @@ impl Color {
     pub const CYAN_FOREGROUND: Color = Color { fg: 35, bg: 0 };
     pub const PURPLE_FOREGROUND: Color = Color { fg: 36, bg: 0 };
 
+    pub const RED_BACKGROUND: Color = Color { fg: 0, bg: 41 };
+    pub const GREEN_BACKGROUND: Color = Color { fg: 0, bg: 42 };
     pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
+    pub const BLUE_BACKGROUND: Color = Color { fg: 0, bg: 44 };
+    pub const PURPLE_BACKGROUND: Color = Color { fg: 0, bg: 45 };
+    pub const CYAN_BACKGROUND: Color = Color { fg: 0, bg: 46 };
     pub const WHITE_BACKGROUND: Color = Color { fg: 0, bg: 47 };
 
     pub fn escape_sequence(self) -> String {
