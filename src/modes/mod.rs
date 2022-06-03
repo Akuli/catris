@@ -86,51 +86,36 @@ impl AnyGame {
         self.get_players().len()
     }
 
-    fn get_moved_relative_coords(
-        &self,
-        player_idx: usize,
-        dx: i32,
-        dy: i32,
-    ) -> Option<Vec<PlayerPoint>> {
+    fn move_if_possible(&self, player_idx: usize, dx: i8, dy: i8) -> bool {
         let square_contents = self.get_square_contents(Some(player_idx));
-        let player = self.get_players()[player_idx].borrow();
-
-        let new_relative_coords: Vec<PlayerPoint> = player
-            .block
-            .relative_coords
-            .iter()
-            .map(|(x, y)| (x + dx, y + dy))
-            .collect();
-        let (spawn_x, spawn_y) = player.spawn_point;
-        let new_player_coords: Vec<PlayerPoint> = new_relative_coords
-            .iter()
-            .map(|(relative_x, relative_y)| (spawn_x + relative_x, spawn_y + relative_y))
-            .collect();
-
-        let can_move = new_player_coords.iter().all(|p| {
+        let player = &self.get_players()[player_idx];
+        let coords = player.borrow().block.get_moved_coords(dx, dy);
+        let can_move = coords.iter().all(|p| {
             let stays_in_bounds = self.is_valid_moving_block_coords(*p);
             let goes_on_top_of_something =
-                square_contents.contains_key(&player.player_to_world(*p));
+                square_contents.contains_key(&player.borrow().player_to_world(*p));
             stays_in_bounds && !goes_on_top_of_something
         });
-
         if can_move {
-            Some(new_relative_coords)
-        } else {
-            None
+            player.borrow_mut().block.m0v3(dx, dy);
         }
+        can_move
     }
 
-    fn move_if_possible(&self, player_idx: usize, dx: i32, dy: i32) -> bool {
-        if let Some(coords) = self.get_moved_relative_coords(player_idx, dx, dy) {
-            self.get_players()[player_idx]
-                .borrow_mut()
-                .block
-                .relative_coords = coords;
-            true
-        } else {
-            false
+    fn rotate_if_possible(&self, player_idx: usize) -> bool {
+        let square_contents = self.get_square_contents(Some(player_idx));
+        let player = &self.get_players()[player_idx];
+        let coords = player.borrow().block.get_rotated_coords();
+        let can_rotate = coords.iter().all(|p| {
+            let stays_in_bounds = self.is_valid_moving_block_coords(*p);
+            let goes_on_top_of_something =
+                square_contents.contains_key(&player.borrow().player_to_world(*p));
+            stays_in_bounds && !goes_on_top_of_something
+        });
+        if can_rotate {
+            player.borrow_mut().block.rotate();
         }
+        can_rotate
     }
 
     pub fn move_blocks_down(&mut self, fast: bool) {
@@ -175,6 +160,9 @@ impl AnyGame {
             }
             KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') => {
                 self.move_if_possible(player_idx, 1, 0)
+            }
+            KeyPress::Up | KeyPress::Character('W') | KeyPress::Character('w') => {
+                self.rotate_if_possible(player_idx)
             }
             _ => {
                 println!("Unhandled Key Press!! {:?}", key);

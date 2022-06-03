@@ -103,11 +103,9 @@ impl TraditionalGame {
                 continue;
             }
 
-            let (center_x, center_y) = player.borrow().block.center;
             let contents = player.borrow().block.get_square_contents();
-            for (x, y) in &player.borrow().block.relative_coords {
-                let player_point: PlayerPoint = (*x + center_x, *y + center_y);
-                result.insert(player.borrow().player_to_world(player_point), contents);
+            for player_point in &player.borrow().block.get_player_coords() {
+                result.insert(player.borrow().player_to_world(*player_point), contents);
             }
         }
 
