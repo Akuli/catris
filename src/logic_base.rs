@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::ansi;
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::lobby::ClientInfo;
@@ -33,7 +32,7 @@ impl MovingBlock {
     pub fn get_square_contents(&self) -> SquareContent {
         SquareContent {
             text: [' ', ' '],
-            colors: ansi::YELLOW_BACKGROUND,
+            colors: Color::YELLOW_BACKGROUND,
         }
     }
 

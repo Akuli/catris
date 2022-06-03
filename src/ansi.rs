@@ -26,17 +26,18 @@ pub struct Color {
     pub bg: u8,
 }
 
-pub const DEFAULT_COLOR: Color = Color { fg: 0, bg: 0 };
-pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
-
-pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
-pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
-pub const PURPLE_FOREGROUND: Color = Color { fg: 36, bg: 0 };
-pub const CYAN_FOREGROUND: Color = Color { fg: 35, bg: 0 };
-
-pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
-
 impl Color {
+    pub const DEFAULT: Color = Color { fg: 0, bg: 0 };
+    pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
+    pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
+
+    pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
+    pub const CYAN_FOREGROUND: Color = Color { fg: 35, bg: 0 };
+    pub const PURPLE_FOREGROUND: Color = Color { fg: 36, bg: 0 };
+
+    pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
+    pub const WHITE_BACKGROUND: Color = Color { fg: 0, bg: 47 };
+
     pub fn escape_sequence(self) -> String {
         let mut result = RESET_COLORS.to_string();
         if self.fg != 0 {

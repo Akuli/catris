@@ -34,7 +34,7 @@ async fn handle_receiving(
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
-    views::ask_name(&mut client, used_names.clone()).await?;
+    views::ask_name(&mut client, used_names).await?;
     client
         .logger()
         .log(&format!("Name asking done: {}", client.get_name()));

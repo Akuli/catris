@@ -44,7 +44,7 @@ impl Buffer {
                 row.resize(width, ' ');
             }
             for row in &mut self.colors {
-                row.resize(width, ansi::DEFAULT_COLOR);
+                row.resize(width, ansi::Color::DEFAULT);
             }
         }
 
@@ -52,7 +52,7 @@ impl Buffer {
             let mut blank_chars_row = vec![];
             let mut blank_colors_row = vec![];
             blank_chars_row.resize(width, ' ');
-            blank_colors_row.resize(width, ansi::DEFAULT_COLOR);
+            blank_colors_row.resize(width, ansi::Color::DEFAULT);
             self.chars.resize(height, blank_chars_row);
             self.colors.resize(height, blank_colors_row);
         }
@@ -62,7 +62,7 @@ impl Buffer {
     }
 
     pub fn set_char(&mut self, x: usize, y: usize, ch: char) {
-        self.set_char_with_color(x, y, ch, ansi::DEFAULT_COLOR);
+        self.set_char_with_color(x, y, ch, ansi::Color::DEFAULT);
     }
     pub fn set_char_with_color(&mut self, x: usize, y: usize, ch: char, colors: ansi::Color) {
         self.chars[y][x] = ch;
@@ -70,7 +70,7 @@ impl Buffer {
     }
 
     pub fn add_text(&mut self, x: usize, y: usize, text: &str) -> usize {
-        self.add_text_with_color(x, y, text, ansi::DEFAULT_COLOR)
+        self.add_text_with_color(x, y, text, ansi::Color::DEFAULT)
     }
     pub fn add_text_with_color(
         &mut self,
@@ -88,7 +88,7 @@ impl Buffer {
     }
 
     pub fn add_centered_text(&mut self, y: usize, text: &str) {
-        self.add_centered_text_with_color(y, text, ansi::DEFAULT_COLOR);
+        self.add_centered_text_with_color(y, text, ansi::Color::DEFAULT);
     }
     pub fn add_centered_text_with_color(&mut self, y: usize, text: &str, colors: ansi::Color) {
         let n = text.chars().count();
@@ -115,7 +115,7 @@ impl Buffer {
     }
 
     fn clear_and_render_entire_screen(&self) -> String {
-        let mut current_color = ansi::DEFAULT_COLOR;
+        let mut current_color = ansi::Color::DEFAULT;
         let mut result = "".to_string();
 
         result.push_str(&ansi::resize_terminal(self.width, self.height));
@@ -130,7 +130,7 @@ impl Buffer {
                 result.push(self.chars[y][x]);
             }
         }
-        if current_color != ansi::DEFAULT_COLOR {
+        if current_color != ansi::Color::DEFAULT {
             result.push_str(&ansi::RESET_COLORS);
         }
         result
@@ -158,12 +158,12 @@ impl Buffer {
             let mut end = self.width;
             while end > 0
                 && self.chars[y][end - 1] == ' '
-                && self.colors[y][end - 1] == ansi::DEFAULT_COLOR
+                && self.colors[y][end - 1] == ansi::Color::DEFAULT
             {
                 end -= 1;
             }
 
-            let mut current_color = ansi::DEFAULT_COLOR;
+            let mut current_color = ansi::Color::DEFAULT;
             let mut cursor_at_xy = false;
             for x in 0..end {
                 if self.colors[y][x] == old.colors[y][x] && self.chars[y][x] == old.chars[y][x] {
@@ -181,7 +181,7 @@ impl Buffer {
                     result.push(self.chars[y][x]);
                 }
             }
-            if current_color != ansi::DEFAULT_COLOR {
+            if current_color != ansi::Color::DEFAULT {
                 result.push_str(&ansi::RESET_COLORS);
             }
             if !cursor_at_xy {

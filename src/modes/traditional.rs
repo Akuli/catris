@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::ansi;
+use crate::ansi::Color;
 use crate::lobby::ClientInfo;
 use crate::logic_base::Player;
 use crate::logic_base::PlayerPoint;
@@ -13,14 +13,17 @@ const HEIGHT: usize = 20;
 
 pub struct TraditionalGame {
     pub players: Vec<RefCell<Player>>,
-    pub landed_squares: HashMap<WorldPoint, SquareContent>,
+    pub landed_rows: [Vec<Option<SquareContent>>; HEIGHT],
+    pub flashing_points: HashMap<WorldPoint, u8>,
 }
 
 impl TraditionalGame {
     pub fn new() -> TraditionalGame {
+        const BLANK: Vec<Option<SquareContent>> = vec![];
         TraditionalGame {
             players: vec![],
-            landed_squares: HashMap::new(),
+            landed_rows: [BLANK; HEIGHT],
+            flashing_points: HashMap::new(),
         }
     }
 
@@ -42,16 +45,25 @@ impl TraditionalGame {
         self.players
             .push(RefCell::new(Player::new((spawn_x as i32, -1), client_info)));
         assert!(self.get_width_per_player() == new_width_per_player);
+
+        let w = self.get_width();
+        for row in self.landed_rows.iter_mut() {
+            row.resize(w, None);
+        }
     }
 
     pub fn remove_player_if_exists(&mut self, client_id: u64) {
-        // TODO: wipe a slice of landed squares
         if let Some(i) = self
             .players
             .iter()
             .position(|info| info.borrow().client_id == client_id)
         {
             self.players.remove(i);
+            // TODO: wipe a slice of landed squares properly, instead of trim at end
+            let w = self.get_width();
+            for row in self.landed_rows.iter_mut() {
+                row.resize(w, None);
+            }
         }
     }
 
@@ -71,25 +83,42 @@ impl TraditionalGame {
             && x < ((player_idx + 1) * self.get_width_per_player()) as i8
     }
 
+    // TODO: i don't like this function
     pub fn get_square_contents(
         &self,
         exclude_player_idx: Option<usize>,
     ) -> HashMap<(i8, i8), SquareContent> {
         let mut result: HashMap<(i8, i8), SquareContent> = HashMap::new();
-        result.extend(&self.landed_squares);
+
+        for (y, row) in self.landed_rows.iter().enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                if let Some(content) = cell {
+                    result.insert((x as i8, y as i8), *content);
+                }
+            }
+        }
+
         for (i, player) in self.players.iter().enumerate() {
             if Some(i) == exclude_player_idx {
                 continue;
             }
 
             let (center_x, center_y) = player.borrow().block.center;
+            let contents = player.borrow().block.get_square_contents();
             for (x, y) in &player.borrow().block.relative_coords {
                 let player_point: PlayerPoint = (*x + center_x, *y + center_y);
-                result.insert(
-                    player.borrow().player_to_world(player_point),
-                    player.borrow().block.get_square_contents(),
-                );
+                result.insert(player.borrow().player_to_world(player_point), contents);
             }
+        }
+
+        for (point, color) in &self.flashing_points {
+            result.insert(
+                *point,
+                SquareContent {
+                    text: [' ', ' '],
+                    colors: Color { fg: 0, bg: *color },
+                },
+            );
         }
 
         result
@@ -107,6 +136,38 @@ impl TraditionalGame {
                     buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.colors);
                     buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.colors);
                 }
+            }
+        }
+    }
+
+    pub fn set_landed_square(&mut self, point: WorldPoint, content: Option<SquareContent>) {
+        let (x, y) = point;
+        self.landed_rows[y as usize][x as usize] = content;
+    }
+
+    pub fn find_full_rows(&self) -> Vec<WorldPoint> {
+        let mut full_points = vec![];
+        for (y, row) in self.landed_rows.iter().enumerate() {
+            if !row.iter().any(|cell| cell.is_none()) {
+                for (x, _) in row.iter().enumerate() {
+                    full_points.push((x as i8, y as i8));
+                }
+            }
+        }
+        full_points
+    }
+
+    pub fn remove_full_rows(&mut self, full_points: &[WorldPoint]) {
+        let mut should_wipe = [false; HEIGHT];
+        for (_, y) in full_points {
+            should_wipe[*y as usize] = true;
+        }
+
+        for y in 0..HEIGHT {
+            if should_wipe[y] {
+                self.landed_rows[y].clear();
+                self.landed_rows[y].resize(self.get_width(), None);
+                self.landed_rows[..y + 1].rotate_right(1);
             }
         }
     }

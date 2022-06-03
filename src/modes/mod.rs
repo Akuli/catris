@@ -47,7 +47,10 @@ impl GameMode {
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {}
     fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {}
     fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool {}
+    fn set_landed_square(&mut self, location: WorldPoint, content: Option<SquareContent>) {}
     pub fn render_to_buf(&self, buffer: &mut render::Buffer) {}
+    pub fn find_full_rows(&self) -> Vec<WorldPoint> {}
+    pub fn remove_full_rows(&mut self, full_points: &[WorldPoint]) {}
 }]
 pub enum AnyGame {
     Traditional(TraditionalGame),
@@ -73,14 +76,14 @@ impl AnyGame {
         }
     }
 
-    pub fn get_player_count(&self) -> usize {
-        self.get_players().len()
+    pub fn get_flashing_points(&mut self) -> &mut HashMap<WorldPoint, u8> {
+        match self {
+            AnyGame::Traditional(game) => &mut game.flashing_points,
+        }
     }
 
-    fn get_landed_squares(&mut self) -> &mut HashMap<(i8, i8), SquareContent> {
-        match self {
-            AnyGame::Traditional(game) => &mut game.landed_squares,
-        }
+    pub fn get_player_count(&self) -> usize {
+        self.get_players().len()
     }
 
     fn get_moved_relative_coords(
@@ -108,12 +111,6 @@ impl AnyGame {
             let stays_in_bounds = self.is_valid_moving_block_coords(*p);
             let goes_on_top_of_something =
                 square_contents.contains_key(&player.player_to_world(*p));
-            if !stays_in_bounds {
-                println!("out uf bounds");
-            }
-            if goes_on_top_of_something {
-                println!("goes on top of something");
-            }
             stays_in_bounds && !goes_on_top_of_something
         });
 
@@ -155,7 +152,9 @@ impl AnyGame {
             }
         }
 
-        self.get_landed_squares().extend(landing);
+        for (point, content) in landing {
+            self.set_landed_square(point, Some(content));
+        }
     }
 
     pub fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {
@@ -186,5 +185,21 @@ impl AnyGame {
         let mut player = self.get_players()[player_idx].borrow_mut();
         player.fast_down = false;
         need_render
+    }
+
+    pub fn remove_overlapping_landed_squares(&mut self) {
+        let mut gonna_clear = vec![];
+        for player in self.get_players() {
+            let player_coords = player.borrow().block.get_player_coords();
+            for player_point in player_coords {
+                gonna_clear.push(player.borrow().player_to_world(player_point));
+            }
+        }
+
+        for world_point in gonna_clear {
+            if self.is_valid_landed_block_coords(world_point) {
+                self.set_landed_square(world_point, None);
+            }
+        }
     }
 }

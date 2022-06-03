@@ -19,7 +19,8 @@ use tokio::sync::Notify;
 use tokio::time::sleep;
 use weak_table::WeakValueHashMap;
 
-use crate::ansi;
+use crate::ansi::Color;
+use crate::ansi::KeyPress;
 use crate::client;
 use crate::lobby;
 use crate::logic_base;
@@ -69,7 +70,7 @@ where
                 2,
                 13,
                 &error.clone().unwrap_or_default(),
-                ansi::RED_FOREGROUND,
+                Color::RED_FOREGROUND,
             );
             if let Some(f) = add_extra_text {
                 f(&mut render_data.buffer);
@@ -87,25 +88,25 @@ where
             \r is also known as KeyPress::Enter. If we haven't gotten that
             yet, and we get \n, it means someone forgot to set raw mode.
             */
-            ansi::KeyPress::Character('\n') if last_enter_press == None => {
+            KeyPress::Character('\n') if last_enter_press == None => {
                 error = Some(
                     "Your terminal doesn't seem to be in raw mode. Run 'stty raw' and try again."
                         .to_string(),
                 );
             }
-            ansi::KeyPress::Character(ch) => {
+            KeyPress::Character(ch) => {
                 // 15 chars is enough for names and lobby IDs
                 // It's important to have limit (potential out of mem dos attack otherwise)
                 if current_text.chars().count() < 15 {
                     current_text.push(ch);
                 }
             }
-            ansi::KeyPress::BackSpace => {
+            KeyPress::BackSpace => {
                 if current_text.len() > 0 {
                     current_text.pop();
                 }
             }
-            ansi::KeyPress::Enter => {
+            KeyPress::Enter => {
                 if last_enter_press == None
                     || last_enter_press.unwrap().elapsed() > min_duration_between_enter_presses
                 {
@@ -221,7 +222,7 @@ impl Menu {
                     buffer.add_centered_text_with_color(
                         top_y + i,
                         &centered_text,
-                        ansi::BLACK_ON_WHITE,
+                        Color::BLACK_ON_WHITE,
                     );
                 } else {
                     buffer.add_centered_text(top_y + i, &centered_text);
@@ -231,22 +232,22 @@ impl Menu {
     }
 
     // true means enter pressed
-    fn handle_key_press(&mut self, key: ansi::KeyPress) -> bool {
+    fn handle_key_press(&mut self, key: KeyPress) -> bool {
         let last = self.items.len() - 1;
         match key {
-            ansi::KeyPress::Up if self.selected_index != 0 => {
+            KeyPress::Up if self.selected_index != 0 => {
                 self.selected_index -= 1;
                 while self.items[self.selected_index].is_none() {
                     self.selected_index -= 1;
                 }
             }
-            ansi::KeyPress::Down if self.selected_index != last => {
+            KeyPress::Down if self.selected_index != last => {
                 self.selected_index += 1;
                 while self.items[self.selected_index].is_none() {
                     self.selected_index += 1;
                 }
             }
-            ansi::KeyPress::Character(ch) => {
+            KeyPress::Character(ch) => {
                 // pressing r selects Ring Game
                 for (i, item) in self.items.iter().enumerate() {
                     if item
@@ -260,7 +261,7 @@ impl Menu {
                     }
                 }
             }
-            ansi::KeyPress::Enter => {
+            KeyPress::Enter => {
                 return true;
             }
             _ => {}
@@ -323,7 +324,7 @@ fn render_lobby_status(
             x,
             2,
             " (press i to show)",
-            ansi::GRAY_FOREGROUND,
+            Color::GRAY_FOREGROUND,
         );
     } else {
         x = render_data.buffer.add_text(x, 2, &lobby.id);
@@ -331,7 +332,7 @@ fn render_lobby_status(
             x,
             2,
             " (press i to hide)",
-            ansi::GRAY_FOREGROUND,
+            Color::GRAY_FOREGROUND,
         );
     }
 
@@ -344,7 +345,7 @@ fn render_lobby_status(
             x,
             y,
             &info.name,
-            ansi::Color {
+            Color {
                 fg: info.color,
                 bg: 0,
             },
@@ -352,7 +353,7 @@ fn render_lobby_status(
         if info.client_id == client.id {
             render_data
                 .buffer
-                .add_text_with_color(x, y, " (you)", ansi::GRAY_FOREGROUND);
+                .add_text_with_color(x, y, " (you)", Color::GRAY_FOREGROUND);
         }
     }
 
@@ -407,7 +408,7 @@ pub async fn choose_game_mode(
         tokio::select! {
             key_or_error = client.receive_key_press() => {
                 match key_or_error? {
-                    ansi::KeyPress::Character('I') | ansi::KeyPress::Character('i') => {
+                    KeyPress::Character('I') | KeyPress::Character('i') => {
                         client.lobby_id_hidden = !client.lobby_id_hidden;
                     }
                     key => {
@@ -464,22 +465,22 @@ pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::E
         let mut render_data = client.render_data.lock().unwrap();
         render_data.clear(80, 24);
 
-        let mut color = ansi::DEFAULT_COLOR;
+        let mut color = Color::DEFAULT;
         for y in 0..GAMEPLAY_TIPS.len() {
             let mut x = 2;
             let mut string = GAMEPLAY_TIPS[y];
             loop {
                 match string.chars().next() {
                     Some('[') => {
-                        color = ansi::CYAN_FOREGROUND;
+                        color = Color::CYAN_FOREGROUND;
                         string = &string[1..];
                     }
                     Some('{') => {
-                        color = ansi::PURPLE_FOREGROUND;
+                        color = Color::PURPLE_FOREGROUND;
                         string = &string[1..];
                     }
                     Some(']') | Some('}') => {
-                        color = ansi::DEFAULT_COLOR;
+                        color = Color::DEFAULT;
                         string = &string[1..];
                     }
                     Some(_) => {
