@@ -7,11 +7,11 @@ use tokio::sync::watch;
 use tokio::time::sleep;
 
 use crate::ansi::Color;
+use crate::game::Game;
 use crate::logic_base::WorldPoint;
-use crate::modes::AnyGame;
 
 pub struct GameWrapper {
-    pub game: Mutex<AnyGame>,
+    pub game: Mutex<Game>,
     // change event triggers when re-rendering might be needed
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
@@ -22,7 +22,7 @@ pub struct GameWrapper {
 }
 
 impl GameWrapper {
-    pub fn new(game: AnyGame) -> Self {
+    pub fn new(game: Game) -> Self {
         let (sender, receiver) = watch::channel(());
         GameWrapper {
             game: Mutex::new(game),

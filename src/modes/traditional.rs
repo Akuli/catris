@@ -11,16 +11,16 @@ use crate::render;
 
 const HEIGHT: usize = 20;
 
-pub struct TraditionalGame {
+pub struct TraditionalMode {
     pub players: Vec<RefCell<Player>>,
     landed_rows: [Vec<Option<SquareContent>>; HEIGHT],
     pub flashing_points: HashMap<WorldPoint, u8>,
 }
 
-impl TraditionalGame {
-    pub fn new() -> TraditionalGame {
+impl TraditionalMode {
+    pub fn new() -> TraditionalMode {
         const BLANK: Vec<Option<SquareContent>> = vec![];
-        TraditionalGame {
+        TraditionalMode {
             players: vec![],
             landed_rows: [BLANK; HEIGHT],
             flashing_points: HashMap::new(),

@@ -15,6 +15,7 @@ use weak_table::WeakValueHashMap;
 
 mod ansi;
 mod client;
+mod game;
 mod game_wrapper;
 mod lobby;
 mod logic_base;

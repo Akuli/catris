@@ -9,7 +9,7 @@ use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client;
 use crate::lobby;
-use crate::modes::GameMode;
+use crate::modes::Mode;
 use crate::render;
 
 const ASCII_ART: &[&str] = &[
@@ -349,9 +349,9 @@ fn render_lobby_status(
 pub async fn choose_game_mode(
     client: &mut client::Client,
     selected_index: &mut usize,
-) -> Result<Option<GameMode>, io::Error> {
+) -> Result<Option<Mode>, io::Error> {
     let mut items = vec![];
-    items.resize(GameMode::ALL_MODES.len(), None);
+    items.resize(Mode::ALL_MODES.len(), None);
     items.push(None);
     items.push(Some("Gameplay tips".to_string()));
     items.push(Some("Quit".to_string()));
@@ -376,7 +376,7 @@ pub async fn choose_game_mode(
                 let lobby = idk_why_i_need_this.lock().unwrap();
                 render_lobby_status(client, &mut *render_data, &lobby);
 
-                for (i, mode) in GameMode::ALL_MODES.iter().enumerate() {
+                for (i, mode) in Mode::ALL_MODES.iter().enumerate() {
                     // TODO: game full error
                     menu.items[i] = Some(format!(
                         "{} ({}/{} players)",
@@ -405,7 +405,7 @@ pub async fn choose_game_mode(
                                     io::ErrorKind::ConnectionAborted,
                                     "user selected \"Quit\" in menu",
                                 )),
-                                _ => Ok(Some(GameMode::ALL_MODES[menu.selected_index])),
+                                _ => Ok(Some(Mode::ALL_MODES[menu.selected_index])),
                             };
                         }
                     }
@@ -488,7 +488,7 @@ pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::E
     Ok(())
 }
 
-pub async fn play_game(client: &mut client::Client, mode: GameMode) -> Result<(), io::Error> {
+pub async fn play_game(client: &mut client::Client, mode: Mode) -> Result<(), io::Error> {
     let game_wrapper = client
         .lobby
         .as_ref()

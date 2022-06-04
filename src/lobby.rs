@@ -8,10 +8,10 @@ use tokio::sync::watch;
 use weak_table::WeakValueHashMap;
 
 use crate::client;
+use crate::game::Game;
 use crate::game_wrapper;
 use crate::game_wrapper::GameWrapper;
-use crate::modes::AnyGame;
-use crate::modes::GameMode;
+use crate::modes::Mode;
 
 pub struct ClientInfo {
     pub client_id: u64,
@@ -26,7 +26,7 @@ pub struct Lobby {
     // change triggers when people join/leave the lobby or a game, and ui must refresh
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
-    game_wrappers: WeakValueHashMap<GameMode, Weak<GameWrapper>>,
+    game_wrappers: WeakValueHashMap<Mode, Weak<GameWrapper>>,
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
@@ -44,7 +44,7 @@ impl Lobby {
         }
     }
 
-    pub fn get_player_count(&self, mode: GameMode) -> usize {
+    pub fn get_player_count(&self, mode: Mode) -> usize {
         match self.game_wrappers.get(&mode) {
             Some(wrapper) => {
                 let n = wrapper.game.lock().unwrap().get_player_count();
@@ -59,7 +59,7 @@ impl Lobby {
         self.clients.len() == MAX_CLIENTS_PER_LOBBY
     }
 
-    pub fn game_is_full(&self, mode: GameMode) -> bool {
+    pub fn game_is_full(&self, mode: Mode) -> bool {
         self.get_player_count(mode) == mode.max_players()
     }
 
@@ -111,7 +111,7 @@ impl Lobby {
         self.mark_changed();
     }
 
-    pub fn join_game(&mut self, client_id: u64, mode: GameMode) -> Arc<GameWrapper> {
+    pub fn join_game(&mut self, client_id: u64, mode: Mode) -> Arc<GameWrapper> {
         let client_info = self
             .clients
             .iter()
@@ -123,7 +123,7 @@ impl Lobby {
             wrapper.mark_changed();
             wrapper
         } else {
-            let mut game = AnyGame::new(mode);
+            let mut game = Game::new(mode);
             game.add_player(&client_info);
             let wrapper = Arc::new(GameWrapper::new(game));
             tokio::spawn(game_wrapper::move_blocks_down(
