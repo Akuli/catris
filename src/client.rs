@@ -1,3 +1,10 @@
+use crate::ansi;
+use crate::ansi::KeyPress;
+use crate::lobby;
+use crate::lobby::Lobbies;
+use crate::lobby::Lobby;
+use crate::render::RenderBuffer;
+use crate::render::RenderData;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
@@ -12,10 +19,6 @@ use tokio::net::tcp::OwnedReadHalf;
 use tokio::sync::Notify;
 use tokio::time::timeout;
 
-use crate::ansi;
-use crate::lobby;
-use crate::render;
-
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 pub struct ClientLogger {
     pub client_id: u64,
@@ -28,12 +31,12 @@ impl ClientLogger {
 
 pub struct Client {
     pub id: u64,
-    pub render_data: Arc<Mutex<render::RenderData>>,
+    pub render_data: Arc<Mutex<RenderData>>,
     recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
     recv_buffer_size: usize,
     key_press_times: VecDeque<Instant>,
     reader: OwnedReadHalf,
-    pub lobby: Option<Arc<Mutex<lobby::Lobby>>>,
+    pub lobby: Option<Arc<Mutex<Lobby>>>,
     pub lobby_id_hidden: bool,
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
@@ -45,8 +48,8 @@ impl Client {
         Client {
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-            render_data: Arc::new(Mutex::new(render::RenderData {
-                buffer: render::Buffer::new(),
+            render_data: Arc::new(Mutex::new(RenderData {
+                buffer: RenderBuffer::new(),
                 cursor_pos: None,
                 changed: Arc::new(Notify::new()),
             })),
@@ -100,10 +103,10 @@ impl Client {
         Ok(())
     }
 
-    pub async fn receive_key_press(&mut self) -> Result<ansi::KeyPress, io::Error> {
+    pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
         loop {
             match ansi::parse_key_press(&self.recv_buffer[..self.recv_buffer_size]) {
-                Some((ansi::KeyPress::Quit, _)) => {
+                Some((KeyPress::Quit, _)) => {
                     return Err(io::Error::new(
                         io::ErrorKind::ConnectionAborted,
                         "received quit key press",
@@ -134,10 +137,10 @@ impl Client {
         }
     }
 
-    pub fn make_lobby(&mut self, lobbies: lobby::Lobbies) {
+    pub fn make_lobby(&mut self, lobbies: Lobbies) {
         let mut lobbies = lobbies.lock().unwrap();
         let id = lobby::generate_unused_id(&*lobbies);
-        let mut lobby = lobby::Lobby::new(&id);
+        let mut lobby = Lobby::new(&id);
         self.logger().log(&format!("Created lobby: {}", id));
         lobby.add_client(self.logger(), self.get_name());
 
@@ -148,7 +151,7 @@ impl Client {
         self.lobby = Some(lobby);
     }
 
-    pub fn join_lobby(&mut self, lobby: Arc<Mutex<lobby::Lobby>>) -> bool {
+    pub fn join_lobby(&mut self, lobby: Arc<Mutex<Lobby>>) -> bool {
         {
             let mut lobby = lobby.lock().unwrap();
             if lobby.lobby_is_full() {

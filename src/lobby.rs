@@ -1,3 +1,9 @@
+use crate::client;
+use crate::client::ClientLogger;
+use crate::game::Game;
+use crate::game::Mode;
+use crate::game_wrapper;
+use crate::game_wrapper::GameWrapper;
 use rand;
 use rand::Rng;
 use std::sync::Arc;
@@ -7,15 +13,9 @@ use tokio;
 use tokio::sync::watch;
 use weak_table::WeakValueHashMap;
 
-use crate::client;
-use crate::game::Game;
-use crate::game::Mode;
-use crate::game_wrapper;
-use crate::game_wrapper::GameWrapper;
-
 pub struct ClientInfo {
     pub client_id: u64,
-    logger: client::ClientLogger,
+    pub logger: ClientLogger,
     pub name: String,
     pub color: u8,
 }

@@ -1,18 +1,17 @@
+use crate::ansi;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use crate::ansi;
-
-pub struct Buffer {
+pub struct RenderBuffer {
     pub width: usize,
     pub height: usize,
     chars: Vec<Vec<char>>,
     colors: Vec<Vec<ansi::Color>>,
 }
 
-impl Buffer {
-    pub fn new() -> Buffer {
-        Buffer {
+impl RenderBuffer {
+    pub fn new() -> Self {
+        Self {
             width: 0,
             height: 0,
             chars: vec![],
@@ -88,7 +87,7 @@ impl Buffer {
         }
     }
 
-    pub fn copy_into(&self, dest: &mut Buffer) {
+    pub fn copy_into(&self, dest: &mut RenderBuffer) {
         dest.resize(self.width, self.height);
         for y in 0..self.height {
             for x in 0..self.width {
@@ -122,7 +121,7 @@ impl Buffer {
 
     fn get_updates_for_what_changed(
         &self,
-        old: &Buffer,
+        old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
     ) -> String {
         let mut result = "".to_string();
@@ -178,7 +177,7 @@ impl Buffer {
 
     pub fn get_updates_as_ansi_codes(
         &self,
-        old: &Buffer,
+        old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
     ) -> String {
         let mut result;
@@ -205,7 +204,7 @@ impl Buffer {
 }
 
 pub struct RenderData {
-    pub buffer: Buffer,
+    pub buffer: RenderBuffer,
     pub cursor_pos: Option<(usize, usize)>,
     pub changed: Arc<Notify>,
 }

@@ -1,3 +1,6 @@
+use crate::ansi::Color;
+use crate::game::Game;
+use crate::player::WorldPoint;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
@@ -5,10 +8,6 @@ use std::time::Duration;
 use tokio;
 use tokio::sync::watch;
 use tokio::time::sleep;
-
-use crate::ansi::Color;
-use crate::game::Game;
-use crate::logic_base::WorldPoint;
 
 pub struct GameWrapper {
     pub game: Mutex<Game>,

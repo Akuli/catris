@@ -1,17 +1,16 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
+use crate::blocks::BlockOrTimer;
+use crate::blocks::MovingBlock;
+use crate::blocks::SquareContent;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
-use crate::logic_base::BlockOrTimer;
-use crate::logic_base::MovingBlock;
-use crate::logic_base::Player;
-use crate::logic_base::PlayerPoint;
-use crate::logic_base::SquareContent;
-use crate::logic_base::WorldPoint;
-use crate::render;
+use crate::player::Player;
+use crate::player::PlayerPoint;
+use crate::player::WorldPoint;
+use crate::render::RenderBuffer;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {
@@ -253,7 +252,7 @@ impl Game {
     }
 
     // returns the location of world coords (0,0) within the buffer
-    fn render_world_edges_to_buf(&self, buffer: &mut render::Buffer) -> (i8, i8) {
+    fn render_world_edges_to_buf(&self, buffer: &mut RenderBuffer) -> (i8, i8) {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 for y in 0..landed_rows.len() {
@@ -366,7 +365,7 @@ impl Game {
         return vec![];
     }
 
-    pub fn render_to_buf(&self, client_id: u64, buffer: &mut render::Buffer) {
+    pub fn render_to_buf(&self, client_id: u64, buffer: &mut RenderBuffer) {
         let player_idx = self
             .players
             .iter()

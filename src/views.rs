@@ -1,16 +1,19 @@
+use crate::ansi::Color;
+use crate::ansi::KeyPress;
+use crate::client::Client;
+use crate::game::Mode;
+use crate::lobby::looks_like_lobby_id;
+use crate::lobby::Lobbies;
+use crate::lobby::Lobby;
+use crate::lobby::MAX_CLIENTS_PER_LOBBY;
+use crate::render;
+use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-
-use crate::ansi::Color;
-use crate::ansi::KeyPress;
-use crate::client;
-use crate::game::Mode;
-use crate::lobby;
-use crate::render;
 
 const ASCII_ART: &[&str] = &[
     "",
@@ -22,21 +25,21 @@ const ASCII_ART: &[&str] = &[
     "",
 ];
 
-fn add_ascii_art(buffer: &mut render::Buffer) {
+fn add_ascii_art(buffer: &mut RenderBuffer) {
     for (y, line) in ASCII_ART.iter().enumerate() {
         buffer.add_centered_text(y, line);
     }
 }
 
 async fn prompt<F>(
-    client: &mut client::Client,
+    client: &mut Client,
     prompt: &str,
     mut enter_pressed_callback: F,
-    add_extra_text: Option<fn(&mut render::Buffer)>,
+    add_extra_text: Option<fn(&mut RenderBuffer)>,
     min_duration_between_enter_presses: Duration,
 ) -> Result<(), io::Error>
 where
-    F: FnMut(&str, &mut client::Client) -> Option<String>,
+    F: FnMut(&str, &mut Client) -> Option<String>,
 {
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
@@ -117,7 +120,7 @@ const VALID_NAME_CHARS: &str = concat!(
     "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ",
 );
 
-fn add_name_asking_notes(buffer: &mut render::Buffer) {
+fn add_name_asking_notes(buffer: &mut RenderBuffer) {
     buffer.add_centered_text(17, "If you play well, your name will be");
     buffer.add_centered_text(18, "visible to everyone in the high scores.");
 
@@ -126,7 +129,7 @@ fn add_name_asking_notes(buffer: &mut render::Buffer) {
 }
 
 pub async fn ask_name(
-    client: &mut client::Client,
+    client: &mut Client,
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
     prompt(
@@ -154,15 +157,15 @@ pub async fn ask_name(
 }
 
 pub async fn ask_lobby_id_and_join_lobby(
-    client: &mut client::Client,
-    lobbies: lobby::Lobbies,
+    client: &mut Client,
+    lobbies: Lobbies,
 ) -> Result<(), io::Error> {
     prompt(
         client,
         "Lobby ID (6 characters): ",
         |id, client| {
             let id = id.to_uppercase();
-            if !lobby::looks_like_lobby_id(&id) {
+            if !looks_like_lobby_id(&id) {
                 return Some("The text you entered doesn't look like a lobby ID.".to_string());
             }
 
@@ -173,8 +176,7 @@ pub async fn ask_lobby_id_and_join_lobby(
                 } else {
                     Some(format!(
                         "Lobby '{}' is full. It already has {} players.",
-                        id,
-                        lobby::MAX_CLIENTS_PER_LOBBY
+                        id, MAX_CLIENTS_PER_LOBBY
                     ))
                 }
             } else {
@@ -199,7 +201,7 @@ impl Menu {
         &self.items[self.selected_index].as_ref().unwrap()
     }
 
-    fn render(&self, buffer: &mut render::Buffer, top_y: usize) {
+    fn render(&self, buffer: &mut RenderBuffer, top_y: usize) {
         for (i, item) in self.items.iter().enumerate() {
             if let Some(text) = item {
                 let centered_text = format!("{:^35}", text);
@@ -255,7 +257,7 @@ impl Menu {
     }
 }
 
-pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::Error> {
+pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
     let mut menu = Menu {
         items: vec![
             Some("New lobby".to_string()),
@@ -296,11 +298,7 @@ pub async fn ask_if_new_lobby(client: &mut client::Client) -> Result<bool, io::E
     }
 }
 
-fn render_lobby_status(
-    client: &client::Client,
-    render_data: &mut render::RenderData,
-    lobby: &lobby::Lobby,
-) {
+fn render_lobby_status(client: &Client, render_data: &mut render::RenderData, lobby: &Lobby) {
     let mut x = 3;
     x = render_data.buffer.add_text(x, 2, "Lobby ID: ");
     if client.lobby_id_hidden {
@@ -347,7 +345,7 @@ fn render_lobby_status(
 
 // None return value means show gameplay tips
 pub async fn choose_game_mode(
-    client: &mut client::Client,
+    client: &mut Client,
     selected_index: &mut usize,
 ) -> Result<Option<Mode>, io::Error> {
     let mut items = vec![];
@@ -440,7 +438,7 @@ const GAMEPLAY_TIPS: &[&str] = &[
     "playing area} to do your waiting time before others mess up.",
 ];
 
-pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::Error> {
+pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
     let mut menu = Menu {
         items: vec![Some("Back to menu".to_string())],
         selected_index: 0,
@@ -488,7 +486,7 @@ pub async fn show_gameplay_tips(client: &mut client::Client) -> Result<(), io::E
     Ok(())
 }
 
-pub async fn play_game(client: &mut client::Client, mode: Mode) -> Result<(), io::Error> {
+pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error> {
     let game_wrapper = client
         .lobby
         .as_ref()

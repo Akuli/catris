@@ -1,3 +1,4 @@
+use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
@@ -14,11 +15,12 @@ use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
 mod ansi;
+mod blocks;
 mod client;
 mod game;
 mod game_wrapper;
 mod lobby;
-mod logic_base;
+mod player;
 mod render;
 mod views;
 
@@ -54,7 +56,7 @@ async fn handle_sending(
     render_data: Arc<Mutex<render::RenderData>>,
 ) -> Result<(), io::Error> {
     // pseudo optimization: double buffering to prevent copying between buffers
-    let mut buffers = [render::Buffer::new(), render::Buffer::new()];
+    let mut buffers = [RenderBuffer::new(), RenderBuffer::new()];
     let mut next_idx = 0;
 
     loop {
