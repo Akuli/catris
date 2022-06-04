@@ -192,7 +192,6 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
-    //pub block: MovingBlock,
     pub fast_down: bool,
 }
 impl Player {

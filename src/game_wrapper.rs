@@ -45,19 +45,14 @@ pub async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
                 .game
                 .lock()
                 .unwrap()
-                .get_flashing_points_mut()
+                .flashing_points
                 .insert(*p, color);
         }
         wrapper.changed_sender.send(()).unwrap();
         sleep(Duration::from_millis(100)).await;
     }
     for p in points {
-        wrapper
-            .game
-            .lock()
-            .unwrap()
-            .get_flashing_points_mut()
-            .remove(p);
+        wrapper.game.lock().unwrap().flashing_points.remove(p);
     }
 }
 

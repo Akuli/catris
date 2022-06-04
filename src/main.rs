@@ -19,7 +19,6 @@ mod game;
 mod game_wrapper;
 mod lobby;
 mod logic_base;
-mod modes;
 mod render;
 mod views;
 

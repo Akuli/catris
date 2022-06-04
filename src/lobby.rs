@@ -9,9 +9,9 @@ use weak_table::WeakValueHashMap;
 
 use crate::client;
 use crate::game::Game;
+use crate::game::Mode;
 use crate::game_wrapper;
 use crate::game_wrapper::GameWrapper;
-use crate::modes::Mode;
 
 pub struct ClientInfo {
     pub client_id: u64,

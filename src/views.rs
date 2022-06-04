@@ -8,8 +8,8 @@ use std::time::Instant;
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client;
+use crate::game::Mode;
 use crate::lobby;
-use crate::modes::Mode;
 use crate::render;
 
 const ASCII_ART: &[&str] = &[
