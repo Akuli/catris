@@ -86,7 +86,9 @@ async fn tick_please_wait_counter(weak_wrapper: Weak<GameWrapper>, client_id: u6
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
                 let mut game = wrapper.game.lock().unwrap();
-                if !game.tick_please_wait_counter(client_id) {
+                let run_again = game.tick_please_wait_counter(client_id);
+                wrapper.mark_changed();
+                if !run_again {
                     return;
                 }
             }
@@ -107,11 +109,14 @@ async fn start_please_wait_counters_as_needed(
                     .lock()
                     .unwrap()
                     .start_pending_please_wait_counters();
-                for client_id in ids {
+                for client_id in &ids {
                     tokio::spawn(tick_please_wait_counter(
                         Arc::downgrade(&wrapper),
-                        client_id,
+                        *client_id,
                     ));
+                }
+                if !ids.is_empty() {
+                    wrapper.mark_changed();
                 }
             }
             None => return,

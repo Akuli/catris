@@ -523,7 +523,6 @@ impl Game {
                     BlockOrTimer::Timer(1) => true, // need reset
                     BlockOrTimer::Timer(n) => {
                         player.block_or_timer = BlockOrTimer::Timer(n - 1);
-                        println!("Counter {}", n - 1);
                         return true; // call again in 1sec
                     }
                     _ => false,
