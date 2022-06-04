@@ -50,6 +50,9 @@ impl TraditionalGame {
         self.players
             .push(RefCell::new(Player::new((0, -1), client_info)));
         self.update_spawn_places();
+        self.players[self.players.len() - 1]
+            .borrow_mut()
+            .new_block();
 
         let w = self.get_width();
         for row in self.landed_rows.iter_mut() {
@@ -58,9 +61,9 @@ impl TraditionalGame {
     }
 
     fn wipe_vertical_slice(&mut self, left: usize, width: usize) {
-        let right = left+width;
+        let right = left + width;
         for row in self.landed_rows.iter_mut() {
-            row.splice(left..(left+width), vec![]);
+            row.splice(left..right, vec![]);
         }
 
         let left = left as i32;
@@ -69,18 +72,29 @@ impl TraditionalGame {
 
         for player in &self.players {
             let block = &mut player.borrow_mut().block;
+
             // In traditional mode, player points and world points are the same.
             // So it doesn't matter whether "left" is in world or player points.
             let old_points = block.get_player_coords();
             let mut new_points = vec![];
             for (x, y) in old_points {
+                // Remove points in (left..right), move points on right side
                 if (..left).contains(&x) {
                     new_points.push((x, y));
                 } else if (right..).contains(&x) {
-                    new_points.push((x-width, y));
+                    new_points.push((x - width, y));
                 }
             }
-            block.set_player_coords(&new_points);
+
+            // Move center just like other points, except that it can't be removed
+            let (mut center_x, center_y) = block.center;
+            if (right..).contains(&center_x) {
+                center_x -= width;
+            } else if (left..right).contains(&center_x) {
+                center_x = left;
+            }
+
+            block.set_player_coords(&new_points, (center_x, center_y));
         }
     }
 
