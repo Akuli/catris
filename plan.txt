@@ -1,9 +1,12 @@
-traditional game with all yellow square blocks and no ui
-other blocks than yellow square blocks
+plz wait timers
+high scores saving+view
+bomb blocks
+drill blocks
+cursed blocks
 ingame ui
-special blocks
-lobbies
-game selection menu, bottle game
+bottle game
 ring game
-ip logging rules
+
 prod with RUST_BACKTRACE=1
+
+Bug: cant move left/right after fast-down

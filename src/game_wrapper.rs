@@ -36,7 +36,7 @@ impl GameWrapper {
     }
 }
 
-pub async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
+async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
     // TODO: define and use constants
     for color in [Color::WHITE_BACKGROUND.bg, 0, Color::WHITE_BACKGROUND.bg, 0] {
         for p in points {
@@ -55,7 +55,7 @@ pub async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
     }
 }
 
-pub async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
+async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
     loop {
         sleep(Duration::from_millis(if fast { 25 } else { 400 })).await;
         match weak_wrapper.upgrade() {
@@ -78,4 +78,9 @@ pub async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
             None => return,
         }
     }
+}
+
+pub fn start_tasks(wrapper: Arc<GameWrapper>) {
+    tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
+    tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
 }

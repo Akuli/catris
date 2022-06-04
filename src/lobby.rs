@@ -126,14 +126,7 @@ impl Lobby {
             let mut game = Game::new(mode);
             game.add_player(&client_info);
             let wrapper = Arc::new(GameWrapper::new(game));
-            tokio::spawn(game_wrapper::move_blocks_down(
-                Arc::downgrade(&wrapper),
-                true,
-            ));
-            tokio::spawn(game_wrapper::move_blocks_down(
-                Arc::downgrade(&wrapper),
-                false,
-            ));
+            game_wrapper::start_tasks(wrapper.clone());
             self.game_wrappers.insert(mode, wrapper.clone());
             wrapper
         };
