@@ -100,7 +100,7 @@ impl MovingBlock {
             .collect()
     }
 
-    pub fn get_player_coords(&self) -> Vec<PlayerPoint> {
+    pub fn get_coords(&self) -> Vec<PlayerPoint> {
         self.add_center(&self.relative_coords)
     }
 
@@ -158,12 +158,41 @@ impl MovingBlock {
 }
 
 #[derive(Debug)]
+pub enum BlockOrTimer {
+    Block(MovingBlock),
+    Timer(u8),
+}
+impl BlockOrTimer {
+    pub fn get_coords(&self) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_coords(),
+            BlockOrTimer::Timer(_) => vec![],
+        }
+    }
+
+    pub fn get_moved_coords(&self, dx: i8, dy: i8) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_moved_coords(dx, dy),
+            BlockOrTimer::Timer(_) => vec![],
+        }
+    }
+
+    pub fn get_rotated_coords(&self) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_rotated_coords(),
+            BlockOrTimer::Timer(_) => vec![],
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Player {
     pub client_id: u64,
     pub name: String,
     pub color: u8,
     pub spawn_point: PlayerPoint,
-    pub block: MovingBlock,
+    pub block_or_timer: BlockOrTimer,
+    //pub block: MovingBlock,
     pub fast_down: bool,
 }
 impl Player {
@@ -173,7 +202,7 @@ impl Player {
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point: spawn_point,
-            block: MovingBlock::new(spawn_point),
+            block_or_timer: BlockOrTimer::Block(MovingBlock::new(spawn_point)),
             fast_down: false,
         }
     }
@@ -186,11 +215,5 @@ impl Player {
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, y) = point;
         (x as i8, y as i8)
-    }
-
-    pub fn new_block(&mut self) {
-        self.block = MovingBlock::new(self.spawn_point);
-        println!("new block {:?}", self.block);
-        // TODO: start please wait countdown if there are overlaps
     }
 }

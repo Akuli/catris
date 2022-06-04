@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::lobby::ClientInfo;
+use crate::logic_base::BlockOrTimer;
 use crate::logic_base::Player;
 use crate::logic_base::PlayerPoint;
 use crate::logic_base::SquareContent;
@@ -50,9 +51,6 @@ impl TraditionalGame {
         self.players
             .push(RefCell::new(Player::new((0, -1), client_info)));
         self.update_spawn_places();
-        self.players[self.players.len() - 1]
-            .borrow_mut()
-            .new_block();
 
         let w = self.get_width();
         for row in self.landed_rows.iter_mut() {
@@ -71,30 +69,33 @@ impl TraditionalGame {
         let right = right as i32;
 
         for player in &self.players {
-            let block = &mut player.borrow_mut().block;
+            match &mut player.borrow_mut().block_or_timer {
+                BlockOrTimer::Block(block) => {
+                    // In traditional mode, player points and world points are the same.
+                    // So it doesn't matter whether "left" is in world or player points.
+                    let old_points = block.get_coords();
+                    let mut new_points = vec![];
+                    for (x, y) in old_points {
+                        // Remove points in (left..right), move points on right side
+                        if (..left).contains(&x) {
+                            new_points.push((x, y));
+                        } else if (right..).contains(&x) {
+                            new_points.push((x - width, y));
+                        }
+                    }
 
-            // In traditional mode, player points and world points are the same.
-            // So it doesn't matter whether "left" is in world or player points.
-            let old_points = block.get_player_coords();
-            let mut new_points = vec![];
-            for (x, y) in old_points {
-                // Remove points in (left..right), move points on right side
-                if (..left).contains(&x) {
-                    new_points.push((x, y));
-                } else if (right..).contains(&x) {
-                    new_points.push((x - width, y));
+                    // Move center just like other points, except that it can't be removed
+                    let (mut center_x, center_y) = block.center;
+                    if (right..).contains(&center_x) {
+                        center_x -= width;
+                    } else if (left..right).contains(&center_x) {
+                        center_x = left;
+                    }
+
+                    block.set_player_coords(&new_points, (center_x, center_y));
                 }
+                BlockOrTimer::Timer(_) => {}
             }
-
-            // Move center just like other points, except that it can't be removed
-            let (mut center_x, center_y) = block.center;
-            if (right..).contains(&center_x) {
-                center_x -= width;
-            } else if (left..right).contains(&center_x) {
-                center_x = left;
-            }
-
-            block.set_player_coords(&new_points, (center_x, center_y));
         }
     }
 
@@ -166,7 +167,7 @@ impl TraditionalGame {
         full_points
     }
 
-    pub fn remove_full_rows(&mut self, full_points: &[WorldPoint]) {
+    pub fn remove_full_rows_raw(&mut self, full_points: &[WorldPoint]) {
         let mut should_wipe = [false; HEIGHT];
         for (_, y) in full_points {
             should_wipe[*y as usize] = true;
@@ -176,7 +177,7 @@ impl TraditionalGame {
             if should_wipe[y] {
                 self.landed_rows[y].clear();
                 self.landed_rows[y].resize(self.get_width(), None);
-                self.landed_rows[..y + 1].rotate_right(1);
+                self.landed_rows[..(y + 1)].rotate_right(1);
             }
         }
     }

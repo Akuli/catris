@@ -66,23 +66,20 @@ pub async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
         sleep(Duration::from_millis(if fast { 25 } else { 400 })).await;
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
-                {
-                    let mut _lock = wrapper.flashing_mutex.lock().await;
-                    let full = {
-                        let mut game = wrapper.game.lock().unwrap();
-                        game.move_blocks_down(fast);
-                        game.find_full_rows()
-                    };
-                    if full.len() != 0 {
-                        flash(wrapper.clone(), &full).await;
-                        let mut game = wrapper.game.lock().unwrap();
-                        game.remove_full_rows(&full);
-                        // Moving landed squares can cause them to overlap moving squares
-                        game.remove_overlapping_landed_squares();
-                    }
+                let mut _lock = wrapper.flashing_mutex.lock().await;
+                let (moved, full) = {
+                    let mut game = wrapper.game.lock().unwrap();
+                    let moved = game.move_blocks_down(fast);
+                    (moved, game.find_full_rows())
+                };
+                if !full.is_empty() {
+                    flash(wrapper.clone(), &full).await;
+                    let mut game = wrapper.game.lock().unwrap();
+                    game.remove_full_rows(&full);
                 }
-
-                wrapper.mark_changed();
+                if moved || !full.is_empty() {
+                    wrapper.mark_changed();
+                }
             }
             None => return,
         }
