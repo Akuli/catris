@@ -30,14 +30,14 @@ impl Color {
     pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
 
     pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
-    pub const CYAN_FOREGROUND: Color = Color { fg: 35, bg: 0 };
-    pub const PURPLE_FOREGROUND: Color = Color { fg: 36, bg: 0 };
+    pub const MAGENTA_FOREGROUND: Color = Color { fg: 35, bg: 0 };
+    pub const CYAN_FOREGROUND: Color = Color { fg: 36, bg: 0 };
 
     pub const RED_BACKGROUND: Color = Color { fg: 0, bg: 41 };
     pub const GREEN_BACKGROUND: Color = Color { fg: 0, bg: 42 };
     pub const YELLOW_BACKGROUND: Color = Color { fg: 0, bg: 43 };
     pub const BLUE_BACKGROUND: Color = Color { fg: 0, bg: 44 };
-    pub const PURPLE_BACKGROUND: Color = Color { fg: 0, bg: 45 };
+    pub const MAGENTA_BACKGROUND: Color = Color { fg: 0, bg: 45 };
     pub const CYAN_BACKGROUND: Color = Color { fg: 0, bg: 46 };
     pub const WHITE_BACKGROUND: Color = Color { fg: 0, bg: 47 };
 

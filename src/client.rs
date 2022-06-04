@@ -38,6 +38,7 @@ pub struct Client {
     reader: OwnedReadHalf,
     pub lobby: Option<Arc<Mutex<Lobby>>>,
     pub lobby_id_hidden: bool,
+    pub prefer_rotating_counter_clockwise: bool,
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
 
@@ -59,6 +60,7 @@ impl Client {
             reader,
             lobby: None,
             lobby_id_hidden: false,
+            prefer_rotating_counter_clockwise: false,
             remove_name_on_disconnect_data: None,
         }
     }

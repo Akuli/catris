@@ -1,8 +1,8 @@
 use crate::ansi::Color;
-use crate::ingame_ui;
 use crate::ansi::KeyPress;
 use crate::client::Client;
 use crate::game::Mode;
+use crate::ingame_ui;
 use crate::lobby::looks_like_lobby_id;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;
@@ -456,11 +456,11 @@ pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
             loop {
                 match string.chars().next() {
                     Some('[') => {
-                        color = Color::CYAN_FOREGROUND;
+                        color = Color::MAGENTA_FOREGROUND;
                         string = &string[1..];
                     }
                     Some('{') => {
-                        color = Color::PURPLE_FOREGROUND;
+                        color = Color::CYAN_FOREGROUND;
                         string = &string[1..];
                     }
                     Some(']') | Some('}') => {
@@ -501,7 +501,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
             let game = game_wrapper.game.lock().unwrap();
-            ingame_ui::render(&*game, client.id, &mut *render_data);
+            ingame_ui::render(&*game, &mut *render_data, client);
             render_data.changed.notify_one();
         }
 

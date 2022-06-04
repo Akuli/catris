@@ -1,12 +1,15 @@
 plz wait timers: game over when everyone on timer
+score counter
 pause
 high scores saving+view
 bomb blocks
 drill blocks
 cursed blocks
-ingame ui
+show next block
 bottle game
 ring game
+hold
+counter-clockwise rotation
 websocket support
 
 prod with RUST_BACKTRACE=1

@@ -19,7 +19,7 @@ const STANDARD_BLOCKS: &[(Color, &[BlockRelativeCoords])] = &[
     (Color::CYAN_BACKGROUND, &[(-2, 0), (-1, 0), (0, 0), (1, 0)]),
     (Color::BLUE_BACKGROUND, &[(-1, -1), (-1, 0), (0, 0), (1, 0)]),
     (Color::YELLOW_BACKGROUND, &[(-1, 0), (0, 0), (0, -1), (-1, -1)]),
-    (Color::PURPLE_BACKGROUND, &[(-1, 0), (0, 0), (1, 0), (0, -1)]),
+    (Color::MAGENTA_BACKGROUND, &[(-1, 0), (0, 0), (1, 0), (0, -1)]),
     (Color::RED_BACKGROUND, &[(-1, -1), (0, -1), (0, 0), (1, 0)]),
     (Color::GREEN_BACKGROUND, &[(1, -1), (0, -1), (0, 0), (-1, 0)]),
 ];

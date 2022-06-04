@@ -229,7 +229,7 @@ impl Game {
                 let h = self.get_height() as i32;
                 (0..w).contains(&x) && (..h).contains(&y)
             }
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -241,7 +241,7 @@ impl Game {
                 let h = self.get_height() as i8;
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
