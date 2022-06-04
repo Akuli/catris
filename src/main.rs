@@ -1,23 +1,15 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
-use std::io::Write;
 use std::net::IpAddr;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::Weak;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
-use tokio::sync::Notify;
-use tokio::time::sleep;
 use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
@@ -122,7 +114,7 @@ pub async fn handle_connection(
     // TODO: max concurrent connections from same ip?
     let (reader, mut writer) = socket.into_split();
 
-    let client = client::Client::new(ip, reader);
+    let client = client::Client::new(reader);
     let logger = client.logger();
     logger.log("New connection");
     log_ip_if_connects_a_lot(&logger, ip, recent_ips);

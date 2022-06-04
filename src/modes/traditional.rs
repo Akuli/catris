@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::ansi::Color;
 use crate::lobby::ClientInfo;
 use crate::logic_base::Player;
 use crate::logic_base::PlayerPoint;

@@ -1,11 +1,7 @@
 use rand::seq::SliceRandom;
-use std::cell::RefCell;
-use std::collections::HashMap;
 
 use crate::ansi::Color;
-use crate::ansi::KeyPress;
 use crate::lobby::ClientInfo;
-use crate::render;
 
 #[derive(Copy, Clone)]
 pub struct SquareContent {

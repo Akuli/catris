@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 pub const CLEAR_SCREEN: &str = "\x1b[2J";
 pub const CLEAR_TO_END_OF_LINE: &str = "\x1b[0K";
 pub const CLEAR_FROM_CURSOR_TO_END_OF_SCREEN: &str = "\x1b[0J";

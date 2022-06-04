@@ -1,32 +1,20 @@
-use std::cmp::min;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
-use std::io::Write;
-use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::MutexGuard;
-use std::sync::Weak;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
-use tokio::net::tcp::OwnedWriteHalf;
-use tokio::net::TcpListener;
-use tokio::net::TcpStream;
 use tokio::sync::Notify;
-use tokio::time::sleep;
 use tokio::time::timeout;
-use weak_table::WeakValueHashMap;
 
 use crate::ansi;
 use crate::lobby;
 use crate::render;
-use crate::views;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 pub struct ClientLogger {
@@ -39,7 +27,6 @@ impl ClientLogger {
 }
 
 pub struct Client {
-    ip: IpAddr,
     pub id: u64,
     pub render_data: Arc<Mutex<render::RenderData>>,
     recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
@@ -54,9 +41,8 @@ pub struct Client {
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 impl Client {
-    pub fn new(ip: IpAddr, reader: OwnedReadHalf) -> Client {
+    pub fn new(reader: OwnedReadHalf) -> Client {
         Client {
-            ip,
             // https://stackoverflow.com/a/32936288
             id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
             render_data: Arc::new(Mutex::new(render::RenderData {
