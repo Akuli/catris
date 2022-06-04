@@ -520,7 +520,7 @@ pub async fn play_game(client: &mut client::Client, mode: GameMode) -> Result<()
                 .game
                 .lock()
                 .unwrap()
-                .render_to_buf(&mut render_data.buffer);
+                .render_to_buf(client.id, &mut render_data.buffer);
             render_data.changed.notify_one();
         }
 

@@ -109,8 +109,7 @@ impl MovingBlock {
     }
 
     fn get_moved_relative_coords(&self, dx: i8, dy: i8) -> Vec<BlockRelativeCoords> {
-        self
-            .relative_coords
+        self.relative_coords
             .iter()
             .map(|(x, y)| (x + dx, y + dy))
             .collect::<Vec<BlockRelativeCoords>>()

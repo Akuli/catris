@@ -13,7 +13,7 @@ const HEIGHT: usize = 20;
 
 pub struct TraditionalGame {
     pub players: Vec<RefCell<Player>>,
-    pub landed_rows: [Vec<Option<SquareContent>>; HEIGHT],
+    landed_rows: [Vec<Option<SquareContent>>; HEIGHT],
     pub flashing_points: HashMap<WorldPoint, u8>,
 }
 
@@ -83,64 +83,22 @@ impl TraditionalGame {
             && x < ((player_idx + 1) * self.get_width_per_player()) as i8
     }
 
-    // TODO: i don't like this function
-    pub fn get_square_contents(
-        &self,
-        exclude_player_idx: Option<usize>,
-    ) -> HashMap<(i8, i8), SquareContent> {
-        let mut result: HashMap<(i8, i8), SquareContent> = HashMap::new();
-
-        for (y, row) in self.landed_rows.iter().enumerate() {
-            for (x, cell) in row.iter().enumerate() {
-                if let Some(content) = cell {
-                    result.insert((x as i8, y as i8), *content);
-                }
-            }
-        }
-
-        for (i, player) in self.players.iter().enumerate() {
-            if Some(i) == exclude_player_idx {
-                continue;
-            }
-
-            let contents = player.borrow().block.get_square_contents();
-            for player_point in &player.borrow().block.get_player_coords() {
-                result.insert(player.borrow().player_to_world(*player_point), contents);
-            }
-        }
-
-        for (point, color) in &self.flashing_points {
-            result.insert(
-                *point,
-                SquareContent {
-                    text: [' ', ' '],
-                    color: Color { fg: 0, bg: *color },
-                },
-            );
-        }
-
-        result
-    }
-
-    pub fn render_to_buf(&self, buffer: &mut render::Buffer) {
-        let square_contents = self.get_square_contents(None);
-
+    pub fn render_world_edges_to_buf(&self, buffer: &mut render::Buffer) -> (i8, i8) {
         for y in 0..HEIGHT {
             buffer.set_char(0, y, '|');
             buffer.set_char(2 * self.get_width() + 1, y, '|');
-
-            for x in 0..self.get_width() {
-                if let Some(content) = square_contents.get(&(x as i8, y as i8)) {
-                    buffer.set_char_with_color(2 * x + 1, y, content.text[0], content.color);
-                    buffer.set_char_with_color(2 * x + 2, y, content.text[1], content.color);
-                }
-            }
         }
+        return (1, 0);
     }
 
-    pub fn set_landed_square(&mut self, point: WorldPoint, content: Option<SquareContent>) {
+    pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         let (x, y) = point;
-        self.landed_rows[y as usize][x as usize] = content;
+        self.landed_rows[y as usize][x as usize]
+    }
+
+    pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
+        let (x, y) = point;
+        self.landed_rows[y as usize][x as usize] = value;
     }
 
     pub fn find_full_rows(&self) -> Vec<WorldPoint> {
