@@ -1,4 +1,5 @@
-plz wait timers
+plz wait timers: show in ui
+plz wait timers: game over when everyone on timer
 high scores saving+view
 bomb blocks
 drill blocks
@@ -10,3 +11,5 @@ ring game
 prod with RUST_BACKTRACE=1
 
 Bug: cant move left/right after fast-down
+Bug: stacking moving blocks easily gets them stuck
+Todo: highlight await keyword in my editor

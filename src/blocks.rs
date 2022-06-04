@@ -152,31 +152,3 @@ impl MovingBlock {
         };
     }
 }
-
-#[derive(Debug)]
-pub enum BlockOrTimer {
-    Block(MovingBlock),
-    Timer(u8),
-}
-impl BlockOrTimer {
-    pub fn get_coords(&self) -> Vec<PlayerPoint> {
-        match self {
-            BlockOrTimer::Block(block) => block.get_coords(),
-            BlockOrTimer::Timer(_) => vec![],
-        }
-    }
-
-    pub fn get_moved_coords(&self, dx: i8, dy: i8) -> Vec<PlayerPoint> {
-        match self {
-            BlockOrTimer::Block(block) => block.get_moved_coords(dx, dy),
-            BlockOrTimer::Timer(_) => vec![],
-        }
-    }
-
-    pub fn get_rotated_coords(&self) -> Vec<PlayerPoint> {
-        match self {
-            BlockOrTimer::Block(block) => block.get_rotated_coords(),
-            BlockOrTimer::Timer(_) => vec![],
-        }
-    }
-}

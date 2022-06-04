@@ -1,10 +1,38 @@
-use crate::blocks::BlockOrTimer;
 use crate::blocks::MovingBlock;
 use crate::lobby::ClientInfo;
 
 // Relatively big ints in player coords because in ring mode they just grow as blocks wrap around.
 pub type PlayerPoint = (i32, i32);
 pub type WorldPoint = (i8, i8);
+
+#[derive(Debug)]
+pub enum BlockOrTimer {
+    Block(MovingBlock),
+    TimerPending,
+    Timer(u8),
+}
+impl BlockOrTimer {
+    pub fn get_coords(&self) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_coords(),
+            _ => vec![],
+        }
+    }
+
+    pub fn get_moved_coords(&self, dx: i8, dy: i8) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_moved_coords(dx, dy),
+            _ => vec![],
+        }
+    }
+
+    pub fn get_rotated_coords(&self) -> Vec<PlayerPoint> {
+        match self {
+            BlockOrTimer::Block(block) => block.get_rotated_coords(),
+            _ => vec![],
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Player {

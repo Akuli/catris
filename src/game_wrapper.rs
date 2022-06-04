@@ -80,7 +80,55 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
     }
 }
 
+async fn tick_please_wait_counter(weak_wrapper: Weak<GameWrapper>, client_id: u64) {
+    loop {
+        sleep(Duration::from_secs(1)).await;
+        match weak_wrapper.upgrade() {
+            Some(wrapper) => {
+                let mut game = wrapper.game.lock().unwrap();
+                if !game.tick_please_wait_counter(client_id) {
+                    return;
+                }
+            }
+            None => return,
+        }
+    }
+}
+
+async fn start_please_wait_counters_as_needed(
+    weak_wrapper: Weak<GameWrapper>,
+    mut changed_receiver: watch::Receiver<()>,
+) {
+    loop {
+        match weak_wrapper.upgrade() {
+            Some(wrapper) => {
+                let ids = wrapper
+                    .game
+                    .lock()
+                    .unwrap()
+                    .start_pending_please_wait_counters();
+                for client_id in ids {
+                    tokio::spawn(tick_please_wait_counter(
+                        Arc::downgrade(&wrapper),
+                        client_id,
+                    ));
+                }
+            }
+            None => return,
+        }
+
+        // Can fail, if game no longer exists (we only have a weak reference)
+        if changed_receiver.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
 pub fn start_tasks(wrapper: Arc<GameWrapper>) {
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
+    tokio::spawn(start_please_wait_counters_as_needed(
+        Arc::downgrade(&wrapper),
+        wrapper.changed_receiver.clone(),
+    ));
 }

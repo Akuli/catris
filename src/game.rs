@@ -1,10 +1,10 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::blocks::BlockOrTimer;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
+use crate::player::BlockOrTimer;
 use crate::player::Player;
 use crate::player::PlayerPoint;
 use crate::player::WorldPoint;
@@ -149,7 +149,7 @@ impl Game {
 
                     block.set_player_coords(&new_points, (center_x, center_y));
                 }
-                BlockOrTimer::Timer(_) => {}
+                _ => {}
             }
         }
     }
@@ -236,18 +236,6 @@ impl Game {
                 let h = landed_rows.len() as i8;
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
-        }
-    }
-
-    fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool {
-        match self.mode() {
-            Mode::Traditional => {
-                let (x, _) = point;
-                let start = (player_idx * self.get_width_per_player()) as i8;
-                let end = ((player_idx + 1) * self.get_width_per_player()) as i8;
-                (start..end).contains(&x)
-            }
-            _ => unimplemented!(),
         }
     }
 
@@ -405,7 +393,7 @@ impl Game {
                                     break;
                                 }
                             }
-                            BlockOrTimer::Timer(_) => {}
+                            _ => {}
                         }
                     }
                 }
@@ -462,7 +450,7 @@ impl Game {
 
             let (player_coords, square_content) = match &player.borrow().block_or_timer {
                 BlockOrTimer::Block(b) => (b.get_coords(), b.get_square_content()),
-                BlockOrTimer::Timer(_) => continue,
+                _ => continue,
             };
 
             let world_points: Vec<WorldPoint> = player_coords
@@ -481,12 +469,8 @@ impl Game {
             } else {
                 // no room to land
                 let mut player = player.borrow_mut();
-                player.block_or_timer = BlockOrTimer::Timer(30);
-                // TODO: start a timer task somehow
-                //self.client_ids_starting_timer.push(player.client_id);
+                player.block_or_timer = BlockOrTimer::TimerPending;
             }
-
-            player.borrow_mut().fast_down = false;
         }
 
         for (point, content) in landing {
@@ -524,8 +508,7 @@ impl Game {
             }
         };
 
-        let mut player = self.players[player_idx].borrow_mut();
-        player.fast_down = false;
+        self.players[player_idx].borrow_mut().fast_down = false;
         need_render
     }
 
@@ -569,7 +552,72 @@ impl Game {
 
     pub fn new_block(&self, player_idx: usize) {
         let mut player = self.players[player_idx].borrow_mut();
-        player.block_or_timer = BlockOrTimer::Block(MovingBlock::new(player.spawn_point));
-        // TODO: start please wait countdown if there are overlaps
+        let block = MovingBlock::new(player.spawn_point);
+        let overlaps = block
+            .get_coords()
+            .iter()
+            .any(|p| self.square_is_occupied(player.player_to_world(*p), Some(player_idx)));
+        if overlaps {
+            player.block_or_timer = BlockOrTimer::TimerPending;
+        } else {
+            player.block_or_timer = BlockOrTimer::Block(MovingBlock::new(player.spawn_point));
+        }
+        player.fast_down = false;
+    }
+
+    pub fn start_pending_please_wait_counters(&mut self) -> Vec<u64> {
+        let mut client_ids = vec![];
+        for player in &self.players {
+            let mut player = player.borrow_mut();
+            if matches!(player.block_or_timer, BlockOrTimer::TimerPending) {
+                player.block_or_timer = BlockOrTimer::Timer(30);
+                client_ids.push(player.client_id);
+            }
+        }
+
+        client_ids
+    }
+
+    // returns whether this should be called again in 1 second
+    pub fn tick_please_wait_counter(&mut self, client_id: u64) -> bool {
+        if let Some(i) = self
+            .players
+            .iter()
+            .position(|p| p.borrow().client_id == client_id)
+        {
+            let need_reset = {
+                let mut player = self.players[i].borrow_mut();
+                match player.block_or_timer {
+                    BlockOrTimer::Timer(0) => panic!(),
+                    BlockOrTimer::Timer(1) => true, // need reset
+                    BlockOrTimer::Timer(n) => {
+                        player.block_or_timer = BlockOrTimer::Timer(n - 1);
+                        println!("Counter {}", n - 1);
+                        return true; // call again in 1sec
+                    }
+                    _ => false,
+                }
+            };
+            if need_reset {
+                self.clear_playing_area(i);
+                self.new_block(i);
+            }
+        }
+        false
+    }
+
+    fn clear_playing_area(&mut self, player_idx: usize) {
+        let left = self.get_width_per_player() * player_idx;
+        let right = self.get_width_per_player() * (player_idx + 1);
+
+        match &mut self.mode_specific_data {
+            ModeSpecificData::Traditional { landed_rows } => {
+                for row in landed_rows.iter_mut() {
+                    for square_ref in row[left..right].iter_mut() {
+                        *square_ref = None;
+                    }
+                }
+            }
+        }
     }
 }
