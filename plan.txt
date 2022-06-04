@@ -1,4 +1,5 @@
 plz wait timers: game over when everyone on timer
+pause
 high scores saving+view
 bomb blocks
 drill blocks

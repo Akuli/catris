@@ -1,4 +1,3 @@
-use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
@@ -8,7 +7,6 @@ use crate::player::BlockOrTimer;
 use crate::player::Player;
 use crate::player::PlayerPoint;
 use crate::player::WorldPoint;
-use crate::render::RenderBuffer;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -45,7 +43,7 @@ enum ModeSpecificData {
 }
 
 pub struct Game {
-    players: Vec<RefCell<Player>>,
+    pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
     mode_specific_data: ModeSpecificData,
 }
@@ -74,7 +72,7 @@ impl Game {
         }
     }
 
-    fn get_width_per_player(&self) -> usize {
+    pub fn get_width_per_player(&self) -> usize {
         match self.mode() {
             Mode::Traditional => {
                 // TODO: 10 would be wide enough for two
@@ -88,10 +86,16 @@ impl Game {
         }
     }
 
-    fn get_width(&self) -> usize {
+    pub fn get_width(&self) -> usize {
         match self.mode() {
             Mode::Traditional => self.get_width_per_player() * self.players.len(),
             _ => unimplemented!(),
+        }
+    }
+
+    pub fn get_height(&self) -> usize {
+        match &self.mode_specific_data {
+            ModeSpecificData::Traditional { landed_rows } => landed_rows.len(),
         }
     }
 
@@ -218,28 +222,48 @@ impl Game {
     }
 
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
-        match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
+        match self.mode() {
+            Mode::Traditional => {
                 let (x, y) = point;
                 let w = self.get_width() as i32;
-                let h = landed_rows.len() as i32;
+                let h = self.get_height() as i32;
                 (0..w).contains(&x) && (..h).contains(&y)
             }
+            _ => panic!()
         }
     }
 
-    fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
-        match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
+    pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
+        match self.mode() {
+            Mode::Traditional => {
                 let (x, y) = point;
                 let w = self.get_width() as i8;
-                let h = landed_rows.len() as i8;
+                let h = self.get_height() as i8;
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
+            _ => panic!()
         }
     }
 
-    fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
+    pub fn get_moving_square(&self, point: WorldPoint) -> Option<SquareContent> {
+        for player in &self.players {
+            match &player.borrow().block_or_timer {
+                BlockOrTimer::Block(block) => {
+                    if block
+                        .get_coords()
+                        .iter()
+                        .any(|p| player.borrow().player_to_world(*p) == point)
+                    {
+                        return Some(block.get_square_content());
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 let (x, y) = point;
@@ -310,7 +334,7 @@ impl Game {
         can_move
     }
 
-    fn predict_landing_place(&self, player_idx: usize) -> Vec<WorldPoint> {
+    pub fn predict_landing_place(&self, player_idx: usize) -> Vec<WorldPoint> {
         let player = &self.players[player_idx];
         let mut working_coords: Vec<WorldPoint> = vec![];
 
@@ -338,139 +362,6 @@ impl Game {
 
         // Block won't land if it moves down. Happens a lot in ring mode.
         return vec![];
-    }
-
-    fn render_walls(&self, client_id: u64, buffer: &mut RenderBuffer) {
-        match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
-                let h = landed_rows.len();
-
-                for (i, player) in self.players.iter().enumerate() {
-                    let w = 2*self.get_width_per_player();
-                    let left = 1 + (i * w);
-                    let text = player.borrow().get_name_string(w);
-                    let color = Color {
-                        fg: player.borrow().color,
-                        bg: 0,
-                    };
-                    let free_space = w - text.chars().count();
-                    buffer.add_text_with_color(left + (free_space / 2), 0, &text, color);
-
-                    let line_character = if player.borrow().client_id == client_id {
-                        "="
-                    } else {
-                        "-"
-                    };
-                    for x in left..(left + w) {
-                        buffer.add_text_with_color(x, 1, line_character, color);
-                    }
-                }
-
-                buffer.set_char(0, 1, 'o');
-                buffer.set_char(2 * self.get_width() + 1, 1, 'o');
-                for y in 2..(2 + h) {
-                    buffer.set_char(0, y, '|');
-                    buffer.set_char(2 * self.get_width() + 1, y, '|');
-                }
-
-                let bottom_y = 2 + h;
-                buffer.set_char(0, bottom_y, 'o');
-                buffer.set_char(2 * self.get_width() + 1, bottom_y, 'o');
-                for x in 1..(2 * self.get_width() + 1) {
-                    buffer.set_char(x, bottom_y, '-');
-                }
-            }
-        }
-    }
-
-    fn render_blocks(&self, client_id: u64, buffer: &mut RenderBuffer) {
-        let player_idx = self
-            .players
-            .iter()
-            .position(|cell| cell.borrow().client_id == client_id)
-            .unwrap();
-
-        let (offset_x, offset_y) = match self.mode() {
-            Mode::Traditional => (1, 2),
-            _ => panic!(),
-        };
-
-        let trace_points = self.predict_landing_place(player_idx);
-
-        // TODO: optimize lol?
-        for x in i8::MIN..i8::MAX {
-            for y in i8::MIN..i8::MAX {
-                if !self.is_valid_landed_block_coords((x, y)) {
-                    continue;
-                }
-
-                // If flashing, display the flashing
-                let mut content = self
-                    .flashing_points
-                    .get(&(x, y))
-                    .map(|color| SquareContent {
-                        text: [' ', ' '],
-                        color: Color { fg: 0, bg: *color },
-                    });
-
-                // If not flashing and there's a player's block, show that
-                if content.is_none() {
-                    for player in &self.players {
-                        match &player.borrow().block_or_timer {
-                            BlockOrTimer::Block(block) => {
-                                if block
-                                    .get_coords()
-                                    .iter()
-                                    .any(|p| player.borrow().player_to_world(*p) == (x, y))
-                                {
-                                    content = Some(block.get_square_content());
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // If still nothing found, use landed squares or leave empty.
-                // These are the only ones that can get trace markers "::" on top of them.
-                // Traces of drill blocks usually go on top of landed squares.
-                if content.is_none() {
-                    let mut traced_content =
-                        self.get_landed_square((x, y)).unwrap_or(SquareContent {
-                            text: [' ', ' '],
-                            color: Color::DEFAULT,
-                        });
-                    if trace_points.contains(&(x, y))
-                        && traced_content.text[0] == ' '
-                        && traced_content.text[1] == ' '
-                    {
-                        traced_content.text[0] = ':';
-                        traced_content.text[1] = ':';
-                    }
-                    content = Some(traced_content);
-                };
-
-                let content = content.unwrap();
-                buffer.set_char_with_color(
-                    (2 * x + offset_x) as usize,
-                    (y + offset_y) as usize,
-                    content.text[0],
-                    content.color,
-                );
-                buffer.set_char_with_color(
-                    (2 * x + offset_x) as usize + 1,
-                    (y + offset_y) as usize,
-                    content.text[1],
-                    content.color,
-                );
-            }
-        }
-    }
-
-    pub fn render_to_buf(&self, client_id: u64, buffer: &mut RenderBuffer) {
-        self.render_walls(client_id, buffer);
-        self.render_blocks(client_id, buffer);
     }
 
     pub fn move_blocks_down(&mut self, fast: bool) -> bool {
@@ -553,11 +444,12 @@ impl Game {
 
     pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
         let w = self.get_width();
+        let h = self.get_height();
 
         match &mut self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 let mut should_wipe = vec![];
-                should_wipe.resize(landed_rows.len(), false);
+                should_wipe.resize(h, false);
                 for (_, y) in full {
                     should_wipe[*y as usize] = true;
                 }

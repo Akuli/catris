@@ -1,4 +1,5 @@
 use crate::ansi::Color;
+use crate::ingame_ui;
 use crate::ansi::KeyPress;
 use crate::client::Client;
 use crate::game::Mode;
@@ -499,11 +500,8 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         {
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
-            game_wrapper
-                .game
-                .lock()
-                .unwrap()
-                .render_to_buf(client.id, &mut render_data.buffer);
+            let game = game_wrapper.game.lock().unwrap();
+            ingame_ui::render(&*game, client.id, &mut *render_data);
             render_data.changed.notify_one();
         }
 
