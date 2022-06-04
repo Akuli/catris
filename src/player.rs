@@ -56,6 +56,22 @@ impl Player {
         }
     }
 
+    pub fn get_name_string(&self, max_len: usize) -> String {
+        let mut name = self.name.clone();
+        loop {
+            let formatted: String = match self.block_or_timer {
+                BlockOrTimer::Timer(n) => format!("[{}] {}", name, n),
+                _ => name.clone(),
+            };
+            if formatted.chars().count() <= max_len {
+                return formatted;
+            }
+
+            assert!(!name.is_empty());
+            name.pop();
+        }
+    }
+
     pub fn world_to_player(&self, point: WorldPoint) -> PlayerPoint {
         let (x, y) = point;
         (x as i32, y as i32)

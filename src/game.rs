@@ -239,19 +239,6 @@ impl Game {
         }
     }
 
-    // returns the location of world coords (0,0) within the buffer
-    fn render_world_edges_to_buf(&self, buffer: &mut RenderBuffer) -> (i8, i8) {
-        match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
-                for y in 0..landed_rows.len() {
-                    buffer.set_char(0, y, '|');
-                    buffer.set_char(2 * self.get_width() + 1, y, '|');
-                }
-                (1, 0)
-            }
-        }
-    }
-
     fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
@@ -353,14 +340,61 @@ impl Game {
         return vec![];
     }
 
-    pub fn render_to_buf(&self, client_id: u64, buffer: &mut RenderBuffer) {
+    fn render_walls(&self, client_id: u64, buffer: &mut RenderBuffer) {
+        match &self.mode_specific_data {
+            ModeSpecificData::Traditional { landed_rows } => {
+                let h = landed_rows.len();
+
+                for (i, player) in self.players.iter().enumerate() {
+                    let w = 2*self.get_width_per_player();
+                    let left = 1 + (i * w);
+                    let text = player.borrow().get_name_string(w);
+                    let color = Color {
+                        fg: player.borrow().color,
+                        bg: 0,
+                    };
+                    let free_space = w - text.chars().count();
+                    buffer.add_text_with_color(left + (free_space / 2), 0, &text, color);
+
+                    let line_character = if player.borrow().client_id == client_id {
+                        "="
+                    } else {
+                        "-"
+                    };
+                    for x in left..(left + w) {
+                        buffer.add_text_with_color(x, 1, line_character, color);
+                    }
+                }
+
+                buffer.set_char(0, 1, 'o');
+                buffer.set_char(2 * self.get_width() + 1, 1, 'o');
+                for y in 2..(2 + h) {
+                    buffer.set_char(0, y, '|');
+                    buffer.set_char(2 * self.get_width() + 1, y, '|');
+                }
+
+                let bottom_y = 2 + h;
+                buffer.set_char(0, bottom_y, 'o');
+                buffer.set_char(2 * self.get_width() + 1, bottom_y, 'o');
+                for x in 1..(2 * self.get_width() + 1) {
+                    buffer.set_char(x, bottom_y, '-');
+                }
+            }
+        }
+    }
+
+    fn render_blocks(&self, client_id: u64, buffer: &mut RenderBuffer) {
         let player_idx = self
             .players
             .iter()
             .position(|cell| cell.borrow().client_id == client_id)
             .unwrap();
 
-        let (offset_x, offset_y) = self.render_world_edges_to_buf(buffer);
+        let (offset_x, offset_y) = match self.mode() {
+            Mode::Traditional => (1, 2),
+            _ => panic!(),
+        };
+
         let trace_points = self.predict_landing_place(player_idx);
 
         // TODO: optimize lol?
@@ -432,6 +466,11 @@ impl Game {
                 );
             }
         }
+    }
+
+    pub fn render_to_buf(&self, client_id: u64, buffer: &mut RenderBuffer) {
+        self.render_walls(client_id, buffer);
+        self.render_blocks(client_id, buffer);
     }
 
     pub fn move_blocks_down(&mut self, fast: bool) -> bool {

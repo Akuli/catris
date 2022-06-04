@@ -1,4 +1,3 @@
-plz wait timers: show in ui
 plz wait timers: game over when everyone on timer
 high scores saving+view
 bomb blocks
@@ -7,6 +6,7 @@ cursed blocks
 ingame ui
 bottle game
 ring game
+websocket support
 
 prod with RUST_BACKTRACE=1
 
