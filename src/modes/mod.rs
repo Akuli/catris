@@ -94,31 +94,17 @@ impl AnyGame {
         self.get_players().len()
     }
 
-    fn get_square_content(
-        &self,
-        point: WorldPoint,
-        exclude_player_idx: Option<usize>,
-    ) -> Option<SquareContent> {
-        if self.is_valid_landed_block_coords(point) {
-            if let Some(content) = self.get_landed_square(point) {
-                return Some(content);
-            }
-        }
-
-        for (i, player) in self.get_players().iter().enumerate() {
-            if exclude_player_idx != Some(i)
-                && player
-                    .borrow()
-                    .block
-                    .get_player_coords()
-                    .iter()
-                    .any(|p| player.borrow().player_to_world(*p) == point)
-            {
-                return Some(player.borrow().block.get_square_contents());
-            }
-        }
-
-        None
+    fn square_is_occupied(&self, point: WorldPoint, exclude_player_idx: Option<usize>) -> bool {
+        (self.is_valid_landed_block_coords(point) && self.get_landed_square(point).is_some())
+            || self.get_players().iter().enumerate().any(|(i, player)| {
+                exclude_player_idx != Some(i)
+                    && player
+                        .borrow()
+                        .block
+                        .get_player_coords()
+                        .iter()
+                        .any(|p| player.borrow().player_to_world(*p) == point)
+            })
     }
 
     fn rotate_if_possible(&self, player_idx: usize) -> bool {
@@ -126,10 +112,9 @@ impl AnyGame {
         let coords = player.borrow().block.get_rotated_coords();
         let can_rotate = coords.iter().all(|p| {
             let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-            let doesnt_go_on_top_of_anything = self
-                .get_square_content(player.borrow().player_to_world(*p), Some(player_idx))
-                .is_none();
-            stays_in_bounds && doesnt_go_on_top_of_anything
+            let goes_on_top_of_something =
+                self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
+            stays_in_bounds && !goes_on_top_of_something
         });
         if can_rotate {
             player.borrow_mut().block.rotate();
@@ -142,10 +127,9 @@ impl AnyGame {
         let coords = player.borrow().block.get_moved_coords(dx, dy);
         let can_move = coords.iter().all(|p| {
             let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-            let doesnt_go_on_top_of_anything = self
-                .get_square_content(player.borrow().player_to_world(*p), Some(player_idx))
-                .is_none();
-            stays_in_bounds && doesnt_go_on_top_of_anything
+            let goes_on_top_of_something =
+                self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
+            stays_in_bounds && !goes_on_top_of_something
         });
         if can_move {
             player.borrow_mut().block.m0v3(dx, dy);
@@ -162,10 +146,9 @@ impl AnyGame {
             let coords = player.borrow().block.get_moved_coords(0, offset);
             let can_move = coords.iter().all(|p| {
                 let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-                let doesnt_go_on_top_of_anything = self
-                    .get_square_content(player.borrow().player_to_world(*p), Some(player_idx))
-                    .is_none();
-                stays_in_bounds && doesnt_go_on_top_of_anything
+                let goes_on_top_of_something =
+                    self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
+                stays_in_bounds && !goes_on_top_of_something
             });
             if can_move {
                 working_coords = Some(
@@ -220,7 +203,7 @@ impl AnyGame {
                                     .iter()
                                     .any(|p| player.borrow().player_to_world(*p) == (x, y))
                             })
-                            .map(|player| player.borrow().block.get_square_contents())
+                            .map(|player| player.borrow().block.get_square_content())
                     });
 
                 let content = if let Some(c) = content_that_doesnt_get_tracing_marks {
@@ -268,9 +251,10 @@ impl AnyGame {
                     // land
                     let player_coords = player.borrow().block.get_player_coords();
                     for player_point in player_coords {
-                        let world_point = player.borrow().player_to_world(player_point);
-                        let square_contents = player.borrow().block.get_square_contents();
-                        landing.push((world_point, square_contents));
+                        let player = player.borrow();
+                        let world_point = player.player_to_world(player_point);
+                        let square_content = player.block.get_square_content();
+                        landing.push((world_point, square_content));
                     }
                     player.borrow_mut().fast_down = false;
                     player.borrow_mut().new_block();

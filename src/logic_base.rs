@@ -89,7 +89,7 @@ impl MovingBlock {
         }
     }
 
-    pub fn get_square_contents(&self) -> SquareContent {
+    pub fn get_square_content(&self) -> SquareContent {
         SquareContent {
             text: [' ', ' '],
             color: self.color,
