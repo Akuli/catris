@@ -487,7 +487,42 @@ pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
     Ok(())
 }
 
+const PAUSE_SCREEN: &[&str] = &[
+    "o============================================================o",
+    "|                                                            |",
+    "|                                                            |",
+    "|                        Game paused                         |",
+    "|                       ^^^^^^^^^^^^^                        |",
+    "|                                                            |",
+    "|                                                            |",
+    "|                                                            |",
+    "|                                                            |",
+    "|                                                            |",
+    "|                                                            |",
+    "|         You will be disconnected automatically if          |",
+    "|          you don't press any keys for 10 minutes.          |",
+    "|                                                            |",
+    "|                                                            |",
+    "o============================================================o",
+];
+
+fn render_pause_screen(buffer: &mut RenderBuffer, menu: &Menu) {
+    let top_y = (buffer.height - PAUSE_SCREEN.len()) / 2;
+    for (i, text) in PAUSE_SCREEN.iter().enumerate() {
+        buffer.add_centered_text_with_color(top_y + i, text, Color::GREEN_FOREGROUND);
+    }
+    menu.render(buffer, top_y + 7);
+}
+
 pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error> {
+    let mut pause_menu = Menu {
+        items: vec![
+            Some("Continue playing".to_string()),
+            Some("Quit game".to_string()),
+        ],
+        selected_index: 0,
+    };
+
     let game_wrapper = client
         .lobby
         .as_ref()
@@ -502,6 +537,11 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
             render_data.clear(80, 24);
             let game = game_wrapper.game.lock().unwrap();
             ingame_ui::render(&*game, &mut *render_data, client);
+            if game_wrapper.is_paused() {
+                render_pause_screen(&mut render_data.buffer, &pause_menu);
+            } else {
+                pause_menu.selected_index = 0;
+            }
             render_data.changed.notify_one();
         }
 
@@ -511,7 +551,31 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                 result.unwrap();
             }
             key = client.receive_key_press() => {
-                game_wrapper.handle_key_press(client.id, key?);
+                match key? {
+                    KeyPress::Character('P') | KeyPress::Character('p') => {
+                        game_wrapper.set_paused(!game_wrapper.is_paused());
+                    }
+                    k => {
+                        if game_wrapper.is_paused() {
+                            if pause_menu.handle_key_press(k) {
+                                match pause_menu.selected_text() {
+                                    "Continue playing" => game_wrapper.set_paused(false),
+                                    "Quit game" => {
+                                        game_wrapper.remove_player_if_exists(client.id);
+                                        client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
+                                        return Ok(());
+                                    }
+                                    _ => panic!(),
+                                }
+                            }
+                        } else {
+                            let did_something = game_wrapper.game.lock().unwrap().handle_key_press(client.id, k);
+                            if did_something {
+                                game_wrapper.mark_changed();
+                            }
+                        }
+                    }
+                }
             }
         }
     }

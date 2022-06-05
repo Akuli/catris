@@ -1,5 +1,4 @@
 use crate::ansi::Color;
-use crate::ansi::KeyPress;
 use crate::game_logic::Game;
 use crate::lobby::ClientInfo;
 use crate::player::WorldPoint;
@@ -40,10 +39,19 @@ impl GameWrapper {
         }
     }
 
-    fn mark_changed(&self) {
+    pub fn mark_changed(&self) {
         // .send() fails when there are no receivers
         // shouldn't fail here, because this struct owns a receiver
         self.changed_sender.send(()).unwrap();
+    }
+
+    pub fn is_paused(&self) -> bool {
+        *self.paused_receiver.borrow()
+    }
+
+    pub fn set_paused(&self, value: bool) {
+        self.paused_sender.send(value).unwrap();
+        self.mark_changed();
     }
 
     pub fn add_player(&self, client_info: &ClientInfo) {
@@ -54,20 +62,6 @@ impl GameWrapper {
     pub fn remove_player_if_exists(&self, client_id: u64) {
         self.game.lock().unwrap().remove_player_if_exists(client_id);
         self.mark_changed();
-    }
-
-    pub fn handle_key_press(&self, client_id: u64, key: KeyPress) {
-        match key {
-            KeyPress::Character('P') | KeyPress::Character('p') => {
-                let paused = *self.paused_receiver.borrow();
-                self.paused_sender.send(!paused).unwrap();
-            }
-            k => {
-                if self.game.lock().unwrap().handle_key_press(client_id, k) {
-                    self.mark_changed();
-                }
-            }
-        }
     }
 }
 
@@ -209,7 +203,7 @@ async fn start_please_wait_counters_as_needed(
 }
 
 pub fn start_tasks(wrapper: Arc<GameWrapper>) {
-    //tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
+    tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
     tokio::spawn(start_please_wait_counters_as_needed(
         Arc::downgrade(&wrapper),

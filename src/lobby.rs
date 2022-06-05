@@ -23,7 +23,8 @@ pub struct ClientInfo {
 pub struct Lobby {
     pub id: String,
     pub clients: Vec<ClientInfo>,
-    // change triggers when people join/leave the lobby or a game, and ui must refresh
+    // change triggers when people join/leave the lobby or a game.
+    // Lobby UI shows how many players are in each game, that must refresh
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
     game_wrappers: WeakValueHashMap<Mode, Weak<GameWrapper>>,
@@ -63,7 +64,7 @@ impl Lobby {
         self.get_player_count(mode) == mode.max_players()
     }
 
-    fn mark_changed(&self) {
+    pub fn mark_changed(&self) {
         self.changed_sender.send(()).unwrap();
     }
 
