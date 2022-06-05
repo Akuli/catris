@@ -192,11 +192,6 @@ fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client,
         buffer.add_text(x_offset, 16, "Nothing in hold");
         buffer.add_text(x_offset, 17, "   (press h)");
     }
-    if true {
-    } else {
-        buffer.add_text(x_offset, 6, "Holding:");
-        //TODO: show hold
-    }
 }
 
 pub fn render(game: &Game, render_data: &mut RenderData, client: &Client) {
