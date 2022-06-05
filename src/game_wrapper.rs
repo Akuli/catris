@@ -1,5 +1,5 @@
 use crate::ansi::Color;
-use crate::game::Game;
+use crate::game_logic::Game;
 use crate::player::WorldPoint;
 use std::sync::Arc;
 use std::sync::Mutex;

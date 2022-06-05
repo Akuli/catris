@@ -1,7 +1,7 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client::Client;
-use crate::game::Mode;
+use crate::game_logic::Mode;
 use crate::ingame_ui;
 use crate::lobby::looks_like_lobby_id;
 use crate::lobby::Lobbies;

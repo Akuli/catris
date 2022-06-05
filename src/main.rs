@@ -17,7 +17,7 @@ use weak_table::WeakValueHashMap;
 mod ansi;
 mod blocks;
 mod client;
-mod game;
+mod game_logic;
 mod game_wrapper;
 mod ingame_ui;
 mod lobby;

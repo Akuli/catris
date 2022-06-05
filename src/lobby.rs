@@ -1,7 +1,7 @@
 use crate::client;
 use crate::client::ClientLogger;
-use crate::game::Game;
-use crate::game::Mode;
+use crate::game_logic::Game;
+use crate::game_logic::Mode;
 use crate::game_wrapper;
 use crate::game_wrapper::GameWrapper;
 use rand;
