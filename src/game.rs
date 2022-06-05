@@ -483,7 +483,10 @@ impl Game {
 
     pub fn new_block(&self, player_idx: usize) {
         let mut player = self.players[player_idx].borrow_mut();
-        let block = MovingBlock::new(player.spawn_point);
+
+        let mut block = std::mem::replace(&mut player.next_block, MovingBlock::new());
+        block.center = player.spawn_point;
+
         let overlaps = block
             .get_coords()
             .iter()
@@ -491,7 +494,7 @@ impl Game {
         if overlaps {
             player.block_or_timer = BlockOrTimer::TimerPending;
         } else {
-            player.block_or_timer = BlockOrTimer::Block(MovingBlock::new(player.spawn_point));
+            player.block_or_timer = BlockOrTimer::Block(block);
         }
         player.fast_down = false;
     }

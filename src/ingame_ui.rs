@@ -1,6 +1,7 @@
-use crate::client::Client;
 use crate::ansi::Color;
+use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
+use crate::client::Client;
 use crate::game::Game;
 use crate::game::Mode;
 use crate::render::RenderBuffer;
@@ -128,12 +129,41 @@ fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
 
 const SCORE_TEXT_COLOR: Color = Color::CYAN_FOREGROUND;
 
-fn render_stuff_on_side(
-    _game: &Game,
+fn render_block(
+    block: &MovingBlock,
     buffer: &mut RenderBuffer,
-    client: &Client,
-    x_offset: usize,
+    text_x: usize,
+    text_y: usize,
+    text: &str,
 ) {
+    /*
+    text goes here
+
+      xxxxxxxxxx
+      xxxxxxxxxx
+      xxxx()xxxx    <-- () is the center
+      xxxxxxxxxx
+      xxxxxxxxxx
+    */
+    buffer.add_text(text_x, text_y, text);
+    let center_x = text_x + 6;
+    let center_y = text_y + 4;
+
+    let square_content = block.get_square_content();
+    for (x, y) in block.get_relative_coords_for_rendering_the_preview() {
+        let buf_x = ((center_x as i8) + 2*(*x as i8)) as usize;
+        let buf_y = ((center_y as i8) + (*y as i8)) as usize;
+        buffer.set_char_with_color(buf_x, buf_y, square_content.text[0], square_content.color);
+        buffer.set_char_with_color(
+            buf_x + 1,
+            buf_y,
+            square_content.text[1],
+            square_content.color,
+        );
+    }
+}
+
+fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client, x_offset: usize) {
     if client.lobby_id_hidden {
         buffer.add_text(x_offset, 4, "Lobby ID: ******");
     } else {
@@ -148,12 +178,17 @@ fn render_stuff_on_side(
         buffer.add_text(x_offset, 6, &"Counter-clockwise");
     }
 
-    buffer.add_text(x_offset, 9, "Next:");
-    //TODO: show next
+    let player = game
+        .players
+        .iter()
+        .find(|p| p.borrow().client_id == client.id)
+        .unwrap()
+        .borrow();
+    render_block(&player.next_block, buffer, x_offset, 9, "Next:");
 
     if true {
-    buffer.add_text(x_offset, 17, "Nothing in hold");
-    buffer.add_text(x_offset, 18, "   (press h)");
+        buffer.add_text(x_offset, 17, "Nothing in hold");
+        buffer.add_text(x_offset, 18, "   (press h)");
     } else {
         buffer.add_text(x_offset, 17, "Holding:");
         //TODO: show hold
@@ -166,5 +201,5 @@ pub fn render(game: &Game, render_data: &mut RenderData, client: &Client) {
     render_data.clear(max(w + room_for_stuff_on_side_size, 80), max(h, 24));
     render_walls(game, &mut render_data.buffer, client.id);
     render_blocks(game, &mut render_data.buffer, client.id);
-    render_stuff_on_side(game, &mut render_data.buffer, client, w+2);
+    render_stuff_on_side(game, &mut render_data.buffer, client, w + 2);
 }

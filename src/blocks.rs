@@ -71,14 +71,18 @@ pub struct MovingBlock {
     rotate_mode: RotateMode,
 }
 impl MovingBlock {
-    pub fn new(spawn_location: PlayerPoint) -> MovingBlock {
+    pub fn new() -> MovingBlock {
         let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
         MovingBlock {
-            center: spawn_location,
+            center: (0, 0), // dummy value, should be changed when spawning the block
             color: *color,
             relative_coords: coords.to_vec(),
             rotate_mode: choose_initial_rotate_mode(coords),
         }
+    }
+
+    pub fn get_relative_coords_for_rendering_the_preview(&self) -> &[(i8, i8)] {
+        &self.relative_coords
     }
 
     pub fn get_square_content(&self) -> SquareContent {

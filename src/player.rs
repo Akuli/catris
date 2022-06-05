@@ -41,6 +41,7 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
+    pub next_block: MovingBlock,
     pub fast_down: bool,
 }
 
@@ -51,7 +52,8 @@ impl Player {
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point: spawn_point,
-            block_or_timer: BlockOrTimer::Block(MovingBlock::new(spawn_point)),
+            block_or_timer: BlockOrTimer::Block(MovingBlock::new()),
+            next_block: MovingBlock::new(),
             fast_down: false,
         }
     }
