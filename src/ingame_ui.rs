@@ -171,8 +171,12 @@ fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client,
         buffer.add_text(x_offset, 4, &format!("Lobby ID: {}", id));
     }
 
-    // TODO: implement scores properly
-    buffer.add_text_with_color(x_offset, 5, "Score: 123", SCORE_TEXT_COLOR);
+    buffer.add_text_with_color(
+        x_offset,
+        5,
+        &format!("Score: {}", game.get_score()),
+        SCORE_TEXT_COLOR,
+    );
 
     if client.prefer_rotating_counter_clockwise {
         buffer.add_text(x_offset, 6, &"Counter-clockwise");

@@ -46,6 +46,7 @@ pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
     mode_specific_data: ModeSpecificData,
+    score: usize,
 }
 
 impl Game {
@@ -63,6 +64,7 @@ impl Game {
             players: vec![],
             flashing_points: HashMap::new(),
             mode_specific_data,
+            score: 0,
         }
     }
 
@@ -70,6 +72,10 @@ impl Game {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { .. } => Mode::Traditional,
         }
+    }
+
+    pub fn get_score(&self) -> usize {
+        self.score
     }
 
     pub fn get_width_per_player(&self) -> usize {
@@ -201,17 +207,47 @@ impl Game {
         self.update_spawn_places();
     }
 
-    pub fn find_full_rows(&self) -> Vec<WorldPoint> {
+    fn add_score(&mut self, single_player_score: usize) {
+        /*
+        It seems to be exponentially harder to get more points when there are a
+        lot of players, basically P(all n players full) = P(1 player full)^n,
+        although that wrongly assumes players are independent of each other.
+
+        Currently this seems to give points more easily when there's a lot of
+        players, but maybe that's a feature, because it should encourage people to
+        play together :)
+
+        The scores also feel quite different for single player and multiplayer.
+        That's why they are shown separately in the high scores view.
+        */
+        self.score += single_player_score * 2usize.pow((self.players.len() - 1) as u32);
+    }
+
+    pub fn find_full_rows_and_increment_score(&mut self) -> Vec<WorldPoint> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 let mut full_points = vec![];
+                let mut full_count = 0;
+
                 for (y, row) in landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
+                        full_count += 1;
                         for (x, _) in row.iter().enumerate() {
                             full_points.push((x as i8, y as i8));
                         }
                     }
                 }
+
+                /*
+                With 1 player:
+                    no full rows: +0
+                    1 full row:   +10
+                    2 full rows:  +30
+                    3 full rows:  +60
+                    etc
+                */
+                self.add_score(5 * full_count * (full_count + 1));
+
                 full_points
             }
         }

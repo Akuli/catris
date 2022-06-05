@@ -1,5 +1,4 @@
 plz wait timers: game over when everyone on timer
-score counter
 pause
 high scores saving+view
 bomb blocks
@@ -15,3 +14,4 @@ prod with RUST_BACKTRACE=1
 Bug: cant move left/right after fast-down
 Bug: stacking moving blocks easily gets them stuck
 Todo: highlight await keyword in my editor
+Todo: highlight 2usize properly

@@ -64,7 +64,7 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
                 let (moved, full) = {
                     let mut game = wrapper.game.lock().unwrap();
                     let moved = game.move_blocks_down(fast);
-                    (moved, game.find_full_rows())
+                    (moved, game.find_full_rows_and_increment_score())
                 };
                 if !full.is_empty() {
                     flash(wrapper.clone(), &full).await;
