@@ -42,18 +42,20 @@ pub struct Player {
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
     pub next_block: MovingBlock,
+    pub block_in_hold: Option<MovingBlock>,
     pub fast_down: bool,
 }
 
 impl Player {
-    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo) -> Player {
-        Player {
+    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo) -> Self {
+        Self {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point: spawn_point,
             block_or_timer: BlockOrTimer::Block(MovingBlock::new()),
             next_block: MovingBlock::new(),
+            block_in_hold: None,
             fast_down: false,
         }
     }

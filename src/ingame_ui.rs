@@ -151,7 +151,7 @@ fn render_block(
 
     let square_content = block.get_square_content();
     for (x, y) in block.get_relative_coords_for_rendering_the_preview() {
-        let buf_x = ((center_x as i8) + 2*(*x as i8)) as usize;
+        let buf_x = ((center_x as i8) + 2 * (*x as i8)) as usize;
         let buf_y = ((center_y as i8) + (*y as i8)) as usize;
         buffer.set_char_with_color(buf_x, buf_y, square_content.text[0], square_content.color);
         buffer.set_char_with_color(
@@ -184,13 +184,17 @@ fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client,
         .find(|p| p.borrow().client_id == client.id)
         .unwrap()
         .borrow();
-    render_block(&player.next_block, buffer, x_offset, 9, "Next:");
+    render_block(&player.next_block, buffer, x_offset, 8, "Next:");
 
-    if true {
-        buffer.add_text(x_offset, 17, "Nothing in hold");
-        buffer.add_text(x_offset, 18, "   (press h)");
+    if let Some(block) = &player.block_in_hold {
+        render_block(block, buffer, x_offset, 16, "Holding:");
     } else {
-        buffer.add_text(x_offset, 17, "Holding:");
+        buffer.add_text(x_offset, 16, "Nothing in hold");
+        buffer.add_text(x_offset, 17, "   (press h)");
+    }
+    if true {
+    } else {
+        buffer.add_text(x_offset, 6, "Holding:");
         //TODO: show hold
     }
 }

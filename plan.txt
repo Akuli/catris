@@ -5,10 +5,8 @@ high scores saving+view
 bomb blocks
 drill blocks
 cursed blocks
-show next block
 bottle game
 ring game
-hold
 counter-clockwise rotation
 websocket support
 

@@ -432,6 +432,7 @@ impl Game {
             KeyPress::Up | KeyPress::Character('W') | KeyPress::Character('w') => {
                 self.rotate_if_possible(player_idx)
             }
+            KeyPress::Character('H') | KeyPress::Character('h') => self.hold_block(player_idx),
             _ => {
                 println!("Unhandled Key Press!! {:?}", key);
                 false
@@ -481,22 +482,60 @@ impl Game {
         }
     }
 
-    pub fn new_block(&self, player_idx: usize) {
+    fn can_add_block(&self, player_idx: usize, block: &MovingBlock) -> bool {
+        let overlaps = block.get_coords().iter().any(|p| {
+            self.square_is_occupied(
+                self.players[player_idx].borrow().player_to_world(*p),
+                Some(player_idx),
+            )
+        });
+        !overlaps
+    }
+
+    fn new_block_possibly_from_hold(&self, player_idx: usize, from_hold_if_possible: bool) {
+        use std::mem::replace;
+
+        let block = {
+            let mut player = self.players[player_idx].borrow_mut();
+            let mut block;
+            if from_hold_if_possible && player.block_in_hold.is_some() {
+                block = replace(&mut player.block_in_hold, None).unwrap();
+            } else {
+                block = replace(&mut player.next_block, MovingBlock::new());
+            }
+            block.center = player.spawn_point;
+            block
+        };
+
+        let can_add = self.can_add_block(player_idx, &block);
         let mut player = self.players[player_idx].borrow_mut();
-
-        let mut block = std::mem::replace(&mut player.next_block, MovingBlock::new());
-        block.center = player.spawn_point;
-
-        let overlaps = block
-            .get_coords()
-            .iter()
-            .any(|p| self.square_is_occupied(player.player_to_world(*p), Some(player_idx)));
-        if overlaps {
-            player.block_or_timer = BlockOrTimer::TimerPending;
+        if can_add {
+            player.block_or_timer = BlockOrTimer::Block(block)
         } else {
-            player.block_or_timer = BlockOrTimer::Block(block);
+            player.block_or_timer = BlockOrTimer::TimerPending
         }
         player.fast_down = false;
+    }
+
+    fn new_block(&self, player_idx: usize) {
+        self.new_block_possibly_from_hold(player_idx, false);
+    }
+
+    fn hold_block(&self, player_idx: usize) -> bool {
+        use std::mem::replace;
+
+        let mut to_hold = match &mut self.players[player_idx].borrow_mut().block_or_timer {
+            BlockOrTimer::Block(b) if !b.has_been_in_hold => {
+                // Replace the block with a dummy value.
+                // It will be overwritten soon anyway.
+                replace(b, MovingBlock::new())
+            }
+            _ => return false,
+        };
+        self.new_block_possibly_from_hold(player_idx, true);
+        to_hold.has_been_in_hold = true;
+        self.players[player_idx].borrow_mut().block_in_hold = Some(to_hold);
+        true
     }
 
     pub fn start_pending_please_wait_counters(&mut self) -> Vec<u64> {

@@ -69,6 +69,7 @@ pub struct MovingBlock {
     relative_coords: Vec<BlockRelativeCoords>,
     color: Color,
     rotate_mode: RotateMode,
+    pub has_been_in_hold: bool,
 }
 impl MovingBlock {
     pub fn new() -> MovingBlock {
@@ -78,6 +79,7 @@ impl MovingBlock {
             color: *color,
             relative_coords: coords.to_vec(),
             rotate_mode: choose_initial_rotate_mode(coords),
+            has_been_in_hold: false,
         }
     }
 
