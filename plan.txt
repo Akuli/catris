@@ -15,3 +15,5 @@ Bug: cant move left/right after fast-down
 Bug: stacking moving blocks easily gets them stuck
 Todo: highlight await keyword in my editor
 Todo: highlight 2usize properly
+Todo: highlight "static ref" properly
+Todo: highlight "extern crate lazy_static;" properly
