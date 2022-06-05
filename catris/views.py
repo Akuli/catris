@@ -291,7 +291,7 @@ class ChooseIfNewLobbyView(View):
 
         result.append(b"")
         for line in self._motd:
-            result.append((COLOR % 32) + line.strip().center(80).rstrip() + (COLOR % 0))
+            result.append((COLOR % 32) + line.center(80).rstrip() + (COLOR % 0))
 
         return result
 
