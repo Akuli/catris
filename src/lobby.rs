@@ -47,7 +47,7 @@ impl Lobby {
     pub fn get_player_count(&self, mode: Mode) -> usize {
         match self.game_wrappers.get(&mode) {
             Some(wrapper) => {
-                let n = wrapper.game.lock().unwrap().get_player_count();
+                let n = wrapper.game.lock().unwrap().players.len();
                 assert!(n > 0);
                 n
             }

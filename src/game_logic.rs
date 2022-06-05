@@ -201,10 +201,6 @@ impl Game {
         self.update_spawn_places();
     }
 
-    pub fn get_player_count(&self) -> usize {
-        self.players.len()
-    }
-
     pub fn find_full_rows(&self) -> Vec<WorldPoint> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
