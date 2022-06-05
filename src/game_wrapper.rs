@@ -70,8 +70,9 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
                     flash(wrapper.clone(), &full).await;
                     let mut game = wrapper.game.lock().unwrap();
                     game.remove_full_rows(&full);
+                    wrapper.mark_changed();
                 }
-                if moved || !full.is_empty() {
+                if moved {
                     wrapper.mark_changed();
                 }
             }

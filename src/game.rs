@@ -372,9 +372,9 @@ impl Game {
             if player.borrow().fast_down != fast {
                 continue;
             }
-            need_render = true;
 
             if self.move_if_possible(player_idx, 0, 1) {
+                need_render = true;
                 continue;
             }
 
@@ -401,6 +401,7 @@ impl Game {
                 let mut player = player.borrow_mut();
                 player.block_or_timer = BlockOrTimer::TimerPending;
             }
+            need_render = true;
         }
 
         for (point, content) in landing {
