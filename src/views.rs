@@ -507,12 +507,11 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
 
         tokio::select! {
             result = changed_receiver.changed() => {
-                result.unwrap();  // should not be an error
+                // shouldn't fail, because game still exists
+                result.unwrap();
             }
             key = client.receive_key_press() => {
-                if game_wrapper.game.lock().unwrap().handle_key_press(client.id, key?) {
-                    game_wrapper.mark_changed();
-                }
+                game_wrapper.handle_key_press(client.id, key?);
             }
         }
     }

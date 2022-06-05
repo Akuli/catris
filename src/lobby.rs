@@ -91,12 +91,7 @@ impl Lobby {
 
     pub fn remove_client(&mut self, client_id: u64) {
         for wrapper in self.game_wrappers.values() {
-            wrapper
-                .game
-                .lock()
-                .unwrap()
-                .remove_player_if_exists(client_id);
-            wrapper.mark_changed();
+            wrapper.remove_player_if_exists(client_id);
         }
 
         let i = self
@@ -119,8 +114,7 @@ impl Lobby {
             .unwrap();
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
-            wrapper.game.lock().unwrap().add_player(&client_info);
-            wrapper.mark_changed();
+            wrapper.add_player(&client_info);
             wrapper
         } else {
             let mut game = Game::new(mode);
