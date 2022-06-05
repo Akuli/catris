@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from abc import abstractmethod
@@ -15,6 +16,7 @@ from catris.ansi import (
     RIGHT_ARROW_KEY,
     UP_ARROW_KEY,
 )
+from catris.compat import to_thread
 from catris.connections import WebSocketConnection
 from catris.games import GAME_CLASSES, Game, RingGame
 from catris.player import Player
@@ -243,6 +245,18 @@ class _Menu:
         return False  # do not quit yet
 
 
+def _read_motd() -> list[bytes]:
+    result = []
+    try:
+        with open("catris_motd.txt", "rb") as motd:
+            for line in motd:
+                result.append(line.strip())
+    except FileNotFoundError:
+        pass
+
+    return result
+
+
 class ChooseIfNewLobbyView(View):
     def __init__(self, client: Client):
         super().__init__(client)
@@ -253,21 +267,31 @@ class ChooseIfNewLobbyView(View):
                 ("Quit", lambda: True),
             ]
         )
+        self._motd: list[bytes] = []
+        asyncio.create_task(self._motd_task())
+
+    async def _motd_task(self) -> None:
+        self._motd = await to_thread(_read_motd)
+        self.client.render()
 
     def get_lines_to_render(self) -> list[bytes]:
         result = _ASCII_ART.split(b"\n") + self._menu.get_lines_to_render()
 
-        # Bring text to roughly same place as in previous view
-        while len(result) < 17:
-            result.append(b"")
+        result.append(b"")
+        result.append(b"")
+        result.append(b"")
+        result.append(b"")
 
         texts = [
             b"If you want to play alone, just make a new lobby.",
-            b"",
             b"For multiplayer, one player makes a lobby and others join it.",
         ]
         for text in texts:
             result.append(text.center(80).rstrip())
+
+        result.append(b"")
+        for line in self._motd:
+            result.append((COLOR % 32) + line.strip().center(80).rstrip() + (COLOR % 0))
 
         return result
 
