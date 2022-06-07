@@ -4,11 +4,8 @@ use std::io;
 use std::io::ErrorKind;
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio::fs::File;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncBufReadExt;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 
@@ -165,7 +162,9 @@ async fn read_matching_high_scores(
     Ok(result)
 }
 
-pub async fn add_result_and_get_high_scores(result: GameResult) -> Result<(Vec<GameResult>, Option<usize>), Box<dyn Error>> {
+pub async fn add_result_and_get_high_scores(
+    result: GameResult,
+) -> Result<(Vec<GameResult>, Option<usize>), Box<dyn Error>> {
     let filename_handle = FILE_LOCK.lock().unwrap();
     ensure_file_exists(*filename_handle).await?;
 

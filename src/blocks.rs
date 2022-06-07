@@ -83,6 +83,14 @@ impl MovingBlock {
         }
     }
 
+    pub fn spawn_at(&mut self, spawn_point: PlayerPoint) {
+        // Position the block just above the spawn point
+        let (spawn_x, spawn_y) = spawn_point;
+        let lowest_relative_y = *self.relative_coords.iter().map(|(_, y)| y).max().unwrap();
+        let bottom_edge = (lowest_relative_y as i32) + 1;
+        self.center = (spawn_x, spawn_y - bottom_edge);
+    }
+
     pub fn get_relative_coords_for_rendering_the_preview(&self) -> &[(i8, i8)] {
         &self.relative_coords
     }

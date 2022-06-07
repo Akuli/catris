@@ -105,13 +105,13 @@ impl Game {
         }
     }
 
-    fn update_spawn_places(&self) {
+    fn update_spawn_points(&self) {
         match self.mode() {
             Mode::Traditional => {
                 let w = self.get_width_per_player() as i32;
                 for (player_idx, player) in self.players.iter().enumerate() {
                     let i = player_idx as i32;
-                    player.borrow_mut().spawn_point.0 = (i * w) + (w / 2);
+                    player.borrow_mut().spawn_point = ((i * w) + (w / 2), 0);
                 }
             }
             _ => unimplemented!(),
@@ -167,8 +167,8 @@ impl Game {
     pub fn add_player(&mut self, client_info: &ClientInfo) {
         let player_idx = self.players.len();
         self.players
-            .push(RefCell::new(Player::new((0, -1), client_info)));
-        self.update_spawn_places();
+            .push(RefCell::new(Player::new((0, 0), client_info)));
+        self.update_spawn_points();
 
         let w = self.get_width();
         match &mut self.mode_specific_data {
@@ -204,7 +204,7 @@ impl Game {
             }
         }
 
-        self.update_spawn_places();
+        self.update_spawn_points();
     }
 
     fn add_score(&mut self, single_player_score: usize) {
@@ -536,7 +536,7 @@ impl Game {
             } else {
                 block = replace(&mut player.next_block, MovingBlock::new());
             }
-            block.center = player.spawn_point;
+            block.spawn_at(player.spawn_point);
             block
         };
 
