@@ -2,14 +2,13 @@ use crate::game_logic::Mode;
 use std::error::Error;
 use std::io;
 use std::io::ErrorKind;
-use std::sync::Mutex;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GameResult {
     pub mode: Mode,
     pub score: usize,
@@ -95,7 +94,8 @@ fn add_game_result_if_high_score(
 // Prevent multiple games writing their high scores at once.
 // File name stored here so I won't forget to use this
 lazy_static! {
-    static ref FILE_LOCK: Mutex<&'static str> = Mutex::new("catris_high_scores.txt");
+    static ref FILE_LOCK: tokio::sync::Mutex<&'static str> =
+        tokio::sync::Mutex::new("catris_high_scores.txt");
 }
 
 async fn read_matching_high_scores(
@@ -165,7 +165,7 @@ async fn read_matching_high_scores(
 pub async fn add_result_and_get_high_scores(
     result: GameResult,
 ) -> Result<(Vec<GameResult>, Option<usize>), Box<dyn Error>> {
-    let filename_handle = FILE_LOCK.lock().unwrap();
+    let filename_handle = FILE_LOCK.lock().await;
     ensure_file_exists(*filename_handle).await?;
 
     let mut high_scores =

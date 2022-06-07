@@ -2,6 +2,7 @@ use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client::Client;
 use crate::game_logic::Mode;
+use crate::game_wrapper::GameStatus;
 use crate::ingame_ui;
 use crate::lobby::looks_like_lobby_id;
 use crate::lobby::Lobbies;
@@ -15,6 +16,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::sync::watch;
 
 const ASCII_ART: &[&str] = &[
     "",
@@ -530,14 +532,18 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         .lock()
         .unwrap()
         .join_game(client.id, mode);
-    let mut changed_receiver = game_wrapper.changed_receiver.clone();
+
+    // TODO: should these be .subscribe()? grep for subscribe to find another place that needs it
+    let mut receiver = game_wrapper.status_receiver.clone();
+    let mut paused = false;
+
     loop {
         {
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
             let game = game_wrapper.game.lock().unwrap();
             ingame_ui::render(&*game, &mut *render_data, client);
-            if game_wrapper.is_paused() {
+            if paused {
                 render_pause_screen(&mut render_data.buffer, &pause_menu);
             } else {
                 pause_menu.selected_index = 0;
@@ -546,20 +552,28 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         }
 
         tokio::select! {
-            result = changed_receiver.changed() => {
-                // shouldn't fail, because game still exists
-                result.unwrap();
+            result = receiver.changed() => {
+                result.unwrap(); // shouldn't fail, because game wrapper still has the sender
+                let game_over = match *receiver.borrow() {
+                    GameStatus::Playing => { paused = false; false }
+                    GameStatus::Paused(_) => { paused = true; false }
+                    _ => true,
+                };
+                if game_over {
+                    client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
+                    return show_high_scores(receiver).await;
+                }
             }
             key = client.receive_key_press() => {
                 match key? {
                     KeyPress::Character('P') | KeyPress::Character('p') => {
-                        game_wrapper.set_paused(!game_wrapper.is_paused());
+                        game_wrapper.set_paused(None);
                     }
                     k => {
-                        if game_wrapper.is_paused() {
+                        if paused {
                             if pause_menu.handle_key_press(k) {
                                 match pause_menu.selected_text() {
-                                    "Continue playing" => game_wrapper.set_paused(false),
+                                    "Continue playing" => game_wrapper.set_paused(Some(false)),
                                     "Quit game" => {
                                         game_wrapper.remove_player_if_exists(client.id);
                                         client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
@@ -579,4 +593,9 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
             }
         }
     }
+}
+
+async fn show_high_scores(receiver: watch::Receiver<GameStatus>) -> Result<(), io::Error> {
+    println!("Show high scores lol...");
+    Ok(())
 }

@@ -1,6 +1,7 @@
 use crate::ansi::KeyPress;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
+use crate::high_scores::GameResult;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
 use crate::player::BlockOrTimer;
@@ -9,6 +10,8 @@ use crate::player::PlayerPoint;
 use crate::player::WorldPoint;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {
@@ -46,6 +49,9 @@ pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
     mode_specific_data: ModeSpecificData,
+    start_time: Instant,
+    end_time: Option<Instant>, // None means still playing
+    time_spent_paused: Duration,
     score: usize,
 }
 
@@ -64,6 +70,9 @@ impl Game {
             players: vec![],
             flashing_points: HashMap::new(),
             mode_specific_data,
+            start_time: Instant::now(),
+            end_time: None,
+            time_spent_paused: Duration::ZERO,
             score: 0,
         }
     }
@@ -71,6 +80,24 @@ impl Game {
     pub fn mode(&self) -> Mode {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { .. } => Mode::Traditional,
+        }
+    }
+
+    pub fn add_paused_time(&mut self, duration: Duration) {
+        self.time_spent_paused += duration;
+    }
+
+    // None means game still going and not over yet
+    pub fn get_result(&self) -> GameResult {
+        GameResult {
+            mode: self.mode(),
+            score: self.score,
+            duration: self.end_time.unwrap() - self.start_time - self.time_spent_paused,
+            players: self
+                .players
+                .iter()
+                .map(|p| p.borrow().name.clone())
+                .collect(),
         }
     }
 
@@ -571,7 +598,8 @@ impl Game {
         true
     }
 
-    pub fn start_pending_please_wait_counters(&mut self) -> Vec<u64> {
+    // returns None if everyone end up waiting, i.e. if game is over
+    pub fn start_pending_please_wait_counters(&mut self) -> Option<Vec<u64>> {
         let mut client_ids = vec![];
         for player in &self.players {
             let mut player = player.borrow_mut();
@@ -581,7 +609,16 @@ impl Game {
             }
         }
 
-        client_ids
+        if self
+            .players
+            .iter()
+            .all(|p| matches!(p.borrow().block_or_timer, BlockOrTimer::Timer(_)))
+        {
+            self.end_time = Some(Instant::now());
+            None
+        } else {
+            Some(client_ids)
+        }
     }
 
     // returns whether this should be called again in 1 second
