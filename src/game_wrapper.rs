@@ -2,7 +2,6 @@ use crate::ansi::Color;
 use crate::game_logic::Game;
 use crate::high_scores::add_result_and_get_high_scores;
 use crate::high_scores::GameResult;
-use crate::lobby::ClientInfo;
 use crate::player::WorldPoint;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -13,7 +12,6 @@ use tokio;
 use tokio::sync::watch;
 use tokio::time::timeout;
 
-#[derive(Debug)]
 pub enum GameStatus {
     Playing,
     Paused(Instant),
@@ -69,44 +67,28 @@ impl GameWrapper {
             _ => {}
         });
     }
-
-    pub fn add_player(&self, client_info: &ClientInfo) {
-        self.game.lock().unwrap().add_player(client_info);
-        self.mark_changed();
-    }
-
-    pub fn remove_player_if_exists(&self, client_id: u64) {
-        self.game.lock().unwrap().remove_player_if_exists(client_id);
-        self.mark_changed();
-    }
 }
 
-// TODO: remove once i'm done debugging
-impl Drop for GameWrapper {
-    fn drop(&mut self) {
-        println!("dropping Game Wrapper");
-    }
-}
-
-async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Duration) {
+// returns true if can keep going, false if game is ending
+async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Duration) -> bool {
     let mut receiver = match weak_wrapper.upgrade() {
         // subscribe() needed because it marks previous messages as seen
         // if you instead clone the receiver, the first few calls to receiver.changed() will return immediately
         Some(w) => w.status_sender.subscribe(),
-        None => return, // game ended already, before we can do anything
+        None => return false, // game ended already, before we can do anything
     };
 
     loop {
         let is_paused = match *receiver.borrow() {
             GameStatus::Paused(_) => true,
             GameStatus::Playing => false,
-            _ => return, // game over
+            _ => return false, // game over
         };
         if is_paused {
             // wait for unpause, without consuming remaining time
             if receiver.changed().await.is_err() {
                 // game ended while waiting
-                return;
+                return false;
             }
         } else {
             // wait for game to pause or end, by at most the given sleep time
@@ -114,11 +96,11 @@ async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Durati
             match timeout(duration, receiver.changed()).await {
                 Err(_) => {
                     // timed out: we successfully slept the whole duration
-                    return;
+                    return true;
                 }
                 Ok(Err(_)) => {
                     // receiver.changed() failed: sender no longer exists, game ended
-                    return;
+                    return false;
                 }
                 Ok(Ok(())) => {
                     // pause was toggled
@@ -127,7 +109,7 @@ async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Durati
                         .checked_sub(successfully_slept)
                         .unwrap_or(Duration::ZERO);
                     if duration.is_zero() {
-                        return;
+                        return true;
                     }
                 }
             }
@@ -146,7 +128,9 @@ async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
                 .insert(*p, color);
         }
         wrapper.mark_changed();
-        pause_aware_sleep(Arc::downgrade(&wrapper), Duration::from_millis(100)).await;
+        if !pause_aware_sleep(Arc::downgrade(&wrapper), Duration::from_millis(100)).await {
+            return;
+        }
     }
     for p in points {
         wrapper.game.lock().unwrap().flashing_points.remove(p);
@@ -155,8 +139,7 @@ async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
 
 async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
     let sleep_duration = Duration::from_millis(if fast { 25 } else { 400 });
-    loop {
-        pause_aware_sleep(weak_wrapper.clone(), sleep_duration).await;
+    while pause_aware_sleep(weak_wrapper.clone(), sleep_duration).await {
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
                 let mut _lock = wrapper.flashing_mutex.lock().await;
@@ -189,8 +172,7 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
 }
 
 async fn tick_please_wait_counter(weak_wrapper: Weak<GameWrapper>, client_id: u64) {
-    loop {
-        pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await;
+    while pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await {
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
                 let mut game = wrapper.game.lock().unwrap();

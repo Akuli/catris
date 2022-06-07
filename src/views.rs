@@ -4,6 +4,7 @@ use crate::client::Client;
 use crate::game_logic::Mode;
 use crate::game_wrapper::GameStatus;
 use crate::ingame_ui;
+use crate::lobby::join_game_in_a_lobby;
 use crate::lobby::looks_like_lobby_id;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;
@@ -525,13 +526,8 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         selected_index: 0,
     };
 
-    let game_wrapper = client
-        .lobby
-        .as_ref()
-        .unwrap()
-        .lock()
-        .unwrap()
-        .join_game(client.id, mode);
+    let (game_wrapper, _auto_leave_token) =
+        join_game_in_a_lobby(client.lobby.as_ref().unwrap().clone(), client.id, mode);
 
     // TODO: should these be .subscribe()? grep for subscribe to find another place that needs it
     let mut receiver = game_wrapper.status_receiver.clone();
@@ -575,7 +571,6 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                                 match pause_menu.selected_text() {
                                     "Continue playing" => game_wrapper.set_paused(Some(false)),
                                     "Quit game" => {
-                                        game_wrapper.remove_player_if_exists(client.id);
                                         client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
                                         return Ok(());
                                     }

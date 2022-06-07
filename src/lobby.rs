@@ -6,6 +6,7 @@ use crate::game_wrapper;
 use crate::game_wrapper::GameWrapper;
 use rand;
 use rand::Rng;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
@@ -27,7 +28,8 @@ pub struct Lobby {
     // Lobby UI shows how many players are in each game, that must refresh
     changed_sender: watch::Sender<()>,
     pub changed_receiver: watch::Receiver<()>,
-    game_wrappers: WeakValueHashMap<Mode, Weak<GameWrapper>>,
+    // games get deleted when players leave them
+    game_wrappers: HashMap<Mode, Arc<GameWrapper>>,
 }
 
 pub const MAX_CLIENTS_PER_LOBBY: usize = 6;
@@ -41,7 +43,7 @@ impl Lobby {
             clients: vec![],
             changed_sender: sender,
             changed_receiver: receiver,
-            game_wrappers: WeakValueHashMap::new(),
+            game_wrappers: HashMap::new(),
         }
     }
 
@@ -91,10 +93,6 @@ impl Lobby {
     }
 
     pub fn remove_client(&mut self, client_id: u64) {
-        for wrapper in self.game_wrappers.values() {
-            wrapper.remove_player_if_exists(client_id);
-        }
-
         let i = self
             .clients
             .iter()
@@ -107,7 +105,7 @@ impl Lobby {
         self.mark_changed();
     }
 
-    pub fn join_game(&mut self, client_id: u64, mode: Mode) -> Arc<GameWrapper> {
+    fn join_game(&mut self, client_id: u64, mode: Mode) -> Arc<GameWrapper> {
         let client_info = self
             .clients
             .iter()
@@ -115,8 +113,9 @@ impl Lobby {
             .unwrap();
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
-            wrapper.add_player(&client_info);
-            wrapper
+            wrapper.game.lock().unwrap().add_player(client_info);
+            wrapper.mark_changed();
+            wrapper.clone()
         } else {
             let mut game = Game::new(mode);
             game.add_player(&client_info);
@@ -129,13 +128,58 @@ impl Lobby {
         self.mark_changed();
         wrapper
     }
+
+    pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
+        let last_player_removed = if let Some(wrapper) = self.game_wrappers.get(&mode) {
+            let mut game = wrapper.game.lock().unwrap();
+            game.remove_player_if_exists(client_id);
+            wrapper.mark_changed();
+            game.players.is_empty()
+        } else {
+            false
+        };
+
+        if last_player_removed {
+            self.game_wrappers.remove(&mode);
+        }
+        self.mark_changed();
+    }
+
+    pub fn remove_game(&mut self, mode: Mode) {
+        self.game_wrappers.remove(&mode);
+        self.mark_changed();
+    }
 }
 
-// TODO: remove this eventually once i trust that it works
-impl Drop for Lobby {
+// Removes client from lobby automatically when game ends
+pub struct PlayingToken {
+    client_id: u64,
+    mode: Mode,
+    lobby: Arc<Mutex<Lobby>>,
+}
+impl Drop for PlayingToken {
     fn drop(&mut self) {
-        println!("[lobby {}] Destroying lobby", self.id);
+        self.lobby
+            .lock()
+            .unwrap()
+            .leave_game(self.client_id, self.mode);
     }
+}
+
+pub fn join_game_in_a_lobby(
+    lobby: Arc<Mutex<Lobby>>,
+    client_id: u64,
+    mode: Mode,
+) -> (Arc<GameWrapper>, PlayingToken) {
+    let game_wrapper = lobby.lock().unwrap().join_game(client_id, mode);
+    (
+        game_wrapper,
+        PlayingToken {
+            client_id,
+            mode,
+            lobby,
+        },
+    )
 }
 
 pub type Lobbies = Arc<Mutex<WeakValueHashMap<String, Weak<Mutex<Lobby>>>>>;
