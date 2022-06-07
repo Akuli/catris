@@ -12,6 +12,7 @@ use tokio;
 use tokio::sync::watch;
 use tokio::time::timeout;
 
+#[derive(Debug)]
 pub enum GameStatus {
     Playing,
     Paused(Instant),

@@ -70,13 +70,20 @@ impl RenderBuffer {
         return x;
     }
 
-    pub fn add_centered_text(&mut self, y: usize, text: &str) {
-        self.add_centered_text_with_color(y, text, ansi::Color::DEFAULT);
+    // returns start and end of range of x coordinates where text ended up
+    pub fn add_centered_text(&mut self, y: usize, text: &str) -> (usize, usize) {
+        self.add_centered_text_with_color(y, text, ansi::Color::DEFAULT)
     }
-    pub fn add_centered_text_with_color(&mut self, y: usize, text: &str, colors: ansi::Color) {
+    pub fn add_centered_text_with_color(
+        &mut self,
+        y: usize,
+        text: &str,
+        colors: ansi::Color,
+    ) -> (usize, usize) {
         let n = text.chars().count();
         let x = self.width / 2 - n / 2;
         self.add_text_with_color(x, y, text, colors);
+        (x, x + n)
     }
 
     pub fn clear(&mut self) {

@@ -127,7 +127,7 @@ fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     }
 }
 
-const SCORE_TEXT_COLOR: Color = Color::CYAN_FOREGROUND;
+pub const SCORE_TEXT_COLOR: Color = Color::CYAN_FOREGROUND;
 
 fn render_block(
     block: &MovingBlock,

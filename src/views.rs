@@ -557,7 +557,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                 };
                 if game_over {
                     client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
-                    return show_high_scores(receiver).await;
+                    return show_high_scores(client, receiver).await;
                 }
             }
             key = client.receive_key_press() => {
@@ -590,7 +590,131 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
     }
 }
 
-async fn show_high_scores(receiver: watch::Receiver<GameStatus>) -> Result<(), io::Error> {
-    println!("Show high scores lol...");
-    Ok(())
+async fn show_high_scores(
+    client: &mut Client,
+    mut receiver: watch::Receiver<GameStatus>,
+) -> Result<(), io::Error> {
+    loop {
+        {
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.clear(80, 24);
+            match &*receiver.borrow() {
+                GameStatus::HighScoresLoading => {
+                    render_data.buffer.add_centered_text(9, "Loading...");
+                }
+                GameStatus::HighScoresError => {
+                    // hopefully nobody ever sees this...
+                    render_data.buffer.add_centered_text_with_color(
+                        9,
+                        "High Scores Error",
+                        Color::RED_FOREGROUND,
+                    );
+                }
+                GameStatus::HighScoresLoaded {
+                    this_game_result,
+                    top_results,
+                    this_game_index,
+                } => {
+                    // TODO: split to separate funcs
+                    if this_game_index.is_none() {
+                        render_data.buffer.add_centered_text(2, "Game over :(");
+                    } else {
+                        render_data.buffer.add_centered_text(2, "Game over :)");
+                    }
+
+                    let (_, text_right) = render_data.buffer.add_centered_text(
+                        3,
+                        &format!("Your score was {}.", this_game_result.score),
+                    );
+                    // highlight the number
+                    let num_text = format!("{}", this_game_result.score);
+                    render_data.buffer.add_text_with_color(
+                        text_right - ".".len() - num_text.len(),
+                        3,
+                        &num_text,
+                        ingame_ui::SCORE_TEXT_COLOR,
+                    );
+
+                    // TODO: mention how long it took
+
+                    let multiplayer = this_game_result.players.len() >= 2;
+                    let header = format!(
+                        " HIGH SCORES: {} as {} ",
+                        this_game_result.mode.name(),
+                        if multiplayer {
+                            "multiplayer"
+                        } else {
+                            "single-player"
+                        }
+                    );
+                    render_data
+                        .buffer
+                        .add_text(0, 6, &format!("{:=^80}", header));
+
+                    render_data.buffer.add_text(
+                        0,
+                        8,
+                        if multiplayer {
+                            "| Score | Duration    | Players"
+                        } else {
+                            "| Score | Duration    | Player"
+                        },
+                    );
+                    render_data.buffer.add_text(
+                        0,
+                        9,
+                        &format!("{:-<80}", "|-------|-------------|----"),
+                    );
+
+                    for (i, result) in top_results.iter().enumerate() {
+                        // TODO: truncate player names if long
+                        let seconds = result.duration.as_secs();
+
+                        let duration_text = if (0..60).contains(&seconds) {
+                            format!("{}sec", seconds)
+                        } else {
+                            format!("{}min {}sec", seconds / 60, seconds % 60)
+                        };
+
+                        let row = format!(
+                            "| {:<6}| {:<12}| {}",
+                            result.score,
+                            duration_text,
+                            result.players.join(", ")
+                        );
+                        if *this_game_index == Some(i) {
+                            render_data.buffer.add_text_with_color(
+                                0,
+                                10 + i,
+                                &format!("{:<80}", row),
+                                Color::GREEN_BACKGROUND,
+                            );
+                        } else {
+                            render_data.buffer.add_text(0, 10 + i, &row);
+                        }
+                    }
+                }
+                GameStatus::Playing | GameStatus::Paused(_) => panic!(),
+            }
+
+            render_data
+                .buffer
+                .add_centered_text(19, "Press Enter to continue...");
+            render_data.changed.notify_one();
+        }
+
+        tokio::select! {
+            result = receiver.changed() => {
+                result.unwrap(); // apparently never fails, not sure why
+            }
+            key = client.receive_key_press() => {
+                match key? {
+                    KeyPress::Enter => {
+                        return Ok(());
+                    }
+                    _ => {},
+                }
+            }
+        }
+    }
 }
