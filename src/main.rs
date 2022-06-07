@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 use crate::game_logic::Mode;
+use std::error::Error;
 use std::io;
 use std::time::Duration;
 
@@ -18,8 +19,8 @@ mod render;
 mod views;
 
 #[tokio::main]
-async fn main() -> Result<(), io::Error> {
-    crate::high_scores::add_high_score(&crate::high_scores::HighScore {
+async fn main() -> Result<(), Box<dyn Error>> {
+    crate::high_scores::add_high_score(crate::high_scores::GameResult {
         mode: Mode::Ring,
         score: 123,
         duration: Duration::from_millis(678901),
