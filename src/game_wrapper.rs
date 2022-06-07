@@ -81,6 +81,7 @@ impl GameWrapper {
     }
 }
 
+// TODO: remove once i'm done debugging
 impl Drop for GameWrapper {
     fn drop(&mut self) {
         println!("dropping Game Wrapper");
@@ -135,7 +136,6 @@ async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Durati
 }
 
 async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
-    println!("flash begins");
     for color in [Color::WHITE_BACKGROUND.bg, 0, Color::WHITE_BACKGROUND.bg, 0] {
         for p in points {
             wrapper
@@ -151,7 +151,6 @@ async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
     for p in points {
         wrapper.game.lock().unwrap().flashing_points.remove(p);
     }
-    println!("flash ends");
 }
 
 async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
