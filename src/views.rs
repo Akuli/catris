@@ -3,6 +3,7 @@ use crate::ansi::KeyPress;
 use crate::client::Client;
 use crate::game_logic::Mode;
 use crate::game_wrapper::GameStatus;
+use crate::high_scores::GameResult;
 use crate::ingame_ui;
 use crate::lobby::join_game_in_a_lobby;
 use crate::lobby::looks_like_lobby_id;
@@ -590,6 +591,130 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
     }
 }
 
+fn format_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    if (0..60).contains(&seconds) {
+        format!("{}sec", seconds)
+    } else {
+        format!("{}min {}sec", seconds / 60, seconds % 60)
+    }
+}
+
+fn render_value_with_label(
+    buffer: &mut RenderBuffer,
+    y: usize,
+    label: &str,
+    value: &str,
+    value_color: Color,
+) {
+    let (_, right) = buffer.add_centered_text(y, &format!("{}: {}", label, value));
+    buffer.add_text_with_color(right - value.len(), y, value, value_color);
+}
+
+fn render_game_over_message(buffer: &mut RenderBuffer, game_result: &GameResult, smile: bool) {
+    if smile {
+        buffer.add_centered_text(2, "Game over :)");
+    } else {
+        buffer.add_centered_text(2, "Game over :(");
+    }
+
+    let duration_text = format_duration(game_result.duration);
+    let score_text = format!("{}", game_result.score);
+
+    let (left, right) = buffer.add_centered_text(
+        3,
+        &format!(
+            "The game lasted {} and it ended with score {}.",
+            &duration_text, &score_text
+        ),
+    );
+    buffer.add_text_with_color(
+        left + "The game lasted ".len(),
+        3,
+        &duration_text,
+        ingame_ui::SCORE_TEXT_COLOR,
+    );
+    buffer.add_text_with_color(
+        right - ".".len() - score_text.len(),
+        3,
+        &score_text,
+        ingame_ui::SCORE_TEXT_COLOR,
+    );
+}
+
+fn render_header(buffer: &mut RenderBuffer, this_game_result: &GameResult) {
+    let multiplayer = this_game_result.players.len() >= 2;
+    let header = format!(
+        " HIGH SCORES: {} with {} ",
+        this_game_result.mode.name(),
+        if multiplayer {
+            "multiplayer"
+        } else {
+            "single-player"
+        }
+    );
+    buffer.add_text(0, 6, &format!("{:=^80}", header));
+}
+
+fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
+    let mut limit = full_names.iter().map(|n| n.chars().count()).max().unwrap();
+    loop {
+        let mut result = "".to_string();
+        for name in full_names {
+            if !result.is_empty() {
+                result.push_str(", ");
+            }
+            if name.chars().count() > limit {
+                for ch in name.chars().take(limit-3) {
+                    result.push(ch);
+                }
+                result.push_str("...");
+            } else {
+                result.push_str(name);
+            }
+        }
+
+        if result.chars().count() < maxlen {
+            return result;
+        }
+        limit -= 1;
+    }
+}
+
+fn render_high_scores_table(
+    buffer: &mut RenderBuffer,
+    top_results: &Vec<GameResult>,
+    this_game_index: Option<usize>,
+    multiplayer: bool,
+) {
+    buffer.add_text(
+        0,
+        8,
+        if multiplayer {
+            "| Score | Duration    | Players"
+        } else {
+            "| Score | Duration    | Player"
+        },
+    );
+
+    let header_prefix = "|-------|-------------|-";
+    buffer.add_text(0, 9, &format!("{:-<80}", header_prefix));
+
+    for (i, result) in top_results.iter().enumerate() {
+        let row = format!(
+            "| {:<6}| {:<12}| {}",
+            result.score,
+            &format_duration(result.duration),
+            &format_player_names(&result.players, 80 - header_prefix.len() - 1)
+        );
+        if this_game_index == Some(i) {
+            buffer.add_text_with_color(0, 10 + i, &format!("{:<80}", row), Color::GREEN_BACKGROUND);
+        } else {
+            buffer.add_text(0, 10 + i, &row);
+        }
+    }
+}
+
 async fn show_high_scores(
     client: &mut Client,
     mut receiver: watch::Receiver<GameStatus>,
@@ -615,84 +740,18 @@ async fn show_high_scores(
                     top_results,
                     this_game_index,
                 } => {
-                    // TODO: split to separate funcs
-                    if this_game_index.is_none() {
-                        render_data.buffer.add_centered_text(2, "Game over :(");
-                    } else {
-                        render_data.buffer.add_centered_text(2, "Game over :)");
-                    }
-
-                    let (_, text_right) = render_data.buffer.add_centered_text(
-                        3,
-                        &format!("Your score was {}.", this_game_result.score),
+                    render_game_over_message(
+                        &mut render_data.buffer,
+                        this_game_result,
+                        this_game_index.is_some(),
                     );
-                    // highlight the number
-                    let num_text = format!("{}", this_game_result.score);
-                    render_data.buffer.add_text_with_color(
-                        text_right - ".".len() - num_text.len(),
-                        3,
-                        &num_text,
-                        ingame_ui::SCORE_TEXT_COLOR,
+                    render_header(&mut render_data.buffer, this_game_result);
+                    render_high_scores_table(
+                        &mut render_data.buffer,
+                        top_results,
+                        *this_game_index,
+                        this_game_result.players.len() >= 2,
                     );
-
-                    // TODO: mention how long it took
-
-                    let multiplayer = this_game_result.players.len() >= 2;
-                    let header = format!(
-                        " HIGH SCORES: {} as {} ",
-                        this_game_result.mode.name(),
-                        if multiplayer {
-                            "multiplayer"
-                        } else {
-                            "single-player"
-                        }
-                    );
-                    render_data
-                        .buffer
-                        .add_text(0, 6, &format!("{:=^80}", header));
-
-                    render_data.buffer.add_text(
-                        0,
-                        8,
-                        if multiplayer {
-                            "| Score | Duration    | Players"
-                        } else {
-                            "| Score | Duration    | Player"
-                        },
-                    );
-                    render_data.buffer.add_text(
-                        0,
-                        9,
-                        &format!("{:-<80}", "|-------|-------------|----"),
-                    );
-
-                    for (i, result) in top_results.iter().enumerate() {
-                        // TODO: truncate player names if long
-                        let seconds = result.duration.as_secs();
-
-                        let duration_text = if (0..60).contains(&seconds) {
-                            format!("{}sec", seconds)
-                        } else {
-                            format!("{}min {}sec", seconds / 60, seconds % 60)
-                        };
-
-                        let row = format!(
-                            "| {:<6}| {:<12}| {}",
-                            result.score,
-                            duration_text,
-                            result.players.join(", ")
-                        );
-                        if *this_game_index == Some(i) {
-                            render_data.buffer.add_text_with_color(
-                                0,
-                                10 + i,
-                                &format!("{:<80}", row),
-                                Color::GREEN_BACKGROUND,
-                            );
-                        } else {
-                            render_data.buffer.add_text(0, 10 + i, &row);
-                        }
-                    }
                 }
                 GameStatus::Playing | GameStatus::Paused(_) => panic!(),
             }
