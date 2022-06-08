@@ -1,4 +1,3 @@
-speeding up
 bomb blocks
 drill blocks
 cursed blocks

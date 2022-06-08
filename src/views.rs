@@ -665,7 +665,7 @@ fn render_header(buffer: &mut RenderBuffer, this_game_result: &GameResult) {
         if multiplayer {
             "multiplayer"
         } else {
-            "single-player"
+            "single player"
         }
     );
     buffer.add_text(0, 6, &format!("{:=^80}", header));

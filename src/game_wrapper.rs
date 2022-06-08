@@ -27,6 +27,7 @@ pub enum GameStatus {
 
 pub struct GameWrapper {
     pub game: Mutex<Game>,
+    pub previous_pauses: Mutex<Duration>,
 
     // when game state has changed, the Playing status is sent again unchanged
     status_sender: watch::Sender<GameStatus>,
@@ -42,6 +43,7 @@ impl GameWrapper {
         let (status_sender, status_receiver) = watch::channel(GameStatus::Playing);
         GameWrapper {
             game: Mutex::new(game),
+            previous_pauses: Mutex::new(Duration::ZERO),
             status_sender,
             status_receiver,
             flashing_mutex: tokio::sync::Mutex::new(()),
@@ -59,14 +61,50 @@ impl GameWrapper {
                 *value = GameStatus::Paused(Instant::now());
             }
             GameStatus::Paused(pause_start) if want_paused != Some(true) => {
-                self.game
-                    .lock()
-                    .unwrap()
-                    .add_paused_time(Instant::now() - pause_start);
+                *self.previous_pauses.lock().unwrap() += pause_start.elapsed();
                 *value = GameStatus::Playing;
             }
             _ => {}
         });
+    }
+
+    fn get_duration(&self) -> Duration {
+        let (game_start_time, game_end_time) = {
+            let game = self.game.lock().unwrap();
+            (game.start_time, game.end_time)
+        };
+
+        let including_previous_pauses = if let Some(t) = game_end_time {
+            // Game is over
+            t - game_start_time
+        } else {
+            match *self.status_receiver.borrow() {
+                GameStatus::Paused(pause_start) => pause_start - game_start_time,
+                GameStatus::Playing => game_start_time.elapsed(),
+                _ => panic!(), // we shouldn't get here if game is over
+            }
+        };
+
+        including_previous_pauses - *self.previous_pauses.lock().unwrap()
+    }
+
+    // can be called only if the game is over
+    pub fn get_game_result(&self) -> GameResult {
+        let (mode, score, players) = {
+            let game = self.game.lock().unwrap();
+            let player_names = game
+                .players
+                .iter()
+                .map(|p| p.borrow().name.clone())
+                .collect();
+            (game.mode(), game.get_score(), player_names)
+        };
+        GameResult {
+            mode,
+            score,
+            players,
+            duration: self.get_duration(),
+        }
     }
 }
 
@@ -139,8 +177,21 @@ async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
 }
 
 async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
-    let sleep_duration = Duration::from_millis(if fast { 25 } else { 400 });
-    while pause_aware_sleep(weak_wrapper.clone(), sleep_duration).await {
+    loop {
+        let sleep_duration = if fast {
+            Duration::from_millis(25)
+        } else if let Some(wrapper) = weak_wrapper.upgrade() {
+            let minutes = wrapper.get_duration().as_secs_f32() / 60.0;
+            // TODO: should speed up more if you play badly
+            let moves_per_second = 2.0 * (1.07 as f32).powf(minutes);
+            Duration::from_secs_f32(1. / moves_per_second)
+        } else {
+            return;
+        };
+        if !pause_aware_sleep(weak_wrapper.clone(), sleep_duration).await {
+            return;
+        }
+
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
                 let mut _lock = wrapper.flashing_mutex.lock().await;
@@ -227,27 +278,24 @@ async fn start_please_wait_counters_as_needed(
                 GameStatus::Playing | GameStatus::Paused(_)
             ));
 
-            let game_result = {
-                let mut game = wrapper.game.lock().unwrap();
-                if let Some(ids) = game.start_pending_please_wait_counters() {
-                    for client_id in &ids {
-                        tokio::spawn(tick_please_wait_counter(
-                            Arc::downgrade(&wrapper),
-                            *client_id,
-                        ));
-                    }
-                    if !ids.is_empty() {
-                        wrapper.mark_changed();
-                    }
-                    None
-                } else {
-                    // game over, can't handle here because we're holding the game mutex
-                    Some(game.get_result())
+            let ids_if_not_game_over = wrapper
+                .game
+                .lock()
+                .unwrap()
+                .start_pending_please_wait_counters();
+            if let Some(ids) = ids_if_not_game_over {
+                for client_id in &ids {
+                    tokio::spawn(tick_please_wait_counter(
+                        Arc::downgrade(&wrapper),
+                        *client_id,
+                    ));
                 }
-            };
-
-            if let Some(result) = game_result {
-                handle_game_over(&wrapper.status_sender, result).await;
+                if !ids.is_empty() {
+                    wrapper.mark_changed();
+                }
+            } else {
+                // game over
+                handle_game_over(&wrapper.status_sender, wrapper.get_game_result()).await;
                 return;
             }
         }
