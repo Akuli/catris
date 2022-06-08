@@ -163,12 +163,17 @@ fn render_block(
     }
 }
 
-fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client, x_offset: usize) {
+fn render_stuff_on_side(
+    game: &Game,
+    buffer: &mut RenderBuffer,
+    client: &Client,
+    lobby_id: &str,
+    x_offset: usize,
+) {
     if client.lobby_id_hidden {
         buffer.add_text(x_offset, 4, "Lobby ID: ******");
     } else {
-        let id = &client.lobby.as_ref().unwrap().lock().unwrap().id;
-        buffer.add_text(x_offset, 4, &format!("Lobby ID: {}", id));
+        buffer.add_text(x_offset, 4, &format!("Lobby ID: {}", lobby_id));
     }
 
     buffer.add_text_with_color(
@@ -198,11 +203,11 @@ fn render_stuff_on_side(game: &Game, buffer: &mut RenderBuffer, client: &Client,
     }
 }
 
-pub fn render(game: &Game, render_data: &mut RenderData, client: &Client) {
+pub fn render(game: &Game, render_data: &mut RenderData, client: &Client, lobby_id: &str) {
     let (w, h) = get_size_without_stuff_on_side(game);
     let room_for_stuff_on_side_size = 20;
     render_data.clear(max(w + room_for_stuff_on_side_size, 80), max(h, 24));
     render_walls(game, &mut render_data.buffer, client.id);
     render_blocks(game, &mut render_data.buffer, client.id);
-    render_stuff_on_side(game, &mut render_data.buffer, client, w + 2);
+    render_stuff_on_side(game, &mut render_data.buffer, client, lobby_id, w + 2);
 }

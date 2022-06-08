@@ -363,12 +363,14 @@ pub async fn choose_game_mode(
         selected_index: *selected_index,
     };
 
-    let mut changed_receiver;
-    {
-        let idk_why_i_need_this = client.lobby.clone().unwrap();
-        let lobby = idk_why_i_need_this.lock().unwrap();
-        changed_receiver = lobby.changed_receiver.clone();
-    }
+    let mut changed_receiver = client
+        .lobby
+        .as_ref()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .changed_receiver
+        .clone();
 
     loop {
         {
@@ -519,6 +521,15 @@ fn render_pause_screen(buffer: &mut RenderBuffer, menu: &Menu) {
 }
 
 pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error> {
+    /*
+    Grab lobby ID before we lock the game.
+
+    Locking the lobby while game is locked would cause deadlocks, because
+    there's lots of other code that locks the game while keeping the lobby
+    locked.
+    */
+    let lobby_id = client.lobby.as_ref().unwrap().lock().unwrap().id.clone();
+
     let mut pause_menu = Menu {
         items: vec![
             Some("Continue playing".to_string()),
@@ -539,7 +550,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
             let game = game_wrapper.game.lock().unwrap();
-            ingame_ui::render(&*game, &mut *render_data, client);
+            ingame_ui::render(&*game, &mut *render_data, client, &lobby_id);
             if paused {
                 render_pause_screen(&mut render_data.buffer, &pause_menu);
             } else {
@@ -557,6 +568,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                     _ => true,
                 };
                 if game_over {
+                    // Locking the lobby here is fine, because we're not locking the game.
                     client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
                     return show_high_scores(client, receiver).await;
                 }
@@ -572,6 +584,8 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                                 match pause_menu.selected_text() {
                                     "Continue playing" => game_wrapper.set_paused(Some(false)),
                                     "Quit game" => {
+                                        // Locking the lobby here is fine, because we're not locking the game.
+                                        // We only have access to the immutable GameWrapper.
                                         client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
                                         return Ok(());
                                     }
@@ -665,7 +679,7 @@ fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
                 result.push_str(", ");
             }
             if name.chars().count() > limit {
-                for ch in name.chars().take(limit-3) {
+                for ch in name.chars().take(limit - 3) {
                     result.push(ch);
                 }
                 result.push_str("...");

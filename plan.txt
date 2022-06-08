@@ -1,5 +1,4 @@
 speeding up
-high scores view finishing touches
 bomb blocks
 drill blocks
 cursed blocks
