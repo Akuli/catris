@@ -538,7 +538,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         selected_index: 0,
     };
 
-    let (game_wrapper, _auto_leave_token) =
+    let (game_wrapper, auto_leave_token) =
         join_game_in_a_lobby(client.lobby.as_ref().unwrap().clone(), client.id, mode);
 
     // TODO: should these be .subscribe()? grep for subscribe to find another place that needs it
@@ -568,6 +568,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                     _ => true,
                 };
                 if game_over {
+                    drop(auto_leave_token);
                     // Locking the lobby here is fine, because we're not locking the game.
                     client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
                     return show_high_scores(client, receiver).await;
