@@ -5,6 +5,7 @@ bottle game
 ring game
 counter-clockwise rotation
 websocket support
+profiling
 
 prod with RUST_BACKTRACE=1
 

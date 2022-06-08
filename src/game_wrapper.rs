@@ -25,9 +25,15 @@ pub enum GameStatus {
     HighScoresError,
 }
 
+#[derive(Copy, Clone)]
+struct TimeInfo {
+    start: Instant,
+    previous_pauses: Duration, // if currently paused, doesn't include that
+}
+
 pub struct GameWrapper {
     pub game: Mutex<Game>,
-    pub previous_pauses: Mutex<Duration>,
+    time_info: Mutex<TimeInfo>,
 
     // when game state has changed, the Playing status is sent again unchanged
     status_sender: watch::Sender<GameStatus>,
@@ -43,7 +49,10 @@ impl GameWrapper {
         let (status_sender, status_receiver) = watch::channel(GameStatus::Playing);
         GameWrapper {
             game: Mutex::new(game),
-            previous_pauses: Mutex::new(Duration::ZERO),
+            time_info: Mutex::new(TimeInfo {
+                start: Instant::now(),
+                previous_pauses: Duration::ZERO,
+            }),
             status_sender,
             status_receiver,
             flashing_mutex: tokio::sync::Mutex::new(()),
@@ -61,7 +70,7 @@ impl GameWrapper {
                 *value = GameStatus::Paused(Instant::now());
             }
             GameStatus::Paused(pause_start) if want_paused != Some(true) => {
-                *self.previous_pauses.lock().unwrap() += pause_start.elapsed();
+                self.time_info.lock().unwrap().previous_pauses += pause_start.elapsed();
                 *value = GameStatus::Playing;
             }
             _ => {}
@@ -69,27 +78,16 @@ impl GameWrapper {
     }
 
     fn get_duration(&self) -> Duration {
-        let (game_start_time, game_end_time) = {
-            let game = self.game.lock().unwrap();
-            (game.start_time, game.end_time)
+        let time_info = *self.time_info.lock().unwrap();
+        let including_previous_pauses = match *self.status_receiver.borrow() {
+            GameStatus::Paused(pause_start) => pause_start - time_info.start,
+            // If game has ended, current time will be the end time
+            _ => time_info.start.elapsed(),
         };
-
-        let including_previous_pauses = if let Some(t) = game_end_time {
-            // Game is over
-            t - game_start_time
-        } else {
-            match *self.status_receiver.borrow() {
-                GameStatus::Paused(pause_start) => pause_start - game_start_time,
-                GameStatus::Playing => game_start_time.elapsed(),
-                _ => panic!(), // we shouldn't get here if game is over
-            }
-        };
-
-        including_previous_pauses - *self.previous_pauses.lock().unwrap()
+        including_previous_pauses - time_info.previous_pauses
     }
 
-    // can be called only if the game is over
-    pub fn get_game_result(&self) -> GameResult {
+    fn get_game_result(&self) -> GameResult {
         let (mode, score, players) = {
             let game = self.game.lock().unwrap();
             let player_names = game

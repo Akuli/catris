@@ -76,11 +76,6 @@ impl Player {
         }
     }
 
-    pub fn world_to_player(&self, point: WorldPoint) -> PlayerPoint {
-        let (x, y) = point;
-        (x as i32, y as i32)
-    }
-
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, y) = point;
         (x as i8, y as i8)

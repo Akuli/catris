@@ -615,17 +615,6 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
-fn render_value_with_label(
-    buffer: &mut RenderBuffer,
-    y: usize,
-    label: &str,
-    value: &str,
-    value_color: Color,
-) {
-    let (_, right) = buffer.add_centered_text(y, &format!("{}: {}", label, value));
-    buffer.add_text_with_color(right - value.len(), y, value, value_color);
-}
-
 fn render_game_over_message(buffer: &mut RenderBuffer, game_result: &GameResult, smile: bool) {
     if smile {
         buffer.add_centered_text(2, "Game over :)");

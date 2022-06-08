@@ -9,7 +9,6 @@ use crate::player::PlayerPoint;
 use crate::player::WorldPoint;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::time::Instant;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {
@@ -48,9 +47,6 @@ pub struct Game {
     pub flashing_points: HashMap<WorldPoint, u8>,
     mode_specific_data: ModeSpecificData,
     score: usize,
-    // TODO: move the below stuff out of here
-    pub start_time: Instant,
-    pub end_time: Option<Instant>, // None means still playing
 }
 
 impl Game {
@@ -68,8 +64,6 @@ impl Game {
             players: vec![],
             flashing_points: HashMap::new(),
             mode_specific_data,
-            start_time: Instant::now(),
-            end_time: None,
             score: 0,
         }
     }
@@ -593,7 +587,6 @@ impl Game {
             .iter()
             .all(|p| matches!(p.borrow().block_or_timer, BlockOrTimer::Timer(_)))
         {
-            self.end_time = Some(Instant::now());
             None
         } else {
             Some(client_ids)
