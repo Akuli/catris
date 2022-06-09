@@ -326,9 +326,12 @@ impl Game {
             })
     }
 
-    fn rotate_if_possible(&self, player_idx: usize) -> bool {
+    fn rotate_if_possible(&self, player_idx: usize, prefer_counter_clockwise: bool) -> bool {
         let player = &self.players[player_idx];
-        let coords = player.borrow().block_or_timer.get_rotated_coords();
+        let coords = player
+            .borrow()
+            .block_or_timer
+            .get_rotated_coords(prefer_counter_clockwise);
 
         let can_rotate = !coords.is_empty()
             && coords.iter().all(|p| {
@@ -338,8 +341,9 @@ impl Game {
                 stays_in_bounds && !goes_on_top_of_something
             });
         if can_rotate {
-            match &mut player.borrow_mut().block_or_timer {
-                BlockOrTimer::Block(block) => block.rotate(),
+            let mut player = player.borrow_mut();
+            match &mut player.block_or_timer {
+                BlockOrTimer::Block(block) => block.rotate(prefer_counter_clockwise),
                 _ => panic!(),
             }
         }
@@ -443,7 +447,12 @@ impl Game {
         need_render
     }
 
-    pub fn handle_key_press(&mut self, client_id: u64, key: KeyPress) -> bool {
+    pub fn handle_key_press(
+        &mut self,
+        client_id: u64,
+        client_prefers_rotating_counter_clockwise: bool,
+        key: KeyPress,
+    ) -> bool {
         let player_idx = self
             .players
             .iter()
@@ -463,7 +472,7 @@ impl Game {
                 self.move_if_possible(player_idx, 1, 0)
             }
             KeyPress::Up | KeyPress::Character('W') | KeyPress::Character('w') => {
-                self.rotate_if_possible(player_idx)
+                self.rotate_if_possible(player_idx, client_prefers_rotating_counter_clockwise)
             }
             KeyPress::Character('H') | KeyPress::Character('h') => self.hold_block(player_idx),
             _ => {

@@ -3,7 +3,6 @@ drill blocks
 cursed blocks
 bottle game
 ring game
-counter-clockwise rotation
 websocket support
 profiling
 

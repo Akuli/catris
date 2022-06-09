@@ -26,9 +26,9 @@ impl BlockOrTimer {
         }
     }
 
-    pub fn get_rotated_coords(&self) -> Vec<PlayerPoint> {
+    pub fn get_rotated_coords(&self, prefer_counter_clockwise: bool) -> Vec<PlayerPoint> {
         match self {
-            BlockOrTimer::Block(block) => block.get_rotated_coords(),
+            BlockOrTimer::Block(block) => block.get_rotated_coords(prefer_counter_clockwise),
             _ => vec![],
         }
     }

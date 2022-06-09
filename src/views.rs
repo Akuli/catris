@@ -579,6 +579,9 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                     KeyPress::Character('P') | KeyPress::Character('p') => {
                         game_wrapper.set_paused(None);
                     }
+                    KeyPress::Character('R') | KeyPress::Character('r') => {
+                        client.prefer_rotating_counter_clockwise = !client.prefer_rotating_counter_clockwise;
+                    }
                     k => {
                         if paused {
                             if pause_menu.handle_key_press(k) {
@@ -594,7 +597,9 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                                 }
                             }
                         } else {
-                            let did_something = game_wrapper.game.lock().unwrap().handle_key_press(client.id, k);
+                            let did_something = game_wrapper.game.lock().unwrap().handle_key_press(
+                                client.id, client.prefer_rotating_counter_clockwise, k
+                            );
                             if did_something {
                                 game_wrapper.mark_changed();
                             }

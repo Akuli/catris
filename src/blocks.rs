@@ -130,16 +130,20 @@ impl MovingBlock {
             .collect::<Vec<BlockRelativeCoords>>()
     }
 
-    fn get_rotated_relative_coords(&self) -> Vec<BlockRelativeCoords> {
-        match self.rotate_mode {
-            RotateMode::NoRotating => self.relative_coords.clone(),
-            // TODO: pressing r should switch rotate dir
-            RotateMode::NextClockwiseThenBack | RotateMode::FullRotating => {
-                self.relative_coords.iter().map(|(x, y)| (-y, *x)).collect()
-            }
-            RotateMode::NextCounterClockwiseThenBack => {
-                self.relative_coords.iter().map(|(x, y)| (*y, -x)).collect()
-            }
+    fn get_rotated_relative_coords(
+        &self,
+        prefer_counter_clockwise: bool,
+    ) -> Vec<BlockRelativeCoords> {
+        let counter_clockwise = match self.rotate_mode {
+            RotateMode::NoRotating => return self.relative_coords.clone(),
+            RotateMode::NextClockwiseThenBack => false,
+            RotateMode::NextCounterClockwiseThenBack => true,
+            RotateMode::FullRotating => prefer_counter_clockwise,
+        };
+        if counter_clockwise {
+            self.relative_coords.iter().map(|(x, y)| (*y, -x)).collect()
+        } else {
+            self.relative_coords.iter().map(|(x, y)| (-y, *x)).collect()
         }
     }
 
@@ -147,8 +151,8 @@ impl MovingBlock {
         self.add_center(&self.get_moved_relative_coords(dx, dy))
     }
 
-    pub fn get_rotated_coords(&self) -> Vec<PlayerPoint> {
-        self.add_center(&self.get_rotated_relative_coords())
+    pub fn get_rotated_coords(&self, prefer_counter_clockwise: bool) -> Vec<PlayerPoint> {
+        self.add_center(&self.get_rotated_relative_coords(prefer_counter_clockwise))
     }
 
     // move is a keyword
@@ -157,8 +161,8 @@ impl MovingBlock {
         self.center = (cx + (dx as i32), cy + (dy as i32));
     }
 
-    pub fn rotate(&mut self) {
-        self.relative_coords = self.get_rotated_relative_coords();
+    pub fn rotate(&mut self, prefer_counter_clockwise: bool) {
+        self.relative_coords = self.get_rotated_relative_coords(prefer_counter_clockwise);
         self.rotate_mode = match self.rotate_mode {
             RotateMode::NextCounterClockwiseThenBack => RotateMode::NextClockwiseThenBack,
             RotateMode::NextClockwiseThenBack => RotateMode::NextCounterClockwiseThenBack,
