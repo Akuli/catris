@@ -221,6 +221,22 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
     }
 }
 
+async fn tick_bombs(weak_wrapper: Weak<GameWrapper>, bomb_id: u64) {
+    while pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await {
+        match weak_wrapper.upgrade() {
+            Some(wrapper) => {
+                let mut game = wrapper.game.lock().unwrap();
+                let run_again = game.tick_bombs_by_id(bomb_id);
+                wrapper.mark_changed();
+                if !run_again {
+                    return;
+                }
+            }
+            None => return,
+        }
+    }
+}
+
 async fn tick_please_wait_counter(weak_wrapper: Weak<GameWrapper>, client_id: u64) {
     while pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await {
         match weak_wrapper.upgrade() {
@@ -258,7 +274,7 @@ async fn handle_game_over(status_sender: &watch::Sender<GameStatus>, this_game_r
     }
 }
 
-async fn start_please_wait_counters_as_needed(
+async fn start_counter_tasks_as_needed(
     weak_wrapper: Weak<GameWrapper>,
     mut receiver: watch::Receiver<GameStatus>,
 ) {
@@ -276,12 +292,19 @@ async fn start_please_wait_counters_as_needed(
                 GameStatus::Playing | GameStatus::Paused(_)
             ));
 
-            let ids_if_not_game_over = wrapper
-                .game
-                .lock()
-                .unwrap()
-                .start_pending_please_wait_counters();
-            if let Some(ids) = ids_if_not_game_over {
+            let client_ids_to_wait;
+            let new_bomb_ids;
+            {
+                let mut game = wrapper.game.lock().unwrap();
+                new_bomb_ids = game.start_ticking_new_bombs();
+                client_ids_to_wait = game.start_pending_please_wait_counters();
+            }
+
+            for bomb_id in new_bomb_ids {
+                tokio::spawn(tick_bombs(Arc::downgrade(&wrapper), bomb_id));
+            }
+
+            if let Some(ids) = client_ids_to_wait {
                 for client_id in &ids {
                     tokio::spawn(tick_please_wait_counter(
                         Arc::downgrade(&wrapper),
@@ -308,7 +331,7 @@ async fn start_please_wait_counters_as_needed(
 pub fn start_tasks(wrapper: Arc<GameWrapper>) {
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
-    tokio::spawn(start_please_wait_counters_as_needed(
+    tokio::spawn(start_counter_tasks_as_needed(
         Arc::downgrade(&wrapper),
         wrapper.status_receiver.clone(),
     ));

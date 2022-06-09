@@ -6,13 +6,14 @@ use rand::Rng;
 #[derive(Copy, Clone, Debug)]
 pub enum SquareContent {
     Normal(Color),
-    Bomb(i8), // timer, can be negative if bomb can't explode due to another explosion holding lock (rare)
+    // bomb timer can become negative if bomb can't explode due to another explosion holding lock (rare)
+    Bomb { timer: i8, id: Option<u64> },
 }
 impl SquareContent {
     pub fn get_text(&self) -> [char; 2] {
         match self {
             Self::Normal(_) => [' ', ' '],
-            Self::Bomb(timer) => {
+            Self::Bomb { timer, .. } => {
                 if *timer >= 10 {
                     [
                         char::from_digit((timer / 10) as u32, 10).unwrap(),
@@ -30,7 +31,7 @@ impl SquareContent {
     pub fn get_color(&self) -> Color {
         match self {
             Self::Normal(color) => *color,
-            Self::Bomb(timer) => {
+            Self::Bomb { timer, .. } => {
                 if *timer > 3 {
                     Color::YELLOW_FOREGROUND
                 } else {
@@ -118,12 +119,16 @@ impl MovingBlock {
     pub fn new(score: usize) -> MovingBlock {
         let score = score as f32;
 
-        let bomb_probability = (score as f32) / 800.0 + 1.0;
-        //let drill_probability = score / 2000;
-        //let cursed_probability = (score - 500) / 200;
+        let bomb_probability = 100 as f32;
+        //let bomb_probability = score / 800.0 + 1.0;
+        //let drill_probability = score / 2000.0;
+        //let cursed_probability = (score - 500.0) / 200.0;
 
         let (content, coords) = if maybe(bomb_probability) {
-            let content = SquareContent::Bomb(if maybe(20.0) { 3 } else { 15 });
+            let content = SquareContent::Bomb {
+                timer: if maybe(20.0) { 3 } else { 15 },
+                id: None,
+            };
             (content, O_COORDS.to_vec())
         //} else if maybe(drill_probability) {
         } else {
@@ -146,6 +151,11 @@ impl MovingBlock {
         let lowest_relative_y = *self.relative_coords.iter().map(|(_, y)| y).max().unwrap();
         let bottom_edge = (lowest_relative_y as i32) + 1;
         self.center = (spawn_x, spawn_y - bottom_edge);
+
+        // spawned bombs get a new tick counter
+        if let SquareContent::Bomb { id, .. } = &mut self.square_content {
+            *id = None;
+        }
     }
 
     pub fn get_relative_coords_for_rendering_the_preview(&self) -> &[(i8, i8)] {

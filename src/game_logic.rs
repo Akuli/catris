@@ -47,8 +47,8 @@ pub struct Game {
     pub flashing_points: HashMap<WorldPoint, u8>,
     mode_specific_data: ModeSpecificData,
     score: usize,
+    bomb_id_counter: u64,
 }
-
 impl Game {
     pub fn new(mode: Mode) -> Self {
         let mode_specific_data = match mode {
@@ -65,6 +65,7 @@ impl Game {
             flashing_points: HashMap::new(),
             mode_specific_data,
             score: 0,
+            bomb_id_counter: 0,
         }
     }
 
@@ -578,6 +579,58 @@ impl Game {
         to_hold.has_been_in_hold = true;
         self.players[player_idx].borrow_mut().block_in_hold = Some(to_hold);
         true
+    }
+
+    pub fn start_ticking_new_bombs(&mut self) -> Vec<u64> {
+        let mut bomb_ids = vec![];
+        for player in &self.players {
+            if let BlockOrTimer::Block(block) = &mut player.borrow_mut().block_or_timer {
+                if let SquareContent::Bomb { id, .. } = &mut block.square_content {
+                    if id.is_none() {
+                        *id = Some(self.bomb_id_counter);
+                        bomb_ids.push(self.bomb_id_counter);
+                        self.bomb_id_counter += 1;
+                    }
+                }
+            }
+        }
+        bomb_ids
+    }
+
+    pub fn tick_bombs_by_id(&mut self, bomb_id: u64) -> bool {
+        let mut found_bombs = false;
+
+        // TODO: ugly and nested
+        for player in &self.players {
+            match &mut player.borrow_mut().block_or_timer {
+                BlockOrTimer::Block(MovingBlock {
+                    square_content: SquareContent::Bomb { id, timer },
+                    ..
+                }) if *id == Some(bomb_id) => {
+                    *timer -= 1;
+                    found_bombs = true;
+                }
+                _ => {}
+            }
+        }
+
+        match &mut self.mode_specific_data {
+            ModeSpecificData::Traditional { landed_rows } => {
+                for row in landed_rows {
+                    for cell in row {
+                        match cell {
+                            Some(SquareContent::Bomb { id, timer }) if *id == Some(bomb_id) => {
+                                *timer -= 1;
+                                found_bombs = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        found_bombs
     }
 
     // returns None if everyone end up waiting, i.e. if game is over
