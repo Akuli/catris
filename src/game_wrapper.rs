@@ -41,7 +41,7 @@ pub struct GameWrapper {
 
     // Prevents blocks from falling down while a bomb or cleared row flashes.
     // This is here because of how it affects gameplay, not because of safety
-    flashing_mutex: tokio::sync::Mutex<()>,
+    flash_mutex: tokio::sync::Mutex<()>,
 }
 
 impl GameWrapper {
@@ -55,7 +55,7 @@ impl GameWrapper {
             }),
             status_sender,
             status_receiver,
-            flashing_mutex: tokio::sync::Mutex::new(()),
+            flash_mutex: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -154,15 +154,14 @@ async fn pause_aware_sleep(weak_wrapper: Weak<GameWrapper>, mut duration: Durati
     }
 }
 
-async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint]) {
-    for color in [Color::WHITE_BACKGROUND.bg, 0, Color::WHITE_BACKGROUND.bg, 0] {
-        for p in points {
-            wrapper
-                .game
-                .lock()
-                .unwrap()
-                .flashing_points
-                .insert(*p, color);
+// consider holding flash_mutex while calling this
+async fn flash(wrapper: Arc<GameWrapper>, points: &[WorldPoint], bg_color: u8) {
+    for color in [bg_color, 0, bg_color, 0] {
+        {
+            let mut game = wrapper.game.lock().unwrap();
+            for p in points {
+                game.flashing_points.insert(*p, color);
+            }
         }
         wrapper.mark_changed();
         if !pause_aware_sleep(Arc::downgrade(&wrapper), Duration::from_millis(100)).await {
@@ -192,7 +191,7 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
 
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
-                let mut _lock = wrapper.flashing_mutex.lock().await;
+                let mut _lock = wrapper.flash_mutex.lock().await;
                 let (moved, full) = {
                     let mut game = wrapper.game.lock().unwrap();
                     if game.players.is_empty() {
@@ -207,7 +206,7 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
                     (moved, game.find_full_rows_and_increment_score())
                 };
                 if !full.is_empty() {
-                    flash(wrapper.clone(), &full).await;
+                    flash(wrapper.clone(), &full, Color::WHITE_BACKGROUND.bg).await;
                     let mut game = wrapper.game.lock().unwrap();
                     game.remove_full_rows(&full);
                     wrapper.mark_changed();
@@ -225,17 +224,31 @@ async fn tick_bombs(weak_wrapper: Weak<GameWrapper>, bomb_id: u64) {
     while pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await {
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
-                let mut game = wrapper.game.lock().unwrap();
-                let exploding_points = game.tick_bombs_by_id(bomb_id);
-                if exploding_points.is_none() {
+                let explosion_centers = wrapper.game.lock().unwrap().tick_bombs_by_id(bomb_id);
+                if explosion_centers.is_none() {
                     // bomb no longer exist
                     return;
                 }
-                let exploding_points = exploding_points.unwrap();
-                wrapper.mark_changed();
-                if !exploding_points.is_empty() {
-                    println!("boom! {:?}", exploding_points);
+                let mut explosion_centers = explosion_centers.unwrap();
+
+                if !explosion_centers.is_empty() {
+                    let _lock = wrapper.flash_mutex.lock().await;
+                    while !explosion_centers.is_empty() {
+                        let flashing = wrapper
+                            .game
+                            .lock()
+                            .unwrap()
+                            .get_points_to_flash(&explosion_centers);
+                        flash(wrapper.clone(), &flashing, Color::RED_BACKGROUND.bg).await;
+                        explosion_centers = wrapper
+                            .game
+                            .lock()
+                            .unwrap()
+                            .finish_explosion(&explosion_centers, &flashing);
+                    }
                 }
+
+                wrapper.mark_changed();
             }
             None => return,
         }

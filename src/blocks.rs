@@ -37,6 +37,10 @@ impl SquareContent {
             }
         }
     }
+
+    pub fn is_bomb(&self) -> bool {
+        matches!(self, Self::Bomb { .. })
+    }
 }
 
 type BlockRelativeCoords = (i8, i8);
@@ -178,6 +182,10 @@ impl MovingBlock {
             .iter()
             .map(|(x, y)| ((x - cx) as i8, (y - cy) as i8))
             .collect();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.relative_coords.is_empty()
     }
 
     fn get_moved_relative_coords(&self, dx: i8, dy: i8) -> Vec<BlockRelativeCoords> {

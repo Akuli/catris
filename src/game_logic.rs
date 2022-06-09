@@ -9,6 +9,7 @@ use crate::player::PlayerPoint;
 use crate::player::WorldPoint;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {
@@ -40,6 +41,19 @@ enum ModeSpecificData {
     Traditional {
         landed_rows: [Vec<Option<SquareContent>>; 20],
     },
+}
+
+fn circle(center: WorldPoint, radius: f32) -> Vec<WorldPoint> {
+    let (cx, cy) = center;
+    let mut result = vec![];
+    for dx in (-radius.ceil() as i8)..=(radius.ceil() as i8) {
+        for dy in (-radius.ceil() as i8)..=(radius.ceil() as i8) {
+            if ((dx * dx + dy * dy) as f32) < radius * radius {
+                result.push((cx + dx, cy + dy));
+            }
+        }
+    }
+    result
 }
 
 pub struct Game {
@@ -579,6 +593,78 @@ impl Game {
         to_hold.has_been_in_hold = true;
         self.players[player_idx].borrow_mut().block_in_hold = Some(to_hold);
         true
+    }
+
+    pub fn get_points_to_flash(&self, bomb_centers: &Vec<WorldPoint>) -> Vec<WorldPoint> {
+        let mut result: HashSet<WorldPoint> = HashSet::new();
+        for center in bomb_centers {
+            for point in circle(*center, 3.5) {
+                if self.is_valid_landed_block_coords(point) {
+                    result.insert(point);
+                }
+            }
+        }
+        Vec::from_iter(result)
+    }
+
+    // returns bomb locations that were affected
+    pub fn finish_explosion(
+        &mut self,
+        old_bomb_points: &Vec<WorldPoint>,
+        old_flashing_points: &Vec<WorldPoint>,
+    ) -> Vec<WorldPoint> {
+        let mut bomb_locations = vec![];
+
+        // TODO avoid copy and pasta
+        let mut need_new_block = vec![];
+        for (player_idx, player_ref) in self.players.iter().enumerate() {
+            let mut player = player_ref.borrow_mut();
+            let coords = if let BlockOrTimer::Block(moving_block) = &player.block_or_timer {
+                let is_bomb = moving_block.square_content.is_bomb();
+                let mut coords = moving_block.get_coords();
+                coords.retain(|p| {
+                    let world_point = player.player_to_world(*p);
+                    if is_bomb {
+                        bomb_locations.push(world_point);
+                    }
+                    !old_flashing_points.contains(&world_point)
+                });
+                Some(coords)
+            } else {
+                None
+            };
+            // mutable use of block_or_timer must be separate because rust is lol
+            if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {
+                moving_block.set_player_coords(&coords.unwrap(), moving_block.center);
+                if moving_block.is_empty() {
+                    // can't call new_block() here, because player is already borrowed
+                    need_new_block.push(player_idx);
+                }
+            }
+        }
+
+        for player_idx in need_new_block {
+            self.new_block(player_idx);
+        }
+
+        match &mut self.mode_specific_data {
+            ModeSpecificData::Traditional { landed_rows } => {
+                for (y, row) in landed_rows.iter_mut().enumerate() {
+                    for (x, cell) in row.iter_mut().enumerate() {
+                        let point = (x as i8, y as i8);
+                        if cell.is_some() && cell.unwrap().is_bomb() {
+                            bomb_locations.push(point);
+                        }
+                        if old_flashing_points.contains(&point) {
+                            *cell = None;
+                        }
+                    }
+                }
+            }
+        }
+
+        bomb_locations.retain(|p| old_flashing_points.contains(p) && !old_bomb_points.contains(p));
+        bomb_locations
     }
 
     pub fn start_ticking_new_bombs(&mut self) -> Vec<u64> {
