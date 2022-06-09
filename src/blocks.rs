@@ -104,6 +104,20 @@ fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords]) -> RotateMode
     RotateMode::FullRotating
 }
 
+fn add_extra_square(coords: &mut Vec<BlockRelativeCoords>) {
+    loop {
+        let existing = coords.choose(&mut rand::thread_rng()).unwrap();
+        let diff: BlockRelativeCoords = *[(-1,0),(1,0),(0,-1),(0,1)].choose(&mut rand::thread_rng()).unwrap();
+        let (ex, ey) = existing;
+        let (dx, dy) = diff;
+        let shifted_point = (ex+dx, ey+dy);
+        if !coords.contains(&shifted_point) {
+            coords.push(shifted_point);
+            return;
+        }
+    }
+}
+
 fn maybe(probability: f32) -> bool {
     rand::thread_rng().gen_range(0.0..100.0) < probability
 }
@@ -120,10 +134,9 @@ impl MovingBlock {
     pub fn new(score: usize) -> MovingBlock {
         let score = score as f32;
 
-        let bomb_probability = 100 as f32;
-        //let bomb_probability = score / 800.0 + 1.0;
+        let bomb_probability = score / 800.0 + 1.0;
         //let drill_probability = score / 2000.0;
-        //let cursed_probability = (score - 500.0) / 200.0;
+        let cursed_probability = (score - 500.0) / 200.0;
 
         let (content, coords) = if maybe(bomb_probability) {
             let content = SquareContent::Bomb {
@@ -134,8 +147,11 @@ impl MovingBlock {
         //} else if maybe(drill_probability) {
         } else {
             let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
-            //if maybe(cursed_probability) {}
-            (SquareContent::Normal(*color), coords.to_vec())
+            let mut coords = coords.to_vec();
+            if maybe(cursed_probability) {
+                add_extra_square(&mut coords);
+            }
+            (SquareContent::Normal(*color), coords)
         };
         MovingBlock {
             square_content: content,

@@ -1,10 +1,11 @@
 drill blocks
-cursed blocks
 bottle game
 ring game
 websocket support
 profiling
 check println calls
+initial "Now serving" print
+when leaving, print num connected clients
 
 prod with RUST_BACKTRACE=1
 
