@@ -226,10 +226,15 @@ async fn tick_bombs(weak_wrapper: Weak<GameWrapper>, bomb_id: u64) {
         match weak_wrapper.upgrade() {
             Some(wrapper) => {
                 let mut game = wrapper.game.lock().unwrap();
-                let run_again = game.tick_bombs_by_id(bomb_id);
-                wrapper.mark_changed();
-                if !run_again {
+                let exploding_points = game.tick_bombs_by_id(bomb_id);
+                if exploding_points.is_none() {
+                    // bomb no longer exist
                     return;
+                }
+                let exploding_points = exploding_points.unwrap();
+                wrapper.mark_changed();
+                if !exploding_points.is_empty() {
+                    println!("boom! {:?}", exploding_points);
                 }
             }
             None => return,

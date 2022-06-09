@@ -5,6 +5,7 @@ bottle game
 ring game
 websocket support
 profiling
+check println calls
 
 prod with RUST_BACKTRACE=1
 

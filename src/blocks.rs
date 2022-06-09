@@ -6,8 +6,7 @@ use rand::Rng;
 #[derive(Copy, Clone, Debug)]
 pub enum SquareContent {
     Normal(Color),
-    // bomb timer can become negative if bomb can't explode due to another explosion holding lock (rare)
-    Bomb { timer: i8, id: Option<u64> },
+    Bomb { timer: u8, id: Option<u64> },
 }
 impl SquareContent {
     pub fn get_text(&self) -> [char; 2] {
@@ -19,10 +18,8 @@ impl SquareContent {
                         char::from_digit((timer / 10) as u32, 10).unwrap(),
                         char::from_digit((timer % 10) as u32, 10).unwrap(),
                     ]
-                } else if *timer >= 0 {
-                    [char::from_digit(*timer as u32, 10).unwrap(), ' ']
                 } else {
-                    ['0', ' ']
+                    [char::from_digit(*timer as u32, 10).unwrap(), ' ']
                 }
             }
         }

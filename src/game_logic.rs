@@ -597,31 +597,47 @@ impl Game {
         bomb_ids
     }
 
-    pub fn tick_bombs_by_id(&mut self, bomb_id: u64) -> bool {
+    // Returns list of locations of exploding bombs, or None if bombs with given id no longer exist
+    pub fn tick_bombs_by_id(&mut self, bomb_id: u64) -> Option<Vec<WorldPoint>> {
         let mut found_bombs = false;
+        let mut result: Vec<WorldPoint> = vec![];
 
-        // TODO: ugly and nested
-        for player in &self.players {
-            match &mut player.borrow_mut().block_or_timer {
-                BlockOrTimer::Block(MovingBlock {
-                    square_content: SquareContent::Bomb { id, timer },
-                    ..
-                }) if *id == Some(bomb_id) => {
-                    *timer -= 1;
-                    found_bombs = true;
+        // TODO avoid copy and pasta
+        for player_ref in &self.players {
+            let mut player = player_ref.borrow_mut();
+            if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {
+                match &mut moving_block.square_content {
+                    SquareContent::Bomb { id, timer } if *id == Some(bomb_id) => {
+                        found_bombs = true;
+                        // check needed because can tick while other bombs is exploding (holds lock)
+                        if *timer > 0 {
+                            *timer -= 1;
+                        }
+                        if *timer == 0 {
+                            for point in moving_block.get_coords() {
+                                result.push(player.player_to_world(point));
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
         match &mut self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
-                for row in landed_rows {
-                    for cell in row {
+                for (y, row) in landed_rows.iter_mut().enumerate() {
+                    for (x, cell) in row.iter_mut().enumerate() {
                         match cell {
                             Some(SquareContent::Bomb { id, timer }) if *id == Some(bomb_id) => {
-                                *timer -= 1;
                                 found_bombs = true;
+                                // check needed because can tick while other bombs is exploding (holds lock)
+                                if *timer > 0 {
+                                    *timer -= 1;
+                                }
+                                if *timer == 0 {
+                                    result.push((x as i8, y as i8));
+                                }
                             }
                             _ => {}
                         }
@@ -630,7 +646,11 @@ impl Game {
             }
         }
 
-        found_bombs
+        if found_bombs {
+            Some(result)
+        } else {
+            None
+        }
     }
 
     // returns None if everyone end up waiting, i.e. if game is over
