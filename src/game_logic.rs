@@ -607,38 +607,50 @@ impl Game {
         Vec::from_iter(result)
     }
 
-    // returns bomb locations that were affected
-    pub fn finish_explosion(
-        &mut self,
-        old_bomb_points: &Vec<WorldPoint>,
-        old_flashing_points: &Vec<WorldPoint>,
-    ) -> Vec<WorldPoint> {
-        let mut bomb_locations = vec![];
-
-        // TODO avoid copy and pasta
+    // for<'a> copied from stackoverflow answer with 0 upvotes
+    // https://stackoverflow.com/a/71254643
+    fn filter_and_mutate_all_squares_in_place<F>(&mut self, mut f: F)
+    where
+        F: for<'a> FnMut(WorldPoint, &'a mut SquareContent, Option<usize>) -> bool,
+    {
         let mut need_new_block = vec![];
+
         for (player_idx, player_ref) in self.players.iter().enumerate() {
             let mut player = player_ref.borrow_mut();
-            let coords = if let BlockOrTimer::Block(moving_block) = &player.block_or_timer {
-                let is_bomb = moving_block.square_content.is_bomb();
-                let mut coords = moving_block.get_coords();
-                coords.retain(|p| {
-                    let world_point = player.player_to_world(*p);
-                    if is_bomb {
-                        bomb_locations.push(world_point);
-                    }
-                    !old_flashing_points.contains(&world_point)
-                });
-                Some(coords)
-            } else {
-                None
-            };
-            // mutable use of block_or_timer must be separate because rust is lol
+
+            // Conversion to world coords can't be done while block_or_timer is borrowed mutable.
+            // I don't really understand why, but it doesn't compile if I use &mut block_or_timer for everything.
+            let mut player_coords: Vec<PlayerPoint> = vec![];
+            let mut world_coords: Vec<WorldPoint> = vec![];
+
+            if let BlockOrTimer::Block(moving_block) = &player.block_or_timer {
+                player_coords = moving_block.get_coords();
+                world_coords = player_coords.iter().map(|p| player.player_to_world(*p)).collect();
+            }
+
             if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {
-                moving_block.set_player_coords(&coords.unwrap(), moving_block.center);
-                if moving_block.is_empty() {
+                let old_len = player_coords.len();
+                assert!(old_len != 0);
+
+                // see example in retain docs
+                let mut world_coord_iter = world_coords.iter();
+                player_coords.retain(|_| {
+                    f(
+                        *world_coord_iter.next().unwrap(),
+                        &mut moving_block.square_content,
+                        Some(player_idx),
+                    )
+                });
+
+                if player_coords.is_empty() {
                     // can't call new_block() here, because player is already borrowed
                     need_new_block.push(player_idx);
+                    continue;
+                }
+
+                // this if statement is a pseudo-optimization
+                if player_coords.len() != old_len {
+                    moving_block.set_player_coords(&player_coords, moving_block.center);
                 }
             }
         }
@@ -652,18 +664,35 @@ impl Game {
                 for (y, row) in landed_rows.iter_mut().enumerate() {
                     for (x, cell) in row.iter_mut().enumerate() {
                         let point = (x as i8, y as i8);
-                        if cell.is_some() && cell.unwrap().is_bomb() {
-                            bomb_locations.push(point);
-                        }
-                        if old_flashing_points.contains(&point) {
-                            *cell = None;
+                        if let Some(content) = cell {
+                            if !f(point, content, None) {
+                                *cell = None;
+                            }
                         }
                     }
                 }
             }
         }
+    }
 
-        bomb_locations.retain(|p| old_flashing_points.contains(p) && !old_bomb_points.contains(p));
+    // returns bomb locations that were affected
+    pub fn finish_explosion(
+        &mut self,
+        old_bomb_points: &Vec<WorldPoint>,
+        old_flashing_points: &Vec<WorldPoint>,
+    ) -> Vec<WorldPoint> {
+        let mut bomb_locations = vec![];
+
+        self.filter_and_mutate_all_squares_in_place(|point, content, _| {
+            if content.is_bomb()
+                && old_flashing_points.contains(&point)
+                && !old_bomb_points.contains(&point)
+            {
+                bomb_locations.push(point);
+            }
+            !old_flashing_points.contains(&point)
+        });
+
         bomb_locations
     }
 
@@ -688,49 +717,33 @@ impl Game {
         let mut found_bombs = false;
         let mut result: Vec<WorldPoint> = vec![];
 
-        // TODO avoid copy and pasta
-        for player_ref in &self.players {
-            let mut player = player_ref.borrow_mut();
-            if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {
-                match &mut moving_block.square_content {
-                    SquareContent::Bomb { id, timer } if *id == Some(bomb_id) => {
-                        found_bombs = true;
-                        // check needed because can tick while other bombs is exploding (holds lock)
-                        if *timer > 0 {
-                            *timer -= 1;
-                        }
-                        if *timer == 0 {
-                            for point in moving_block.get_coords() {
-                                result.push(player.player_to_world(point));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        // Each player typically has 4 bomb squares associated with the same square content.
+        // We want to decrement the counter in the square content only once.
+        let mut moving_block_timer_decremented: Vec<bool> = vec![];
+        moving_block_timer_decremented.resize(self.players.len(), false);
 
-        match &mut self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
-                for (y, row) in landed_rows.iter_mut().enumerate() {
-                    for (x, cell) in row.iter_mut().enumerate() {
-                        match cell {
-                            Some(SquareContent::Bomb { id, timer }) if *id == Some(bomb_id) => {
-                                found_bombs = true;
-                                // check needed because can tick while other bombs is exploding (holds lock)
-                                if *timer > 0 {
-                                    *timer -= 1;
-                                }
-                                if *timer == 0 {
-                                    result.push((x as i8, y as i8));
-                                }
-                            }
-                            _ => {}
-                        }
+        self.filter_and_mutate_all_squares_in_place(|point, square_content, player_idx| {
+            match square_content {
+                SquareContent::Bomb { id, timer } if *id == Some(bomb_id) => {
+                    found_bombs = true;
+                    // timer can already be zero, if other bombs are exploding (holds async lock)
+                    if *timer > 0
+                        && (player_idx.is_none()
+                            || !moving_block_timer_decremented[player_idx.unwrap()])
+                    {
+                        *timer -= 1;
+                    }
+                    if *timer == 0 {
+                        result.push(point);
+                    }
+                    if let Some(i) = player_idx {
+                        moving_block_timer_decremented[i] = true;
                     }
                 }
+                _ => {}
             }
-        }
+            true
+        });
 
         if found_bombs {
             Some(result)

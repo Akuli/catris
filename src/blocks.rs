@@ -107,10 +107,12 @@ fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords]) -> RotateMode
 fn add_extra_square(coords: &mut Vec<BlockRelativeCoords>) {
     loop {
         let existing = coords.choose(&mut rand::thread_rng()).unwrap();
-        let diff: BlockRelativeCoords = *[(-1,0),(1,0),(0,-1),(0,1)].choose(&mut rand::thread_rng()).unwrap();
+        let diff: BlockRelativeCoords = *[(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .choose(&mut rand::thread_rng())
+            .unwrap();
         let (ex, ey) = existing;
         let (dx, dy) = diff;
-        let shifted_point = (ex+dx, ey+dy);
+        let shifted_point = (ex + dx, ey + dy);
         if !coords.contains(&shifted_point) {
             coords.push(shifted_point);
             return;
@@ -198,10 +200,6 @@ impl MovingBlock {
             .iter()
             .map(|(x, y)| ((x - cx) as i8, (y - cy) as i8))
             .collect();
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.relative_coords.is_empty()
     }
 
     fn get_moved_relative_coords(&self, dx: i8, dy: i8) -> Vec<BlockRelativeCoords> {
