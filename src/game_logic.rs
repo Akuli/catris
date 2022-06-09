@@ -167,7 +167,7 @@ impl Game {
     pub fn add_player(&mut self, client_info: &ClientInfo) {
         let player_idx = self.players.len();
         self.players
-            .push(RefCell::new(Player::new((0, 0), client_info)));
+            .push(RefCell::new(Player::new((0, 0), client_info, self.score)));
         self.update_spawn_points();
 
         let w = self.get_width();
@@ -286,7 +286,7 @@ impl Game {
                         .iter()
                         .any(|p| player.borrow().player_to_world(*p) == point)
                     {
-                        return Some(block.get_square_content());
+                        return Some(block.square_content);
                     }
                 }
                 _ => {}
@@ -415,7 +415,7 @@ impl Game {
             }
 
             let (player_coords, square_content) = match &player.borrow().block_or_timer {
-                BlockOrTimer::Block(b) => (b.get_coords(), b.get_square_content()),
+                BlockOrTimer::Block(b) => (b.get_coords(), b.square_content),
                 _ => continue,
             };
 
@@ -543,7 +543,7 @@ impl Game {
             if from_hold_if_possible && player.block_in_hold.is_some() {
                 block = replace(&mut player.block_in_hold, None).unwrap();
             } else {
-                block = replace(&mut player.next_block, MovingBlock::new());
+                block = replace(&mut player.next_block, MovingBlock::new(self.score));
             }
             block.spawn_at(player.spawn_point);
             block
@@ -570,7 +570,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, MovingBlock::new())
+                replace(b, MovingBlock::new(self.score))
             }
             _ => return false,
         };

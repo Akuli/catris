@@ -1,6 +1,5 @@
 use crate::ansi::Color;
 use crate::blocks::MovingBlock;
-use crate::blocks::SquareContent;
 use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
@@ -72,49 +71,47 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             }
 
             // If flashing, display the flashing
-            let mut content = game
+            let mut text_and_color: Option<([char; 2], Color)> = game
                 .flashing_points
                 .get(&(x, y))
-                .map(|color| SquareContent {
-                    text: [' ', ' '],
-                    color: Color { fg: 0, bg: *color },
-                });
+                .map(|color| ([' ', ' '], Color { fg: 0, bg: *color }));
 
             // If not flashing and there's a player's block, show that
-            if content.is_none() {
-                content = game.get_moving_square((x, y));
+            if text_and_color.is_none() {
+                text_and_color = game
+                    .get_moving_square((x, y))
+                    .map(|content| (content.get_text(), content.get_color()));
             }
 
             // If still nothing found, use landed squares or leave empty.
             // These are the only ones that can get trace markers "::" on top of them.
             // Traces of drill blocks usually go on top of landed squares.
-            if content.is_none() {
-                let mut traced_content = game.get_landed_square((x, y)).unwrap_or(SquareContent {
-                    text: [' ', ' '],
-                    color: Color::DEFAULT,
-                });
-                if trace_points.contains(&(x, y))
-                    && traced_content.text[0] == ' '
-                    && traced_content.text[1] == ' '
-                {
-                    traced_content.text[0] = ':';
-                    traced_content.text[1] = ':';
+            if text_and_color.is_none() {
+                let (text, color) = game
+                    .get_landed_square((x, y))
+                    .map(|content| (content.get_text(), content.get_color()))
+                    .unwrap_or(([' ', ' '], Color::DEFAULT));
+
+                if trace_points.contains(&(x, y)) && text[0] == ' ' && text[1] == ' ' {
+                    // TODO: set trace color
+                    text_and_color = Some(([':', ':'], color));
+                } else {
+                    text_and_color = Some((text, color));
                 }
-                content = Some(traced_content);
             };
 
-            let content = content.unwrap();
+            let (text, color) = text_and_color.unwrap();
             buffer.set_char_with_color(
                 (2 * x + offset_x) as usize,
                 (y + offset_y) as usize,
-                content.text[0],
-                content.color,
+                text[0],
+                color,
             );
             buffer.set_char_with_color(
                 (2 * x + offset_x) as usize + 1,
                 (y + offset_y) as usize,
-                content.text[1],
-                content.color,
+                text[1],
+                color,
             );
         }
     }
@@ -149,17 +146,13 @@ fn render_block(
     let center_x = text_x + 6;
     let center_y = text_y + 4;
 
-    let square_content = block.get_square_content();
+    let text = block.square_content.get_text();
+    let color = block.square_content.get_color();
     for (x, y) in block.get_relative_coords_for_rendering_the_preview() {
         let buf_x = ((center_x as i8) + 2 * (*x as i8)) as usize;
         let buf_y = ((center_y as i8) + (*y as i8)) as usize;
-        buffer.set_char_with_color(buf_x, buf_y, square_content.text[0], square_content.color);
-        buffer.set_char_with_color(
-            buf_x + 1,
-            buf_y,
-            square_content.text[1],
-            square_content.color,
-        );
+        buffer.set_char_with_color(buf_x, buf_y, text[0], color);
+        buffer.set_char_with_color(buf_x + 1, buf_y, text[1], color);
     }
 }
 

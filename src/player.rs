@@ -47,14 +47,14 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo) -> Self {
+    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo, current_score: usize) -> Self {
         Self {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point: spawn_point,
-            block_or_timer: BlockOrTimer::Block(MovingBlock::new()),
-            next_block: MovingBlock::new(),
+            block_or_timer: BlockOrTimer::Block(MovingBlock::new(current_score)),
+            next_block: MovingBlock::new(current_score),
             block_in_hold: None,
             fast_down: false,
         }

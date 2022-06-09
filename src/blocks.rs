@@ -1,27 +1,66 @@
 use crate::ansi::Color;
 use crate::player::PlayerPoint;
 use rand::seq::SliceRandom;
+use rand::Rng;
 
-#[derive(Copy, Clone)]
-pub struct SquareContent {
-    pub text: [char; 2],
-    pub color: Color,
+#[derive(Copy, Clone, Debug)]
+pub enum SquareContent {
+    Normal(Color),
+    Bomb(i8), // timer, can be negative if bomb can't explode due to another explosion holding lock (rare)
+}
+impl SquareContent {
+    pub fn get_text(&self) -> [char; 2] {
+        match self {
+            Self::Normal(_) => [' ', ' '],
+            Self::Bomb(timer) => {
+                if *timer >= 10 {
+                    [
+                        char::from_digit((timer / 10) as u32, 10).unwrap(),
+                        char::from_digit((timer % 10) as u32, 10).unwrap(),
+                    ]
+                } else if *timer >= 0 {
+                    [char::from_digit(*timer as u32, 10).unwrap(), ' ']
+                } else {
+                    ['0', ' ']
+                }
+            }
+        }
+    }
+
+    pub fn get_color(&self) -> Color {
+        match self {
+            Self::Normal(color) => *color,
+            Self::Bomb(timer) => {
+                if *timer > 3 {
+                    Color::YELLOW_FOREGROUND
+                } else {
+                    Color::RED_FOREGROUND
+                }
+            }
+        }
+    }
 }
 
 type BlockRelativeCoords = (i8, i8);
 
+const L_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (1, -1)];
+const I_COORDS: &[BlockRelativeCoords] = &[(-2, 0), (-1, 0), (0, 0), (1, 0)];
+const J_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (-1, 0), (0, 0), (1, 0)];
+const O_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (0, -1), (-1, -1)];
+const T_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (0, -1)];
+const Z_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (0, -1), (0, 0), (1, 0)];
+const S_COORDS: &[BlockRelativeCoords] = &[(1, -1), (0, -1), (0, 0), (-1, 0)];
+
 #[rustfmt::skip]
 const STANDARD_BLOCKS: &[(Color, &[BlockRelativeCoords])] = &[
     // Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
-    // The white block should be orange, but that would mean using colors
-    // that don't work on windows cmd (I hope nobody actually uses this on cmd though)
-    (Color::WHITE_BACKGROUND, &[(-1, 0), (0, 0), (1, 0), (1, -1)]),
-    (Color::CYAN_BACKGROUND, &[(-2, 0), (-1, 0), (0, 0), (1, 0)]),
-    (Color::BLUE_BACKGROUND, &[(-1, -1), (-1, 0), (0, 0), (1, 0)]),
-    (Color::YELLOW_BACKGROUND, &[(-1, 0), (0, 0), (0, -1), (-1, -1)]),
-    (Color::MAGENTA_BACKGROUND, &[(-1, 0), (0, 0), (1, 0), (0, -1)]),
-    (Color::RED_BACKGROUND, &[(-1, -1), (0, -1), (0, 0), (1, 0)]),
-    (Color::GREEN_BACKGROUND, &[(1, -1), (0, -1), (0, 0), (-1, 0)]),
+    (Color::WHITE_BACKGROUND, L_COORDS),  // should be orange, but wouldn't work on windows cmd
+    (Color::CYAN_BACKGROUND, I_COORDS),
+    (Color::BLUE_BACKGROUND, J_COORDS),
+    (Color::YELLOW_BACKGROUND, O_COORDS),
+    (Color::MAGENTA_BACKGROUND, T_COORDS),
+    (Color::RED_BACKGROUND, Z_COORDS),
+    (Color::GREEN_BACKGROUND, S_COORDS),
 ];
 
 #[derive(Copy, Clone, Debug)]
@@ -63,22 +102,40 @@ fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords]) -> RotateMode
     RotateMode::FullRotating
 }
 
+fn maybe(probability: f32) -> bool {
+    rand::thread_rng().gen_range(0.0..100.0) < probability
+}
+
 #[derive(Debug)]
 pub struct MovingBlock {
+    pub square_content: SquareContent,
+    pub has_been_in_hold: bool,
     pub center: PlayerPoint,
     relative_coords: Vec<BlockRelativeCoords>,
-    color: Color,
     rotate_mode: RotateMode,
-    pub has_been_in_hold: bool,
 }
 impl MovingBlock {
-    pub fn new() -> MovingBlock {
-        let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
+    pub fn new(score: usize) -> MovingBlock {
+        let score = score as f32;
+
+        let bomb_probability = (score as f32) / 800.0 + 1.0;
+        //let drill_probability = score / 2000;
+        //let cursed_probability = (score - 500) / 200;
+
+        let (content, coords) = if maybe(bomb_probability) {
+            let content = SquareContent::Bomb(if maybe(20.0) { 3 } else { 15 });
+            (content, O_COORDS.to_vec())
+        //} else if maybe(drill_probability) {
+        } else {
+            let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
+            //if maybe(cursed_probability) {}
+            (SquareContent::Normal(*color), coords.to_vec())
+        };
         MovingBlock {
+            square_content: content,
             center: (0, 0), // dummy value, should be changed when spawning the block
-            color: *color,
-            relative_coords: coords.to_vec(),
-            rotate_mode: choose_initial_rotate_mode(coords),
+            rotate_mode: choose_initial_rotate_mode(&coords),
+            relative_coords: coords,
             has_been_in_hold: false,
         }
     }
@@ -93,13 +150,6 @@ impl MovingBlock {
 
     pub fn get_relative_coords_for_rendering_the_preview(&self) -> &[(i8, i8)] {
         &self.relative_coords
-    }
-
-    pub fn get_square_content(&self) -> SquareContent {
-        SquareContent {
-            text: [' ', ' '],
-            color: self.color,
-        }
     }
 
     fn add_center(&self, relative: &[BlockRelativeCoords]) -> Vec<PlayerPoint> {
