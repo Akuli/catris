@@ -292,25 +292,31 @@ impl Game {
         }
     }
 
-    pub fn get_moving_square(&self, point: WorldPoint) -> Option<SquareContent> {
-        for player in &self.players {
-            match &player.borrow().block_or_timer {
-                BlockOrTimer::Block(block) => {
-                    if block
-                        .get_coords()
-                        .iter()
-                        .any(|p| player.borrow().player_to_world(*p) == point)
-                    {
-                        return Some(block.square_content);
+    fn get_moving_square(
+        &self,
+        point: WorldPoint,
+        exclude_player_idx: Option<usize>,
+    ) -> Option<SquareContent> {
+        for (player_idx, player) in self.players.iter().enumerate() {
+            if exclude_player_idx != Some(player_idx) {
+                match &player.borrow().block_or_timer {
+                    BlockOrTimer::Block(block) => {
+                        if block
+                            .get_coords()
+                            .iter()
+                            .any(|p| player.borrow().player_to_world(*p) == point)
+                        {
+                            return Some(block.square_content);
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
         None
     }
 
-    pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
+    fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 let (x, y) = point;
@@ -328,33 +334,37 @@ impl Game {
         }
     }
 
+    pub fn get_any_square(
+        &self,
+        point: WorldPoint,
+        exclude_player_idx: Option<usize>,
+    ) -> Option<SquareContent> {
+        let landed = if self.is_valid_landed_block_coords(point) {
+            self.get_landed_square(point)
+        } else {
+            None
+        };
+        landed.or_else(|| self.get_moving_square(point, exclude_player_idx))
+    }
+
+    // TODO: delete
     fn square_is_occupied(&self, point: WorldPoint, exclude_player_idx: Option<usize>) -> bool {
-        (self.is_valid_landed_block_coords(point) && self.get_landed_square(point).is_some())
-            || self.players.iter().enumerate().any(|(i, player)| {
-                exclude_player_idx != Some(i)
-                    && player
-                        .borrow()
-                        .block_or_timer
-                        .get_coords()
-                        .iter()
-                        .any(|p| player.borrow().player_to_world(*p) == point)
-            })
+        self.get_any_square(point, exclude_player_idx).is_some()
     }
 
     fn rotate_if_possible(&self, player_idx: usize, prefer_counter_clockwise: bool) -> bool {
         let player = &self.players[player_idx];
-        let coords = player
-            .borrow()
-            .block_or_timer
-            .get_rotated_coords(prefer_counter_clockwise);
+        let coords = match &player.borrow().block_or_timer {
+            BlockOrTimer::Block(block) => block.get_rotated_coords(prefer_counter_clockwise),
+            _ => return false,
+        };
 
-        let can_rotate = !coords.is_empty()
-            && coords.iter().all(|p| {
-                let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-                let goes_on_top_of_something =
-                    self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
-                stays_in_bounds && !goes_on_top_of_something
-            });
+        let can_rotate = coords.iter().all(|p| {
+            let stays_in_bounds = self.is_valid_moving_block_coords(*p);
+            let goes_on_top_of_something =
+                self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
+            stays_in_bounds && !goes_on_top_of_something
+        });
         if can_rotate {
             let mut player = player.borrow_mut();
             match &mut player.block_or_timer {
@@ -365,49 +375,86 @@ impl Game {
         can_rotate
     }
 
-    fn move_if_possible(&self, player_idx: usize, dx: i8, dy: i8) -> bool {
+    fn move_if_possible(
+        &mut self,
+        player_idx: usize,
+        dx: i8,
+        dy: i8,
+        enable_drilling: bool,
+    ) -> bool {
         let player = &self.players[player_idx];
-        let coords = player.borrow().block_or_timer.get_moved_coords(dx, dy);
+        let mut gonna_drill: HashSet<WorldPoint> = HashSet::new();
+        let can_move = {
+            let (content, coords) = match &player.borrow().block_or_timer {
+                BlockOrTimer::Block(block) => {
+                    (block.square_content, block.get_moved_coords(dx, dy))
+                }
+                _ => return false,
+            };
 
-        let can_move = !coords.is_empty()
-            && coords.iter().all(|p| {
+            coords.iter().all(|p| {
                 let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-                let goes_on_top_of_something =
-                    self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
-                stays_in_bounds && !goes_on_top_of_something
-            });
+                stays_in_bounds && {
+                    let p = player.borrow().player_to_world(*p);
+                    if let Some(goes_on_top_of) = self.get_any_square(p, Some(player_idx)) {
+                        if enable_drilling && content.can_drill(&goes_on_top_of) {
+                            gonna_drill.insert(p);
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        true
+                    }
+                }
+            })
+        };
+
         if can_move {
             match &mut player.borrow_mut().block_or_timer {
                 BlockOrTimer::Block(block) => block.m0v3(dx, dy),
                 _ => panic!(),
             }
+            self.filter_and_mutate_all_squares_in_place(|point, _, i| {
+                i == Some(player_idx) || !gonna_drill.contains(&point)
+            });
         }
         can_move
     }
 
     pub fn predict_landing_place(&self, player_idx: usize) -> Vec<WorldPoint> {
         let player = &self.players[player_idx];
-        let mut working_coords: Vec<WorldPoint> = vec![];
+        let (content, mut working_coords) = match &player.borrow().block_or_timer {
+            BlockOrTimer::Block(block) => (block.square_content, block.get_coords()),
+            _ => return vec![],
+        };
 
         // 40 is senough even in ring mode
-        for offset in 0..40 {
-            let coords = player.borrow().block_or_timer.get_moved_coords(0, offset);
+        for _ in 0..40 {
+            let can_move = working_coords.iter().all(|p| {
+                let (x, mut y) = *p;
+                y += 1;
 
-            let can_move = !coords.is_empty()
-                && coords.iter().all(|p| {
-                    let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-                    let goes_on_top_of_something = self
-                        .square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
-                    stays_in_bounds && !goes_on_top_of_something
-                });
+                let stays_in_bounds = self.is_valid_moving_block_coords((x, y));
+                stays_in_bounds && {
+                    let world_point = player.borrow().player_to_world((x, y));
+                    if let Some(goes_on_top_of) = self.get_any_square(world_point, Some(player_idx))
+                    {
+                        content.can_drill(&goes_on_top_of)
+                    } else {
+                        true
+                    }
+                }
+            });
             if can_move {
-                working_coords = coords
+                for point in working_coords.iter_mut() {
+                    point.1 += 1;
+                }
+            } else {
+                return working_coords
                     .iter()
                     .map(|p| player.borrow().player_to_world(*p))
                     .collect();
-            } else {
-                // offset 0 always works, so it shouldn't be None
-                return working_coords;
             }
         }
 
@@ -416,23 +463,42 @@ impl Game {
     }
 
     pub fn move_blocks_down(&mut self, fast: bool) -> bool {
-        let mut landing = vec![];
-        let mut need_render = false;
-
+        let mut drill_indexes = vec![];
+        let mut other_indexes = vec![];
         for (player_idx, player) in self.players.iter().enumerate() {
-            if player.borrow().fast_down != fast {
-                continue;
+            if player.borrow().fast_down == fast {
+                if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
+                    if matches!(b.square_content, SquareContent::Drill) {
+                        drill_indexes.push(player_idx);
+                    } else {
+                        other_indexes.push(player_idx);
+                    }
+                }
             }
+        }
 
-            if self.move_if_possible(player_idx, 0, 1) {
-                need_render = true;
-                continue;
+        let mut need_render = false;
+        loop {
+            let old_total_len = drill_indexes.len() + other_indexes.len();
+            // Move drills last, gives other blocks a chance to go in front of a drill and get drilled
+            // Need to loop so other blocks can go to where a drill came from
+            other_indexes.retain(|i| !self.move_if_possible(*i, 0, 1, true));
+            drill_indexes.retain(|i| !self.move_if_possible(*i, 0, 1, true));
+            if drill_indexes.len() + other_indexes.len() == old_total_len {
+                break;
             }
+            need_render = true;
+        }
 
-            let (player_coords, square_content) = match &player.borrow().block_or_timer {
-                BlockOrTimer::Block(b) => (b.get_coords(), b.square_content),
-                _ => continue,
-            };
+        let mut landing = vec![];
+        for player_idx in drill_indexes.iter().chain(other_indexes.iter()) {
+            let player = &self.players[*player_idx];
+            let (player_coords, square_content) =
+                if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
+                    (b.get_coords(), b.square_content)
+                } else {
+                    panic!()
+                };
 
             let world_points: Vec<WorldPoint> = player_coords
                 .iter()
@@ -446,11 +512,10 @@ impl Game {
                 for p in world_points {
                     landing.push((p, square_content));
                 }
-                self.new_block(player_idx);
+                self.new_block(*player_idx);
             } else {
                 // no room to land
-                let mut player = player.borrow_mut();
-                player.block_or_timer = BlockOrTimer::TimerPending;
+                player.borrow_mut().block_or_timer = BlockOrTimer::TimerPending;
             }
             need_render = true;
         }
@@ -481,10 +546,10 @@ impl Game {
                 return false;
             }
             KeyPress::Left | KeyPress::Character('A') | KeyPress::Character('a') => {
-                self.move_if_possible(player_idx, -1, 0)
+                self.move_if_possible(player_idx, -1, 0, false)
             }
             KeyPress::Right | KeyPress::Character('D') | KeyPress::Character('d') => {
-                self.move_if_possible(player_idx, 1, 0)
+                self.move_if_possible(player_idx, 1, 0, false)
             }
             KeyPress::Up | KeyPress::Character('W') | KeyPress::Character('w') => {
                 self.rotate_if_possible(player_idx, client_prefers_rotating_counter_clockwise)
@@ -625,7 +690,10 @@ impl Game {
 
             if let BlockOrTimer::Block(moving_block) = &player.block_or_timer {
                 player_coords = moving_block.get_coords();
-                world_coords = player_coords.iter().map(|p| player.player_to_world(*p)).collect();
+                world_coords = player_coords
+                    .iter()
+                    .map(|p| player.player_to_world(*p))
+                    .collect();
             }
 
             if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {

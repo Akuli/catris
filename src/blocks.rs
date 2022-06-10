@@ -3,10 +3,13 @@ use crate::player::PlayerPoint;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
+type BlockRelativeCoords = (i8, i8);
+
 #[derive(Copy, Clone, Debug)]
 pub enum SquareContent {
     Normal(Color),
     Bomb { timer: u8, id: Option<u64> },
+    Drill,
 }
 impl SquareContent {
     pub fn get_text(&self) -> [char; 2] {
@@ -22,6 +25,7 @@ impl SquareContent {
                     [char::from_digit(*timer as u32, 10).unwrap(), ' ']
                 }
             }
+            Self::Drill => ['d', 'd'],
         }
     }
 
@@ -35,15 +39,18 @@ impl SquareContent {
                     Color::RED_FOREGROUND
                 }
             }
+            Self::Drill => Color::DEFAULT,
         }
     }
 
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
-}
 
-type BlockRelativeCoords = (i8, i8);
+    pub fn can_drill(&self, other: &SquareContent) -> bool {
+        matches!(self, SquareContent::Drill) && !matches!(other, SquareContent::Drill)
+    }
+}
 
 const L_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (1, -1)];
 const I_COORDS: &[BlockRelativeCoords] = &[(-2, 0), (-1, 0), (0, 0), (1, 0)];
@@ -52,6 +59,19 @@ const O_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (0, -1), (-1, -1)];
 const T_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (0, -1)];
 const Z_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (0, -1), (0, 0), (1, 0)];
 const S_COORDS: &[BlockRelativeCoords] = &[(1, -1), (0, -1), (0, 0), (-1, 0)];
+
+const DRILL_COORDS: &[BlockRelativeCoords] = &[
+    (-1, -2),
+    (0, -2),
+    (-1, -1),
+    (0, -1),
+    (-1, 0),
+    (0, 0),
+    (-1, 1),
+    (0, 1),
+    (-1, 2),
+    (0, 2),
+];
 
 #[rustfmt::skip]
 const STANDARD_BLOCKS: &[(Color, &[BlockRelativeCoords])] = &[
@@ -88,7 +108,11 @@ fn shapes_match(a: &[BlockRelativeCoords], b: &[BlockRelativeCoords]) -> bool {
     return b.iter().all(|p| shifted_a.contains(p));
 }
 
-fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords]) -> RotateMode {
+fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords], content: &SquareContent) -> RotateMode {
+    if matches!(content, SquareContent::Drill) {
+        return RotateMode::NoRotating;
+    }
+
     let rotated_once: Vec<BlockRelativeCoords> =
         not_rotated.iter().map(|(x, y)| (-y, *x)).collect();
     if shapes_match(not_rotated, &rotated_once) {
@@ -138,6 +162,7 @@ impl MovingBlock {
 
         let bomb_probability = score / 800.0 + 1.0;
         //let drill_probability = score / 2000.0;
+        let drill_probability = 40.0;
         let cursed_probability = (score - 500.0) / 200.0;
 
         let (content, coords) = if maybe(bomb_probability) {
@@ -146,7 +171,8 @@ impl MovingBlock {
                 id: None,
             };
             (content, O_COORDS.to_vec())
-        //} else if maybe(drill_probability) {
+        } else if maybe(drill_probability) {
+            (SquareContent::Drill, DRILL_COORDS.to_vec())
         } else {
             let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
             let mut coords = coords.to_vec();
@@ -158,7 +184,7 @@ impl MovingBlock {
         MovingBlock {
             square_content: content,
             center: (0, 0), // dummy value, should be changed when spawning the block
-            rotate_mode: choose_initial_rotate_mode(&coords),
+            rotate_mode: choose_initial_rotate_mode(&coords, &content),
             relative_coords: coords,
             has_been_in_hold: false,
         }

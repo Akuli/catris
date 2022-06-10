@@ -6,6 +6,7 @@ profiling
 check println calls
 initial "Now serving" print
 when leaving, print num connected clients
+high scores file bump ver num
 
 prod with RUST_BACKTRACE=1
 

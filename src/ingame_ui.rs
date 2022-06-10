@@ -3,6 +3,7 @@ use crate::blocks::MovingBlock;
 use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
+use crate::player::BlockOrTimer;
 use crate::render::RenderBuffer;
 use crate::render::RenderData;
 use std::cmp::max;
@@ -61,7 +62,20 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         _ => panic!(),
     };
 
-    let trace_points = game.predict_landing_place(player_idx);
+    let mut trace_points = game.predict_landing_place(player_idx);
+
+    // Don't trace on top of current player's moving block
+    {
+        let player = game.players[player_idx].borrow();
+        match &player.block_or_timer {
+            BlockOrTimer::Block(block) => {
+                for point in block.get_coords() {
+                    trace_points.retain(|p| *p != player.player_to_world(point));
+                }
+            }
+            _ => {}
+        }
+    }
 
     // TODO: optimize lol?
     for x in i8::MIN..i8::MAX {
@@ -70,25 +84,15 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 continue;
             }
 
-            // If flashing, display the flashing
+            // If flashing, display it instead of anything else
             let mut text_and_color: Option<([char; 2], Color)> = game
                 .flashing_points
                 .get(&(x, y))
                 .map(|color| ([' ', ' '], Color { fg: 0, bg: *color }));
 
-            // If not flashing and there's a player's block, show that
-            if text_and_color.is_none() {
-                text_and_color = game
-                    .get_moving_square((x, y))
-                    .map(|content| (content.get_text(), content.get_color()));
-            }
-
-            // If still nothing found, use landed squares or leave empty.
-            // These are the only ones that can get trace markers "::" on top of them.
-            // Traces of drill blocks usually go on top of landed squares.
             if text_and_color.is_none() {
                 let (text, color) = game
-                    .get_landed_square((x, y))
+                    .get_any_square((x, y), None)
                     .map(|content| (content.get_text(), content.get_color()))
                     .unwrap_or(([' ', ' '], Color::DEFAULT));
 

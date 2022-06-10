@@ -28,6 +28,7 @@ impl Color {
     pub const DEFAULT: Color = Color { fg: 0, bg: 0 };
     pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
     pub const GRAY_FOREGROUND: Color = Color { fg: 90, bg: 0 };
+    pub const GRAY_BACKGROUND: Color = Color { fg: 0, bg: 100 };
 
     pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
     pub const GREEN_FOREGROUND: Color = Color { fg: 32, bg: 0 };
