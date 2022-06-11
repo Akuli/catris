@@ -3,37 +3,71 @@ use crate::blocks::MovingBlock;
 use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
+use crate::game_logic::BOTTLE;
 use crate::player::BlockOrTimer;
+use crate::player::Player;
 use crate::render::RenderBuffer;
 use crate::render::RenderData;
+use std::cell::RefCell;
 use std::cmp::max;
+
+fn render_name_lines(
+    players: &[RefCell<Player>],
+    highlight_client_id: u64,
+    buffer: &mut RenderBuffer,
+    x_offset: usize,
+    width_per_player: usize,
+    name_y: usize,
+    line_y: usize,
+    o_ends: bool,
+) {
+    for (i, player) in players.iter().enumerate() {
+        let left = x_offset + (i * width_per_player);
+        let right = left + width_per_player;
+        let text = player.borrow().get_name_string(width_per_player);
+        let color = Color {
+            fg: player.borrow().color,
+            bg: 0,
+        };
+        let free_space = width_per_player - text.chars().count();
+        buffer.add_text_with_color(left + (free_space / 2), name_y, &text, color);
+
+        let line_character = if player.borrow().client_id == highlight_client_id {
+            "="
+        } else {
+            "-"
+        };
+
+        if o_ends {
+            buffer.add_text_with_color(left, line_y, "o", color);
+            buffer.add_text_with_color(right - 1, line_y, "o", color);
+            for x in (left + 1)..(right - 1) {
+                buffer.add_text_with_color(x, line_y, line_character, color);
+            }
+        } else {
+            for x in left..right {
+                buffer.add_text_with_color(x, line_y, line_character, color);
+            }
+        }
+    }
+}
 
 fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     match game.mode() {
         Mode::Traditional => {
-            for (i, player) in game.players.iter().enumerate() {
-                let w = 2 * game.get_width_per_player();
-                let left = 1 + (i * w);
-                let text = player.borrow().get_name_string(w);
-                let color = Color {
-                    fg: player.borrow().color,
-                    bg: 0,
-                };
-                let free_space = w - text.chars().count();
-                buffer.add_text_with_color(left + (free_space / 2), 0, &text, color);
-
-                let line_character = if player.borrow().client_id == client_id {
-                    "="
-                } else {
-                    "-"
-                };
-                for x in left..(left + w) {
-                    buffer.add_text_with_color(x, 1, line_character, color);
-                }
-            }
-
             buffer.set_char(0, 1, 'o');
             buffer.set_char(2 * game.get_width() + 1, 1, 'o');
+            render_name_lines(
+                &game.players,
+                client_id,
+                buffer,
+                1,
+                2 * game.get_width_per_player().unwrap(),
+                0,
+                1,
+                false,
+            );
+
             for y in 2..(2 + game.get_height()) {
                 buffer.set_char(0, y, '|');
                 buffer.set_char(2 * game.get_width() + 1, y, '|');
@@ -45,6 +79,38 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             for x in 1..(2 * game.get_width() + 1) {
                 buffer.set_char(x, bottom_y, '-');
             }
+        }
+        Mode::Bottle => {
+            for (player_idx, player) in game.players.iter().enumerate() {
+                let left = player_idx * BOTTLE[0].len();
+                let color = Color {
+                    fg: player.borrow().color,
+                    bg: 0,
+                };
+                for (y, line) in BOTTLE.iter().enumerate() {
+                    let is_in_personal_space = !line.starts_with('|');
+                    for (i, ch) in line.chars().enumerate() {
+                        let is_at_edge = (player_idx == 0 && i == 0)
+                            || (player_idx == game.players.len() - 1 && i == line.len() - 1);
+                        if ch != 'x'
+                            && ch != ' '
+                            && (ch != '|' || is_in_personal_space || is_at_edge)
+                        {
+                            buffer.set_char_with_color(left + i, y, ch, color);
+                        }
+                    }
+                }
+            }
+            render_name_lines(
+                &game.players,
+                client_id,
+                buffer,
+                0,
+                BOTTLE[0].len(),
+                BOTTLE.len() + 1,
+                BOTTLE.len(),
+                true,
+            );
         }
         _ => panic!(),
     }
@@ -59,6 +125,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 
     let (offset_x, offset_y) = match game.mode() {
         Mode::Traditional => (1, 2),
+        Mode::Bottle => (1, 0),
         _ => panic!(),
     };
 
@@ -117,6 +184,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     match game.mode() {
         Mode::Traditional => (game.get_width() * 2 + 2, game.get_height() + 3),
+        Mode::Bottle => (game.get_width() * 2 + 2, game.get_height() + 2),
         _ => panic!(),
     }
 }

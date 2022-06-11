@@ -1,3 +1,4 @@
+use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
@@ -6,6 +7,7 @@ use crate::lobby::MAX_CLIENTS_PER_LOBBY;
 use crate::player::BlockOrTimer;
 use crate::player::Player;
 use std::cell::RefCell;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -41,7 +43,10 @@ impl Mode {
 
 enum ModeSpecificData {
     Traditional {
-        landed_rows: [Vec<Option<SquareContent>>; 20],
+        landed_rows: Vec<Vec<Option<SquareContent>>>,
+    },
+    Bottle {
+        landed_rows: Vec<Vec<Option<SquareContent>>>,
     },
 }
 
@@ -58,6 +63,33 @@ fn circle(center: WorldPoint, radius: f32) -> Vec<WorldPoint> {
     result
 }
 
+pub const BOTTLE: &[&str] = &[
+    r"    |xxxxxxxxxx|    ",
+    r"    |xxxxxxxxxx|    ",
+    r"    |xxxxxxxxxx|    ",
+    r"    |xxxxxxxxxx|    ",
+    r"    /xxxxxxxxxx\    ",
+    r"   /.xxxxxxxxxx.\   ",
+    r"  /xxxxxxxxxxxxxx\  ",
+    r" /.xxxxxxxxxxxxxx.\ ",
+    r"/xxxxxxxxxxxxxxxxxx\",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+    r"|xxxxxxxxxxxxxxxxxx|",
+];
+const BOTTLE_INNER_WIDTH: usize = 9;
+const BOTTLE_OUTER_WIDTH: usize = 10;
+const BOTTLE_PERSONAL_SPACE_HEIGHT: usize = 9; // rows above the wide "|" area
+
 pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
@@ -68,13 +100,13 @@ pub struct Game {
 impl Game {
     pub fn new(mode: Mode) -> Self {
         let mode_specific_data = match mode {
-            Mode::Traditional => {
-                const BLANK: Vec<Option<SquareContent>> = vec![];
-                ModeSpecificData::Traditional {
-                    landed_rows: [BLANK; 20],
-                }
-            }
-            Mode::Bottle | Mode::Ring => unimplemented!(),
+            Mode::Traditional => ModeSpecificData::Traditional {
+                landed_rows: vec![vec![]; 20],
+            },
+            Mode::Bottle => ModeSpecificData::Bottle {
+                landed_rows: vec![vec![]; 21],
+            },
+            Mode::Ring => unimplemented!(),
         };
         Self {
             players: vec![],
@@ -88,6 +120,7 @@ impl Game {
     pub fn mode(&self) -> Mode {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { .. } => Mode::Traditional,
+            ModeSpecificData::Bottle { .. } => Mode::Bottle,
         }
     }
 
@@ -95,40 +128,42 @@ impl Game {
         self.score
     }
 
-    pub fn get_width_per_player(&self) -> usize {
+    pub fn get_width_per_player(&self) -> Option<usize> {
         match self.mode() {
-            Mode::Traditional => {
-                // TODO: 10 would be wide enough for two
-                if self.players.len() >= 2 {
-                    7
-                } else {
-                    10
-                }
-            }
-            _ => unimplemented!(),
+            Mode::Traditional if self.players.len() >= 2 => Some(7),
+            Mode::Traditional => Some(10),
+            _ => None,
         }
     }
 
     pub fn get_width(&self) -> usize {
         match self.mode() {
-            Mode::Traditional => self.get_width_per_player() * self.players.len(),
+            Mode::Traditional => self.get_width_per_player().unwrap() * self.players.len(),
+            Mode::Bottle => BOTTLE_OUTER_WIDTH * self.players.len() - 1,
             _ => unimplemented!(),
         }
     }
 
     pub fn get_height(&self) -> usize {
         match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => landed_rows.len(),
+            ModeSpecificData::Traditional { landed_rows }
+            | ModeSpecificData::Bottle { landed_rows } => landed_rows.len(),
         }
     }
 
     fn update_spawn_points(&self) {
         match self.mode() {
             Mode::Traditional => {
-                let w = self.get_width_per_player() as i32;
+                let w = self.get_width_per_player().unwrap() as i32;
                 for (player_idx, player) in self.players.iter().enumerate() {
                     let i = player_idx as i32;
                     player.borrow_mut().spawn_point = ((i * w) + (w / 2), 0);
+                }
+            }
+            Mode::Bottle => {
+                for (player_idx, player) in self.players.iter().enumerate() {
+                    let x = (player_idx * BOTTLE_OUTER_WIDTH) + (BOTTLE_INNER_WIDTH / 2);
+                    player.borrow_mut().spawn_point = (x as i32, 0);
                 }
             }
             _ => unimplemented!(),
@@ -139,8 +174,9 @@ impl Game {
         let right = left + width;
 
         match &mut self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
-                for row in landed_rows.iter_mut() {
+            ModeSpecificData::Traditional { landed_rows }
+            | ModeSpecificData::Bottle { landed_rows } => {
+                for row in landed_rows {
                     row.splice(left..right, vec![]);
                 }
             }
@@ -190,8 +226,27 @@ impl Game {
         let w = self.get_width();
         match &mut self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
-                for row in landed_rows.iter_mut() {
+                for row in landed_rows {
                     row.resize(w, None);
+                }
+            }
+            ModeSpecificData::Bottle { landed_rows } => {
+                for (y, row) in landed_rows.iter_mut().enumerate() {
+                    row.resize(w, None);
+                    if player_idx >= 1 && (BOTTLE_PERSONAL_SPACE_HEIGHT..).contains(&y) {
+                        let left_color = Color {
+                            fg: self.players[player_idx - 1].borrow().color,
+                            bg: 0,
+                        };
+                        let right_color = Color {
+                            fg: client_info.color,
+                            bg: 0,
+                        };
+                        row[player_idx * BOTTLE_OUTER_WIDTH - 1] = Some(SquareContent::Normal([
+                            ('|', left_color),
+                            ('|', right_color),
+                        ]));
+                    }
                 }
             }
         }
@@ -209,9 +264,9 @@ impl Game {
         }
         let i = i.unwrap();
 
-        match self.mode_specific_data {
-            ModeSpecificData::Traditional { .. } => {
-                let slice_x = self.get_width_per_player() * i;
+        match self.mode() {
+            Mode::Traditional => {
+                let slice_x = self.get_width_per_player().unwrap() * i;
                 let old_width = self.get_width();
                 self.players.remove(i);
                 let new_width = self.get_width();
@@ -219,76 +274,133 @@ impl Game {
                 let slice_width = old_width - new_width;
                 self.wipe_vertical_slice(slice_x, slice_width);
             }
+            Mode::Bottle => {
+                let (slice_x, slice_width) = if self.players.len() == 1 {
+                    (0, BOTTLE_INNER_WIDTH)
+                } else if i == 0 {
+                    (0, BOTTLE_OUTER_WIDTH)
+                } else if i == self.players.len() - 1 {
+                    (i * BOTTLE_OUTER_WIDTH, BOTTLE_INNER_WIDTH)
+                } else {
+                    (i * BOTTLE_OUTER_WIDTH, BOTTLE_OUTER_WIDTH)
+                };
+
+                self.players.remove(i);
+                self.wipe_vertical_slice(slice_x, slice_width);
+            }
+            _ => unimplemented!(),
         }
 
         self.update_spawn_points();
     }
 
-    fn add_score(&mut self, single_player_score: usize) {
-        /*
-        It seems to be exponentially harder to get more points when there are a
-        lot of players, basically P(all n players full) = P(1 player full)^n,
-        although that wrongly assumes players are independent of each other.
+    fn add_score(&mut self, mut add: usize, multi_player_compensate: bool) {
+        if multi_player_compensate {
+            /*
+            It seems to be exponentially harder to get more points when there are a
+            lot of players, basically P(all n players full) = P(1 player full)^n,
+            although that wrongly assumes players are independent of each other.
 
-        Currently this seems to give points more easily when there's a lot of
-        players, but maybe that's a feature, because it should encourage people to
-        play together :)
+            Currently this seems to give points more easily when there's a lot of
+            players, but maybe that's a feature, because it should encourage people to
+            play together :)
 
-        The scores also feel quite different for single player and multiplayer.
-        That's why they are shown separately in the high scores view.
-        */
-        self.score += single_player_score * 2usize.pow((self.players.len() - 1) as u32);
+            The scores also feel quite different for single player and multiplayer.
+            That's why they are shown separately in the high scores view.
+            */
+            add *= 2usize.pow((self.players.len() - 1) as u32);
+        }
+        self.score += add;
     }
 
     pub fn find_full_rows_and_increment_score(&mut self) -> Vec<WorldPoint> {
+        let mut full_points = vec![];
+        let mut full_count_everyone = 0;
+        let mut full_count_single_player = 0;
+
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
-                let mut full_points = vec![];
-                let mut full_count = 0;
-
                 for (y, row) in landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
-                        full_count += 1;
+                        full_count_everyone += 1;
                         for (x, _) in row.iter().enumerate() {
                             full_points.push((x as i16, y as i16));
                         }
                     }
                 }
-
-                /*
-                With 1 player:
-                    no full rows: +0
-                    1 full row:   +10
-                    2 full rows:  +30
-                    3 full rows:  +60
-                    etc
-                */
-                self.add_score(5 * full_count * (full_count + 1));
-
-                full_points
+            }
+            ModeSpecificData::Bottle { landed_rows } => {
+                for (y, row) in landed_rows.iter().enumerate() {
+                    if (0..BOTTLE_PERSONAL_SPACE_HEIGHT).contains(&y) {
+                        for i in 0..self.players.len() {
+                            let left = BOTTLE_OUTER_WIDTH * i
+                                + BOTTLE[y].chars().position(|c| c == 'x').unwrap() / 2;
+                            let right = left + BOTTLE[y].matches("xx").count();
+                            if !row[left..right].iter().any(|cell| cell.is_none()) {
+                                full_count_single_player += 1;
+                                for x in left..right {
+                                    full_points.push((x as i16, y as i16));
+                                }
+                            }
+                        }
+                    } else {
+                        if !row.iter().any(|cell| cell.is_none()) {
+                            full_count_everyone += 1;
+                            for (x, _) in row.iter().enumerate() {
+                                full_points.push((x as i16, y as i16));
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        /*
+        With 1 player:
+            no full rows: +0
+            1 full row:   +10
+            2 full rows:  +30
+            3 full rows:  +60
+            etc
+        */
+        self.add_score(
+            5 * full_count_single_player * (full_count_single_player + 1),
+            false,
+        );
+        self.add_score(5 * full_count_everyone * (full_count_everyone + 1), true);
+        full_points
     }
 
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
         match self.mode() {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Bottle => {
                 let (x, y) = point;
-                let w = self.get_width() as i32;
-                let h = self.get_height() as i32;
-                (0..w).contains(&x) && (..h).contains(&y)
+                self.is_valid_landed_block_coords((x as i16, max(0, y) as i16))
             }
             _ => panic!(),
         }
     }
 
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
+        let (x, y) = point;
         match self.mode() {
             Mode::Traditional => {
-                let (x, y) = point;
                 let w = self.get_width() as i16;
                 let h = self.get_height() as i16;
                 (0..w).contains(&x) && (0..h).contains(&y)
+            }
+            Mode::Bottle => {
+                let w = self.get_width() as i16;
+                let h = self.get_height() as i16;
+                if !(0..w).contains(&x) || !(0..h).contains(&y) {
+                    false
+                } else if (x as usize) % BOTTLE_OUTER_WIDTH == BOTTLE_INNER_WIDTH {
+                    // on wall between two players, not allowed near top
+                    (BOTTLE_PERSONAL_SPACE_HEIGHT..).contains(&(y as usize))
+                } else {
+                    let line = BOTTLE[y as usize].as_bytes();
+                    line[2 * ((x as usize) % BOTTLE_OUTER_WIDTH) + 1] == b'x'
+                }
             }
             _ => panic!(),
         }
@@ -322,7 +434,8 @@ impl Game {
 
     pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         match &self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
+            ModeSpecificData::Traditional { landed_rows }
+            | ModeSpecificData::Bottle { landed_rows } => {
                 let (x, y) = point;
                 landed_rows[y as usize][x as usize]
             }
@@ -331,7 +444,8 @@ impl Game {
 
     fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         match &mut self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
+            ModeSpecificData::Traditional { landed_rows }
+            | ModeSpecificData::Bottle { landed_rows } => {
                 let (x, y) = point;
                 landed_rows[y as usize][x as usize] = value;
             }
@@ -598,22 +712,42 @@ impl Game {
     }
 
     pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
-        let w = self.get_width();
-        let h = self.get_height();
-
         match &mut self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
-                let mut should_wipe = vec![];
-                should_wipe.resize(h, false);
-                for (_, y) in full {
-                    should_wipe[*y as usize] = true;
+                for y in 0..landed_rows.len() {
+                    if full.contains(&(0, y as i16)) {
+                        landed_rows[..(y + 1)].rotate_right(1);
+                        for cell in &mut landed_rows[0] {
+                            *cell = None;
+                        }
+                    }
+                }
+            }
+            ModeSpecificData::Bottle { landed_rows } => {
+                for (i, _) in self.players.iter().enumerate() {
+                    for y in 0..BOTTLE_PERSONAL_SPACE_HEIGHT {
+                        let x_left = i * BOTTLE_OUTER_WIDTH;
+                        let x_right = x_left + BOTTLE_INNER_WIDTH;
+                        if full.contains(&(((x_left + x_right) / 2) as i16, y as i16)) {
+                            // Blocks fall down only on this player's personal area
+                            for source_y in (0..y).rev() {
+                                let source_row: Vec<Option<SquareContent>> =
+                                    landed_rows[source_y][x_left..x_right].to_vec();
+                                landed_rows[source_y + 1].splice(x_left..x_right, source_row);
+                            }
+                            for cell in &mut landed_rows[0][x_left..x_right] {
+                                *cell = None;
+                            }
+                        }
+                    }
                 }
 
-                for (y, wipe) in should_wipe.iter().enumerate() {
-                    if *wipe {
+                for y in BOTTLE_PERSONAL_SPACE_HEIGHT..landed_rows.len() {
+                    if full.contains(&(0, y as i16)) {
                         landed_rows[..(y + 1)].rotate_right(1);
-                        landed_rows[0].clear();
-                        landed_rows[0].resize(w, None);
+                        for cell in &mut landed_rows[0] {
+                            *cell = None;
+                        }
                     }
                 }
             }
@@ -760,7 +894,8 @@ impl Game {
         }
 
         match &mut self.mode_specific_data {
-            ModeSpecificData::Traditional { landed_rows } => {
+            ModeSpecificData::Traditional { landed_rows }
+            | ModeSpecificData::Bottle { landed_rows } => {
                 for (y, row) in landed_rows.iter_mut().enumerate() {
                     for (x, cell) in row.iter_mut().enumerate() {
                         let point = (x as i16, y as i16);
@@ -902,11 +1037,20 @@ impl Game {
     }
 
     fn clear_playing_area(&mut self, player_idx: usize) {
-        let left = self.get_width_per_player() * player_idx;
-        let right = self.get_width_per_player() * (player_idx + 1);
-
+        let w = self.get_width_per_player();
         match &mut self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
+                let left = w.unwrap() * player_idx;
+                let right = w.unwrap() * (player_idx + 1);
+                for row in landed_rows.iter_mut() {
+                    for square_ref in row[left..right].iter_mut() {
+                        *square_ref = None;
+                    }
+                }
+            }
+            ModeSpecificData::Bottle { landed_rows } => {
+                let left = BOTTLE_OUTER_WIDTH * player_idx;
+                let right = left + BOTTLE_INNER_WIDTH;
                 for row in landed_rows.iter_mut() {
                     for square_ref in row[left..right].iter_mut() {
                         *square_ref = None;

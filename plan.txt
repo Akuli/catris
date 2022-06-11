@@ -1,4 +1,3 @@
-bottle game
 ring game (remember drill blocks)
 websocket support
 profiling
@@ -9,6 +8,8 @@ high scores file bump ver num
 trace color for bombs
 grep TODO
 motd
+high scores view: no need to highlight time
+high scores view: no need to display time *that* accurately...
 
 code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
