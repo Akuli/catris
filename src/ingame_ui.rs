@@ -3,7 +3,7 @@ use crate::blocks::MovingBlock;
 use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
-use crate::game_logic::BOTTLE;
+use crate::game_logic::BOTTLE_MAP;
 use crate::player::BlockOrTimer;
 use crate::player::Player;
 use crate::render::RenderBuffer;
@@ -53,7 +53,7 @@ fn render_name_lines(
 }
 
 fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
-    match game.mode() {
+    match game.mode {
         Mode::Traditional => {
             buffer.set_char(0, 1, 'o');
             buffer.set_char(2 * game.get_width() + 1, 1, 'o');
@@ -82,12 +82,12 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         }
         Mode::Bottle => {
             for (player_idx, player) in game.players.iter().enumerate() {
-                let left = player_idx * BOTTLE[0].len();
+                let left = player_idx * BOTTLE_MAP[0].len();
                 let color = Color {
                     fg: player.borrow().color,
                     bg: 0,
                 };
-                for (y, line) in BOTTLE.iter().enumerate() {
+                for (y, line) in BOTTLE_MAP.iter().enumerate() {
                     let is_in_personal_space = !line.starts_with('|');
                     for (i, ch) in line.chars().enumerate() {
                         let is_at_edge = (player_idx == 0 && i == 0)
@@ -106,9 +106,9 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 client_id,
                 buffer,
                 0,
-                BOTTLE[0].len(),
-                BOTTLE.len() + 1,
-                BOTTLE.len(),
+                BOTTLE_MAP[0].len(),
+                BOTTLE_MAP.len() + 1,
+                BOTTLE_MAP.len(),
                 true,
             );
         }
@@ -123,7 +123,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         .position(|cell| cell.borrow().client_id == client_id)
         .unwrap();
 
-    let (offset_x, offset_y) = match game.mode() {
+    let (offset_x, offset_y) = match game.mode {
         Mode::Traditional => (1, 2),
         Mode::Bottle => (1, 0),
         _ => panic!(),
@@ -182,7 +182,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 }
 
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
-    match game.mode() {
+    match game.mode {
         Mode::Traditional => (game.get_width() * 2 + 2, game.get_height() + 3),
         Mode::Bottle => (game.get_width() * 2 + 2, game.get_height() + 2),
         _ => panic!(),

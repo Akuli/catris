@@ -95,7 +95,7 @@ impl GameWrapper {
                 .iter()
                 .map(|p| p.borrow().name.clone())
                 .collect();
-            (game.mode(), game.get_score(), player_names)
+            (game.mode, game.get_score(), player_names)
         };
         GameResult {
             mode,
