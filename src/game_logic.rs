@@ -1,16 +1,17 @@
 use crate::ansi::KeyPress;
-use crate::blocks::BlockRelativeCoords;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
 use crate::player::BlockOrTimer;
 use crate::player::Player;
-use crate::player::PlayerPoint;
-use crate::player::WorldPoint;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
+
+pub type PlayerPoint = (i32, i32); // must be big, these don't wrap around in ring mode
+pub type WorldPoint = (i16, i16);
+pub type BlockRelativeCoords = (i8, i8);
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {
@@ -47,8 +48,8 @@ enum ModeSpecificData {
 fn circle(center: WorldPoint, radius: f32) -> Vec<WorldPoint> {
     let (cx, cy) = center;
     let mut result = vec![];
-    for dx in (-radius.ceil() as i8)..=(radius.ceil() as i8) {
-        for dy in (-radius.ceil() as i8)..=(radius.ceil() as i8) {
+    for dx in (-radius.ceil() as i16)..=(radius.ceil() as i16) {
+        for dy in (-radius.ceil() as i16)..=(radius.ceil() as i16) {
             if ((dx * dx + dy * dy) as f32) < radius * radius {
                 result.push((cx + dx, cy + dy));
             }
@@ -249,7 +250,7 @@ impl Game {
                     if !row.iter().any(|cell| cell.is_none()) {
                         full_count += 1;
                         for (x, _) in row.iter().enumerate() {
-                            full_points.push((x as i8, y as i8));
+                            full_points.push((x as i16, y as i16));
                         }
                     }
                 }
@@ -285,8 +286,8 @@ impl Game {
         match self.mode() {
             Mode::Traditional => {
                 let (x, y) = point;
-                let w = self.get_width() as i8;
-                let h = self.get_height() as i8;
+                let w = self.get_width() as i16;
+                let h = self.get_height() as i16;
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
             _ => panic!(),
@@ -552,7 +553,9 @@ impl Game {
                 _ => {}
             }
             handle_block(&mut player.next_block);
-            if let Some(b) = &mut player.block_in_hold { handle_block(b);}
+            if let Some(b) = &mut player.block_in_hold {
+                handle_block(b);
+            }
         }
         something_changed
     }
@@ -761,7 +764,7 @@ impl Game {
             ModeSpecificData::Traditional { landed_rows } => {
                 for (y, row) in landed_rows.iter_mut().enumerate() {
                     for (x, cell) in row.iter_mut().enumerate() {
-                        let point = (x as i8, y as i8);
+                        let point = (x as i16, y as i16);
                         if let Some(content) = cell {
                             if !f(point, content, None) {
                                 *cell = None;

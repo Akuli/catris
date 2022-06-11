@@ -1,10 +1,9 @@
 use crate::ansi::Color;
-use crate::player::PlayerPoint;
+use crate::game_logic::BlockRelativeCoords;
+use crate::game_logic::PlayerPoint;
 use crate::render::RenderBuffer;
 use rand::seq::SliceRandom;
 use rand::Rng;
-
-pub type BlockRelativeCoords = (i8, i8);
 
 #[rustfmt::skip]
 const DRILL_PICTURES: [[&str; 5]; 4] = [
@@ -66,7 +65,7 @@ impl SquareContent {
         self.is_drill() && !other.is_drill()
     }
 
-    pub fn animate(&mut self) -> bool{
+    pub fn animate(&mut self) -> bool {
         match self {
             Self::MovingDrill { animation_counter } => {
                 *animation_counter += 1;
@@ -95,7 +94,7 @@ impl SquareContent {
         buffer: &mut RenderBuffer,
         x: usize,
         y: usize,
-        relative_coords: Option<(i8, i8)>,
+        relative_coords: Option<BlockRelativeCoords>,
     ) {
         match self {
             Self::Normal(chars_and_colors) => {
@@ -286,7 +285,7 @@ impl MovingBlock {
         }
     }
 
-    pub fn get_relative_coords(&self) -> &[(i8, i8)] {
+    pub fn get_relative_coords(&self) -> &[BlockRelativeCoords] {
         &self.relative_coords
     }
 

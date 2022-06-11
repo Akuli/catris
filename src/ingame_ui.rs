@@ -79,8 +79,8 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     trace_points.retain(|p| !game.flashing_points.contains_key(p));
 
     // TODO: optimize lol?
-    for x in i8::MIN..i8::MAX {
-        for y in i8::MIN..i8::MAX {
+    for x in -100..100 {
+        for y in -100..100 {
             if !game.is_valid_landed_block_coords((x, y)) {
                 continue;
             }

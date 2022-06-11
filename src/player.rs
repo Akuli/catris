@@ -1,9 +1,7 @@
 use crate::blocks::MovingBlock;
+use crate::game_logic::PlayerPoint;
+use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
-
-// Relatively big ints in player coords because in ring mode they just grow as blocks wrap around.
-pub type PlayerPoint = (i32, i32);
-pub type WorldPoint = (i8, i8);
 
 #[derive(Debug)]
 pub enum BlockOrTimer {
@@ -64,6 +62,6 @@ impl Player {
 
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, y) = point;
-        (x as i8, y as i8)
+        (x as i16, y as i16)
     }
 }

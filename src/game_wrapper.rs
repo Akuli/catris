@@ -1,8 +1,8 @@
 use crate::ansi::Color;
 use crate::game_logic::Game;
+use crate::game_logic::WorldPoint;
 use crate::high_scores::add_result_and_get_high_scores;
 use crate::high_scores::GameResult;
-use crate::player::WorldPoint;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
