@@ -497,42 +497,41 @@ impl Game {
             need_render = true;
         }
 
-        let mut landing = vec![];
         for player_idx in drill_indexes.iter().chain(other_indexes.iter()) {
             let player = &self.players[*player_idx];
-            let (player_coords, relative_coords, square_content) =
-                if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
-                    (
-                        b.get_coords(),
-                        b.get_relative_coords().to_vec(),
-                        b.square_content,
-                    )
-                } else {
-                    panic!()
-                };
-
-            let world_coords: Vec<WorldPoint> = player_coords
-                .iter()
-                .map(|p| player.borrow().player_to_world(*p))
-                .collect();
-            if world_coords
-                .iter()
-                .all(|p| self.is_valid_landed_block_coords(*p))
-            {
-                // land the block
-                for (w, r) in world_coords.iter().zip(relative_coords.iter()) {
-                    landing.push((*w, square_content.to_landed_content(*r)));
-                }
-                self.new_block(*player_idx);
+            if fast {
+                player.borrow_mut().fast_down = false;
             } else {
-                // no room to land
-                player.borrow_mut().block_or_timer = BlockOrTimer::TimerPending;
-            }
-            need_render = true;
-        }
+                let (player_coords, relative_coords, square_content) =
+                    if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
+                        (
+                            b.get_coords(),
+                            b.get_relative_coords().to_vec(),
+                            b.square_content,
+                        )
+                    } else {
+                        panic!()
+                    };
 
-        for (point, content) in landing {
-            self.set_landed_square(point, Some(content));
+                let world_coords: Vec<WorldPoint> = player_coords
+                    .iter()
+                    .map(|p| player.borrow().player_to_world(*p))
+                    .collect();
+                if world_coords
+                    .iter()
+                    .all(|p| self.is_valid_landed_block_coords(*p))
+                {
+                    // land the block
+                    for (w, r) in world_coords.iter().zip(relative_coords.iter()) {
+                        self.set_landed_square(*w, Some(square_content.to_landed_content(*r)));
+                    }
+                    self.new_block(*player_idx);
+                } else {
+                    // no room to land
+                    player.borrow_mut().block_or_timer = BlockOrTimer::TimerPending;
+                }
+                need_render = true;
+            }
         }
 
         need_render

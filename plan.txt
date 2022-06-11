@@ -14,7 +14,6 @@ test exploding away part of moving block
 code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
 
-Bug: cant move left/right after fast-down
 Bug: stacking moving blocks easily gets them stuck
 Todo: highlight await keyword in my editor
 Todo: highlight 2usize properly
