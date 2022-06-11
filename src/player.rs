@@ -28,10 +28,16 @@ pub struct Player {
     pub next_block: MovingBlock,
     pub block_in_hold: Option<MovingBlock>,
     pub fast_down: bool,
+    pub up_direction: WorldPoint, // this vector always has length 1
 }
 
 impl Player {
-    pub fn new(spawn_point: PlayerPoint, client_info: &ClientInfo, current_score: usize) -> Self {
+    pub fn new(
+        spawn_point: PlayerPoint,
+        client_info: &ClientInfo,
+        current_score: usize,
+        up_direction: WorldPoint,
+    ) -> Self {
         Self {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
@@ -41,6 +47,7 @@ impl Player {
             next_block: MovingBlock::new(current_score),
             block_in_hold: None,
             fast_down: false,
+            up_direction,
         }
     }
 
@@ -62,6 +69,9 @@ impl Player {
 
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, y) = point;
-        (x as i16, y as i16)
+        let x = x as i16;
+        let y = y as i16;
+        let (up_x, up_y) = self.up_direction;
+        (up_x * y - up_y * x, -up_x * x - up_y * y)
     }
 }

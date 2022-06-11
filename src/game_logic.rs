@@ -81,6 +81,50 @@ const BOTTLE_INNER_WIDTH: usize = 9;
 const BOTTLE_OUTER_WIDTH: usize = 10;
 const BOTTLE_PERSONAL_SPACE_HEIGHT: usize = 9; // rows above the wide "|" area
 
+pub const RING_MAP: &[&str] = &[
+    "               .o------------------------------------------o.               ",
+    "             .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.             ",
+    "           .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.           ",
+    "         .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.         ",
+    "       .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.       ",
+    "     .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.     ",
+    "   .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.   ",
+    " .'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'. ",
+    "oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo============oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|wwwwwwwwwwww|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|aaaaaadddddd|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|ssssssssssss|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo------------oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|",
+    "oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxo",
+    " '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.' ",
+    "   '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'   ",
+    "     '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'     ",
+    "       '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'       ",
+    "         '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'         ",
+    "           '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'           ",
+    "             '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'             ",
+    "               'o------------------------------------------o'               ",
+];
+pub const RING_OUTER_RADIUS: usize = 18;
+pub const RING_INNER_RADIUS: usize = 3;
+
 pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
@@ -94,7 +138,16 @@ impl Game {
         let landed_rows = match mode {
             Mode::Traditional => vec![vec![]; 20],
             Mode::Bottle => vec![vec![]; 21],
-            Mode::Ring => unimplemented!(),
+            Mode::Ring => {
+                let size = 2 * RING_OUTER_RADIUS + 1;
+                let mut rows = vec![];
+                for _ in 0..size {
+                    let mut row = vec![];
+                    row.resize(size, None);
+                    rows.push(row);
+                }
+                rows
+            }
         };
         Self {
             players: vec![],
@@ -114,16 +167,16 @@ impl Game {
         match self.mode {
             Mode::Traditional if self.players.len() >= 2 => Some(7),
             Mode::Traditional => Some(10),
-            _ => None,
+            Mode::Bottle | Mode::Ring => None,
         }
     }
 
     pub fn get_width(&self) -> usize {
+        // can't always return self.landed_rows[0].len(), because this is called during resizing
         match self.mode {
-            // can't return self.landed_rows[0].len(), because this is called during resizing
             Mode::Traditional => self.get_width_per_player().unwrap() * self.players.len(),
             Mode::Bottle => BOTTLE_OUTER_WIDTH * self.players.len() - 1,
-            _ => unimplemented!(),
+            Mode::Ring => self.landed_rows[0].len(),
         }
     }
 
@@ -146,7 +199,7 @@ impl Game {
                     player.borrow_mut().spawn_point = (x as i32, 0);
                 }
             }
-            _ => unimplemented!(),
+            Mode::Ring => {}
         }
     }
 
@@ -195,8 +248,40 @@ impl Game {
 
     pub fn add_player(&mut self, client_info: &ClientInfo) {
         let player_idx = self.players.len();
-        self.players
-            .push(RefCell::new(Player::new((0, 0), client_info, self.score)));
+        let up_direction = match self.mode {
+            Mode::Traditional | Mode::Bottle => (0, -1),
+            Mode::Ring => {
+                /*
+                prefer opposite directions of existing players
+                never choose a direction that is already in use
+                choose consistently, not randomly or depending on hashing
+                */
+                let used: Vec<WorldPoint> = self
+                    .players
+                    .iter()
+                    .map(|p| p.borrow().up_direction)
+                    .collect();
+                let opposites: Vec<WorldPoint> = used.iter().map(|(x, y)| (-x, -y)).collect();
+                let all: &[WorldPoint] = &[(0, -1), (0, 1), (-1, 0), (1, 0)];
+
+                *opposites
+                    .iter()
+                    .chain(all.iter())
+                    .filter(|dir| !used.contains(dir))
+                    .next()
+                    .unwrap()
+            }
+        };
+        let spawn_point = match self.mode {
+            Mode::Traditional | Mode::Bottle => (0, 0), // dummy value to be changed soon
+            Mode::Ring => (0, -(RING_OUTER_RADIUS as i32)),
+        };
+        self.players.push(RefCell::new(Player::new(
+            spawn_point,
+            client_info,
+            self.score,
+            up_direction,
+        )));
         self.update_spawn_points();
 
         let w = self.get_width();
@@ -225,7 +310,7 @@ impl Game {
                     }
                 }
             }
-            _ => unimplemented!(),
+            Mode::Ring => self.clear_playing_area(player_idx),
         }
 
         self.new_block(player_idx);
@@ -330,7 +415,22 @@ impl Game {
                     }
                 }
             }
-            _ => unimplemented!(),
+            Mode::Ring => {
+                for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
+                    let mut ring = vec![(-r,-r),(-r,r),(r,-r),(r,r)];
+                    for i in (-r+1)..r {
+                        ring.push((-r, i));
+                        ring.push((r, i));
+                        ring.push((i, -r));
+                        ring.push((i, r));
+                    }
+
+                    if ring.iter().all(|p| self.get_landed_square(*p).is_some()) {
+                        full_count_everyone += 1;
+                        full_points.extend(ring);
+                    }
+                }
+            }
         }
 
         /*
@@ -350,13 +450,12 @@ impl Game {
     }
 
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
-        match self.mode {
-            Mode::Traditional | Mode::Bottle => {
-                let (x, y) = point;
-                self.is_valid_landed_block_coords((x as i16, max(0, y) as i16))
-            }
-            _ => panic!(),
-        }
+        let top_y = match self.mode {
+            Mode::Traditional | Mode::Bottle => 0,
+            Mode::Ring => -(RING_OUTER_RADIUS as i32),
+        };
+        let (x, y) = point;
+        self.is_valid_landed_block_coords((x as i16, max(top_y, y) as i16))
     }
 
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
@@ -380,7 +479,15 @@ impl Game {
                     line[2 * ((x as usize) % BOTTLE_OUTER_WIDTH) + 1] == b'x'
                 }
             }
-            _ => panic!(),
+            Mode::Ring => {
+                if max(x.abs(), y.abs()) > (RING_OUTER_RADIUS as i16) {
+                    return false;
+                }
+                let map_x = 2 * (x + (RING_OUTER_RADIUS as i16)) as usize + 1;
+                let map_y = (y + (RING_OUTER_RADIUS as i16)) as usize + 1;
+                let line = RING_MAP[map_y as usize].as_bytes();
+                line[map_x as usize] == b'x'
+            }
         }
     }
 
@@ -411,21 +518,21 @@ impl Game {
     }
 
     pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
-        let (x, y) = point;
-        match self.mode {
-            Mode::Traditional | Mode::Bottle => self.landed_rows[y as usize][x as usize],
-            _ => unimplemented!(),
+        let (mut x, mut y) = point;
+        if self.mode == Mode::Ring {
+            x += RING_OUTER_RADIUS as i16;
+            y += RING_OUTER_RADIUS as i16;
         }
+        self.landed_rows[y as usize][x as usize]
     }
 
     fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
-        match self.mode {
-            Mode::Traditional | Mode::Bottle => {
-                let (x, y) = point;
-                self.landed_rows[y as usize][x as usize] = value;
-            }
-            _ => unimplemented!(),
+        let (mut x, mut y) = point;
+        if self.mode == Mode::Ring {
+            x += RING_OUTER_RADIUS as i16;
+            y += RING_OUTER_RADIUS as i16;
         }
+        self.landed_rows[y as usize][x as usize] = value;
     }
 
     pub fn get_any_square(
@@ -870,20 +977,15 @@ impl Game {
             self.new_block(player_idx);
         }
 
-        match self.mode {
-            Mode::Traditional | Mode::Bottle => {
-                for (y, row) in self.landed_rows.iter_mut().enumerate() {
-                    for (x, cell) in row.iter_mut().enumerate() {
-                        let point = (x as i16, y as i16);
-                        if let Some(content) = cell {
-                            if !f(point, content, None) {
-                                *cell = None;
-                            }
-                        }
+        for (y, row) in self.landed_rows.iter_mut().enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
+                let point = (x as i16, y as i16);
+                if let Some(content) = cell {
+                    if !f(point, content, None) {
+                        *cell = None;
                     }
                 }
             }
-            _ => unimplemented!(),
         }
     }
 
@@ -1034,7 +1136,18 @@ impl Game {
                     }
                 }
             }
-            _ => unimplemented!(),
+            Mode::Ring => {
+                let (up_x, up_y) = self.players[player_idx].borrow().up_direction;
+                for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
+                    for across in (-(RING_INNER_RADIUS as i16))..=(RING_INNER_RADIUS as i16) {
+                        let x = r * up_x + across * up_y;
+                        let y = r * up_y - across * up_x;
+                        if self.is_valid_landed_block_coords((x, y)) {
+                            self.set_landed_square((x, y), None);
+                        }
+                    }
+                }
+            }
         }
     }
 }

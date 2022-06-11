@@ -5,6 +5,8 @@ when leaving, print num connected clients
 high scores file bump ver num
 trace color for bombs
 grep TODO
+grep FIXME
+grep unimpl
 motd
 check max players
 websocket support

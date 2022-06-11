@@ -4,6 +4,8 @@ use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
 use crate::game_logic::BOTTLE_MAP;
+use crate::game_logic::RING_MAP;
+use crate::game_logic::RING_OUTER_RADIUS;
 use crate::player::BlockOrTimer;
 use crate::player::Player;
 use crate::render::RenderBuffer;
@@ -112,7 +114,16 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 true,
             );
         }
-        _ => panic!(),
+        Mode::Ring => {
+            // TODO: render names properly, in color (includes border) and with wrapping
+            for (y, line) in RING_MAP.iter().enumerate() {
+                for (x, ch) in line.chars().enumerate() {
+                    if ch != 'x' {
+                        buffer.set_char(x, y, ch);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -126,7 +137,10 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     let (offset_x, offset_y) = match game.mode {
         Mode::Traditional => (1, 2),
         Mode::Bottle => (1, 0),
-        _ => panic!(),
+        Mode::Ring => {
+            let r = RING_OUTER_RADIUS as i16;
+            (1 + 2 * r, 1 + r)
+        }
     };
 
     let mut trace_points = game.predict_landing_place(player_idx);
@@ -182,11 +196,11 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 }
 
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
-    match game.mode {
-        Mode::Traditional => (game.get_width() * 2 + 2, game.get_height() + 3),
-        Mode::Bottle => (game.get_width() * 2 + 2, game.get_height() + 2),
-        _ => panic!(),
-    }
+    let (extra_w, extra_h) = match game.mode {
+        Mode::Traditional => (2, 3), // 3 = player names, dashes below them, dashes at bottom
+        Mode::Bottle | Mode::Ring => (2, 2),
+    };
+    (game.get_width() * 2 + extra_w, game.get_height() + extra_h)
 }
 
 pub const SCORE_TEXT_COLOR: Color = Color::CYAN_FOREGROUND;
