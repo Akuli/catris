@@ -9,7 +9,6 @@ high scores file bump ver num
 trace color for bombs
 grep TODO
 motd
-test exploding away part of moving block
 
 code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
