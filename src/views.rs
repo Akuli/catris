@@ -613,10 +613,10 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
 
 fn format_duration(duration: Duration) -> String {
     let seconds = duration.as_secs();
-    if (0..60).contains(&seconds) {
+    if seconds < 60 {
         format!("{}sec", seconds)
     } else {
-        format!("{}min {}sec", seconds / 60, seconds % 60)
+        format!("{}min", seconds / 60)
     }
 }
 
@@ -630,18 +630,12 @@ fn render_game_over_message(buffer: &mut RenderBuffer, game_result: &GameResult,
     let duration_text = format_duration(game_result.duration);
     let score_text = format!("{}", game_result.score);
 
-    let (left, right) = buffer.add_centered_text(
+    let (_, right) = buffer.add_centered_text(
         3,
         &format!(
             "The game lasted {} and it ended with score {}.",
             &duration_text, &score_text
         ),
-    );
-    buffer.add_text_with_color(
-        left + "The game lasted ".len(),
-        3,
-        &duration_text,
-        ingame_ui::SCORE_TEXT_COLOR,
     );
     buffer.add_text_with_color(
         right - ".".len() - score_text.len(),
@@ -700,18 +694,18 @@ fn render_high_scores_table(
         0,
         8,
         if multiplayer {
-            "| Score | Duration    | Players"
+            "| Score | Duration | Players"
         } else {
-            "| Score | Duration    | Player"
+            "| Score | Duration | Player"
         },
     );
 
-    let header_prefix = "|-------|-------------|-";
+    let header_prefix = "|-------|----------|-";
     buffer.add_text(0, 9, &format!("{:-<80}", header_prefix));
 
     for (i, result) in top_results.iter().enumerate() {
         let row = format!(
-            "| {:<6}| {:<12}| {}",
+            "| {:<6}| {:<9}| {}",
             result.score,
             &format_duration(result.duration),
             &format_player_names(&result.players, 80 - header_prefix.len() - 1)
