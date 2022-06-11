@@ -44,8 +44,15 @@ impl RenderBuffer {
         self.height = height;
     }
 
+    pub fn get_char(&mut self, x: usize, y: usize) -> char {
+        self.chars[y][x]
+    }
+
     pub fn set_char(&mut self, x: usize, y: usize, ch: char) {
         self.set_char_with_color(x, y, ch, ansi::Color::DEFAULT);
+    }
+    pub fn set_char_without_changing_color(&mut self, x: usize, y: usize, ch: char) {
+        self.chars[y][x] = ch;
     }
     pub fn set_char_with_color(&mut self, x: usize, y: usize, ch: char, colors: ansi::Color) {
         self.chars[y][x] = ch;
@@ -65,6 +72,14 @@ impl RenderBuffer {
         let mut x = x;
         for ch in text.chars() {
             self.set_char_with_color(x, y, ch, colors);
+            x += 1;
+        }
+        return x;
+    }
+    pub fn add_text_without_changing_color(&mut self, x: usize, y: usize, text: &str) -> usize {
+        let mut x = x;
+        for ch in text.chars() {
+            self.set_char_without_changing_color(x, y, ch);
             x += 1;
         }
         return x;

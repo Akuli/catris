@@ -1,54 +1,126 @@
 use crate::ansi::Color;
 use crate::player::PlayerPoint;
+use crate::render::RenderBuffer;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-type BlockRelativeCoords = (i8, i8);
+pub type BlockRelativeCoords = (i8, i8);
+
+#[rustfmt::skip]
+const DRILL_PICTURES: [[&str; 5]; 4] = [
+    [
+        r"| /|",
+        r"|/ |",
+        r"| .|",
+        r"|. |",
+        r" \/ ",
+    ],
+    [
+        r"|/ |",
+        r"| .|",
+        r"|. |",
+        r"| /|",
+        r" \/ ",
+    ],
+    [
+        r"| .|",
+        r"|. |",
+        r"| /|",
+        r"|/ |",
+        r" \/ ",
+    ],
+    [
+        r"|. |",
+        r"| /|",
+        r"|/ |",
+        r"| .|",
+        r" \/ ",
+    ],
+];
+
+fn get_drill_text(animation_counter: u8, relative_coords: BlockRelativeCoords) -> &'static str {
+    let (relative_x, relative_y) = relative_coords;
+    let a_index = animation_counter as usize;
+    let x_index = (2 * (relative_x + 1)) as usize;
+    let y_index = (relative_y + 2) as usize;
+    &DRILL_PICTURES[a_index][y_index][x_index..(x_index + 2)]
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum SquareContent {
-    Normal(Color),
+    Normal([(char, Color); 2]),
     Bomb { timer: u8, id: Option<u64> },
-    Drill,
+    MovingDrill { animation_counter: u8 },
+    LandedDrill { text: [char; 2] },
 }
 impl SquareContent {
-    pub fn get_text(&self) -> [char; 2] {
-        match self {
-            Self::Normal(_) => [' ', ' '],
-            Self::Bomb { timer, .. } => {
-                if *timer >= 10 {
-                    [
-                        char::from_digit((timer / 10) as u32, 10).unwrap(),
-                        char::from_digit((timer % 10) as u32, 10).unwrap(),
-                    ]
-                } else {
-                    [char::from_digit(*timer as u32, 10).unwrap(), ' ']
-                }
-            }
-            Self::Drill => ['d', 'd'],
-        }
-    }
-
-    pub fn get_color(&self) -> Color {
-        match self {
-            Self::Normal(color) => *color,
-            Self::Bomb { timer, .. } => {
-                if *timer > 3 {
-                    Color::YELLOW_FOREGROUND
-                } else {
-                    Color::RED_FOREGROUND
-                }
-            }
-            Self::Drill => Color::DEFAULT,
-        }
-    }
-
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
 
+    pub fn is_drill(&self) -> bool {
+        matches!(self, Self::MovingDrill { .. } | Self::LandedDrill { .. })
+    }
+
     pub fn can_drill(&self, other: &SquareContent) -> bool {
-        matches!(self, SquareContent::Drill) && !matches!(other, SquareContent::Drill)
+        self.is_drill() && !other.is_drill()
+    }
+
+    pub fn animate(&mut self) -> bool{
+        match self {
+            Self::MovingDrill { animation_counter } => {
+                *animation_counter += 1;
+                *animation_counter %= 4;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn to_landed_content(&self, relative_coords: BlockRelativeCoords) -> Self {
+        match self {
+            Self::MovingDrill { animation_counter } => {
+                let mut chars = get_drill_text(*animation_counter, relative_coords).chars();
+                Self::LandedDrill {
+                    text: [chars.next().unwrap(), chars.next().unwrap()],
+                }
+            }
+            other => *other,
+        }
+    }
+
+    // relative coords needed only for moving drill blocks
+    pub fn render(
+        &self,
+        buffer: &mut RenderBuffer,
+        x: usize,
+        y: usize,
+        relative_coords: Option<(i8, i8)>,
+    ) {
+        match self {
+            Self::Normal(chars_and_colors) => {
+                let (char1, color1) = chars_and_colors[0];
+                let (char2, color2) = chars_and_colors[1];
+                buffer.set_char_with_color(x, y, char1, color1);
+                buffer.set_char_with_color(x + 1, y, char2, color2);
+            }
+            Self::Bomb { timer, .. } => {
+                let color = if *timer > 3 {
+                    Color::YELLOW_FOREGROUND
+                } else {
+                    Color::RED_FOREGROUND
+                };
+                buffer.add_text_with_color(x, y, &format!("{:<2}", *timer), color);
+            }
+            Self::MovingDrill { animation_counter } => {
+                let text = get_drill_text(*animation_counter, relative_coords.unwrap());
+                buffer.add_text(x, y, text);
+            }
+            Self::LandedDrill { text } => {
+                buffer.set_char_with_color(x, y, text[0], Color::GRAY_BACKGROUND);
+                buffer.set_char_with_color(x + 1, y, text[1], Color::GRAY_BACKGROUND);
+            }
+        };
     }
 }
 
@@ -60,6 +132,7 @@ const T_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (0, -1)];
 const Z_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (0, -1), (0, 0), (1, 0)];
 const S_COORDS: &[BlockRelativeCoords] = &[(1, -1), (0, -1), (0, 0), (-1, 0)];
 
+// x coordinates should be same as in O_COORDS
 const DRILL_COORDS: &[BlockRelativeCoords] = &[
     (-1, -2),
     (0, -2),
@@ -108,8 +181,11 @@ fn shapes_match(a: &[BlockRelativeCoords], b: &[BlockRelativeCoords]) -> bool {
     return b.iter().all(|p| shifted_a.contains(p));
 }
 
-fn choose_initial_rotate_mode(not_rotated: &[BlockRelativeCoords], content: &SquareContent) -> RotateMode {
-    if matches!(content, SquareContent::Drill) {
+fn choose_initial_rotate_mode(
+    not_rotated: &[BlockRelativeCoords],
+    content: &SquareContent,
+) -> RotateMode {
+    if content.is_drill() {
         return RotateMode::NoRotating;
     }
 
@@ -161,8 +237,7 @@ impl MovingBlock {
         let score = score as f32;
 
         let bomb_probability = score / 800.0 + 1.0;
-        //let drill_probability = score / 2000.0;
-        let drill_probability = 40.0;
+        let drill_probability = score / 2000.0;
         let cursed_probability = (score - 500.0) / 200.0;
 
         let (content, coords) = if maybe(bomb_probability) {
@@ -172,14 +247,22 @@ impl MovingBlock {
             };
             (content, O_COORDS.to_vec())
         } else if maybe(drill_probability) {
-            (SquareContent::Drill, DRILL_COORDS.to_vec())
+            (
+                SquareContent::MovingDrill {
+                    animation_counter: 0,
+                },
+                DRILL_COORDS.to_vec(),
+            )
         } else {
             let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
             let mut coords = coords.to_vec();
             if maybe(cursed_probability) {
                 add_extra_square(&mut coords);
             }
-            (SquareContent::Normal(*color), coords)
+            (
+                SquareContent::Normal([(' ', *color), (' ', *color)]),
+                coords,
+            )
         };
         MovingBlock {
             square_content: content,
@@ -203,7 +286,7 @@ impl MovingBlock {
         }
     }
 
-    pub fn get_relative_coords_for_rendering_the_preview(&self) -> &[(i8, i8)] {
+    pub fn get_relative_coords(&self) -> &[(i8, i8)] {
         &self.relative_coords
     }
 

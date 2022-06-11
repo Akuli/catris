@@ -220,6 +220,20 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
     }
 }
 
+async fn animate_drills(weak_wrapper: Weak<GameWrapper>) {
+    while pause_aware_sleep(weak_wrapper.clone(), Duration::from_millis(100)).await {
+        match weak_wrapper.upgrade() {
+            Some(wrapper) => {
+                let mut game = wrapper.game.lock().unwrap();
+                if game.animate_drills() {
+                    wrapper.mark_changed();
+                }
+            }
+            None => return,
+        }
+    }
+}
+
 async fn tick_bombs(weak_wrapper: Weak<GameWrapper>, bomb_id: u64) {
     while pause_aware_sleep(weak_wrapper.clone(), Duration::from_secs(1)).await {
         match weak_wrapper.upgrade() {
@@ -349,6 +363,7 @@ async fn start_counter_tasks_as_needed(
 pub fn start_tasks(wrapper: Arc<GameWrapper>) {
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), true));
     tokio::spawn(move_blocks_down(Arc::downgrade(&wrapper), false));
+    tokio::spawn(animate_drills(Arc::downgrade(&wrapper)));
     tokio::spawn(start_counter_tasks_as_needed(
         Arc::downgrade(&wrapper),
         wrapper.status_receiver.clone(),

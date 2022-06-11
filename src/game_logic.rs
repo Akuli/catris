@@ -1,4 +1,5 @@
 use crate::ansi::KeyPress;
+use crate::blocks::BlockRelativeCoords;
 use crate::blocks::MovingBlock;
 use crate::blocks::SquareContent;
 use crate::lobby::ClientInfo;
@@ -292,21 +293,23 @@ impl Game {
         }
     }
 
-    fn get_moving_square(
+    pub fn get_moving_square(
         &self,
         point: WorldPoint,
         exclude_player_idx: Option<usize>,
-    ) -> Option<SquareContent> {
+    ) -> Option<(SquareContent, BlockRelativeCoords)> {
         for (player_idx, player) in self.players.iter().enumerate() {
             if exclude_player_idx != Some(player_idx) {
                 match &player.borrow().block_or_timer {
                     BlockOrTimer::Block(block) => {
-                        if block
+                        for (player_coords, relative_coords) in block
                             .get_coords()
                             .iter()
-                            .any(|p| player.borrow().player_to_world(*p) == point)
+                            .zip(block.get_relative_coords().iter())
                         {
-                            return Some(block.square_content);
+                            if player.borrow().player_to_world(*player_coords) == point {
+                                return Some((block.square_content, *relative_coords));
+                            }
                         }
                     }
                     _ => {}
@@ -316,7 +319,7 @@ impl Game {
         None
     }
 
-    fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
+    pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         match &self.mode_specific_data {
             ModeSpecificData::Traditional { landed_rows } => {
                 let (x, y) = point;
@@ -344,7 +347,10 @@ impl Game {
         } else {
             None
         };
-        landed.or_else(|| self.get_moving_square(point, exclude_player_idx))
+        landed.or_else(|| {
+            self.get_moving_square(point, exclude_player_idx)
+                .map(|(content, _)| content)
+        })
     }
 
     // TODO: delete
@@ -468,7 +474,7 @@ impl Game {
         for (player_idx, player) in self.players.iter().enumerate() {
             if player.borrow().fast_down == fast {
                 if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
-                    if matches!(b.square_content, SquareContent::Drill) {
+                    if b.square_content.is_drill() {
                         drill_indexes.push(player_idx);
                     } else {
                         other_indexes.push(player_idx);
@@ -493,24 +499,28 @@ impl Game {
         let mut landing = vec![];
         for player_idx in drill_indexes.iter().chain(other_indexes.iter()) {
             let player = &self.players[*player_idx];
-            let (player_coords, square_content) =
+            let (player_coords, relative_coords, square_content) =
                 if let BlockOrTimer::Block(b) = &player.borrow().block_or_timer {
-                    (b.get_coords(), b.square_content)
+                    (
+                        b.get_coords(),
+                        b.get_relative_coords().to_vec(),
+                        b.square_content,
+                    )
                 } else {
                     panic!()
                 };
 
-            let world_points: Vec<WorldPoint> = player_coords
+            let world_coords: Vec<WorldPoint> = player_coords
                 .iter()
                 .map(|p| player.borrow().player_to_world(*p))
                 .collect();
-            if world_points
+            if world_coords
                 .iter()
                 .all(|p| self.is_valid_landed_block_coords(*p))
             {
                 // land the block
-                for p in world_points {
-                    landing.push((p, square_content));
+                for (w, r) in world_coords.iter().zip(relative_coords.iter()) {
+                    landing.push((*w, square_content.to_landed_content(*r)));
                 }
                 self.new_block(*player_idx);
             } else {
@@ -525,6 +535,26 @@ impl Game {
         }
 
         need_render
+    }
+
+    pub fn animate_drills(&mut self) -> bool {
+        let mut something_changed = false;
+        let mut handle_block = |block: &mut MovingBlock| {
+            if block.square_content.animate() {
+                something_changed = true;
+            }
+        };
+
+        for player_ref in &self.players {
+            let mut player = player_ref.borrow_mut();
+            match &mut player.block_or_timer {
+                BlockOrTimer::Block(b) => handle_block(b),
+                _ => {}
+            }
+            handle_block(&mut player.next_block);
+            if let Some(b) = &mut player.block_in_hold { handle_block(b);}
+        }
+        something_changed
     }
 
     pub fn handle_key_press(

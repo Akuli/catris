@@ -64,7 +64,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 
     let mut trace_points = game.predict_landing_place(player_idx);
 
-    // Don't trace on top of current player's moving block
+    // Don't trace on top of current player's moving block or flashing
     {
         let player = game.players[player_idx].borrow();
         match &player.block_or_timer {
@@ -76,6 +76,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             _ => {}
         }
     }
+    trace_points.retain(|p| !game.flashing_points.contains_key(p));
 
     // TODO: optimize lol?
     for x in i8::MIN..i8::MAX {
@@ -84,39 +85,31 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 continue;
             }
 
-            // If flashing, display it instead of anything else
-            let mut text_and_color: Option<([char; 2], Color)> = game
-                .flashing_points
-                .get(&(x, y))
-                .map(|color| ([' ', ' '], Color { fg: 0, bg: *color }));
+            let buffer_x = (offset_x + 2 * x) as usize;
+            let buffer_y = (offset_y + y) as usize;
 
-            if text_and_color.is_none() {
-                let (text, color) = game
-                    .get_any_square((x, y), None)
-                    .map(|content| (content.get_text(), content.get_color()))
-                    .unwrap_or(([' ', ' '], Color::DEFAULT));
+            if let Some(flash_bg) = game.flashing_points.get(&(x, y)) {
+                buffer.add_text_with_color(
+                    buffer_x,
+                    buffer_y,
+                    "  ",
+                    Color {
+                        fg: 0,
+                        bg: *flash_bg,
+                    },
+                );
+            } else if let Some((content, relative_coords)) = game.get_moving_square((x, y), None) {
+                content.render(buffer, buffer_x, buffer_y, Some(relative_coords));
+            } else if let Some(content) = game.get_landed_square((x, y)) {
+                content.render(buffer, buffer_x, buffer_y, None);
+            }
 
-                if trace_points.contains(&(x, y)) && text[0] == ' ' && text[1] == ' ' {
-                    // TODO: set trace color
-                    text_and_color = Some(([':', ':'], color));
-                } else {
-                    text_and_color = Some((text, color));
-                }
-            };
-
-            let (text, color) = text_and_color.unwrap();
-            buffer.set_char_with_color(
-                (2 * x + offset_x) as usize,
-                (y + offset_y) as usize,
-                text[0],
-                color,
-            );
-            buffer.set_char_with_color(
-                (2 * x + offset_x) as usize + 1,
-                (y + offset_y) as usize,
-                text[1],
-                color,
-            );
+            if trace_points.contains(&(x, y))
+                && buffer.get_char(buffer_x, buffer_y) == ' '
+                && buffer.get_char(buffer_x + 1, buffer_y) == ' '
+            {
+                buffer.add_text_without_changing_color(buffer_x, buffer_y, "::");
+            }
         }
     }
 }
@@ -147,16 +140,16 @@ fn render_block(
       xxxxxxxxxx
     */
     buffer.add_text(text_x, text_y, text);
-    let center_x = text_x + 6;
-    let center_y = text_y + 4;
+    let center_x = (text_x as isize) + 6;
+    let center_y = (text_y as isize) + 4;
 
-    let text = block.square_content.get_text();
-    let color = block.square_content.get_color();
-    for (x, y) in block.get_relative_coords_for_rendering_the_preview() {
-        let buf_x = ((center_x as i8) + 2 * (*x as i8)) as usize;
-        let buf_y = ((center_y as i8) + (*y as i8)) as usize;
-        buffer.set_char_with_color(buf_x, buf_y, text[0], color);
-        buffer.set_char_with_color(buf_x + 1, buf_y, text[1], color);
+    for (x, y) in block.get_relative_coords() {
+        block.square_content.render(
+            buffer,
+            (center_x + 2 * (*x as isize)) as usize,
+            (center_y + (*y as isize)) as usize,
+            Some((*x, *y)),
+        );
     }
 }
 

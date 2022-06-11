@@ -1,13 +1,17 @@
-drill blocks
 bottle game
-ring game
+ring game (remember drill blocks)
 websocket support
 profiling
 check println calls
 initial "Now serving" print
 when leaving, print num connected clients
 high scores file bump ver num
+trace color for bombs
+grep TODO
+motd
+test exploding away part of moving block
 
+code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
 
 Bug: cant move left/right after fast-down
