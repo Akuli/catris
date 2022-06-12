@@ -192,7 +192,7 @@ impl Game {
             }
             Mode::Ring => {
                 let r = RING_OUTER_RADIUS as i32;
-                (-r, r+1, -r, r+1)
+                (-r, r + 1, -r, r + 1)
             }
         }
     }
@@ -261,8 +261,8 @@ impl Game {
 
     pub fn add_player(&mut self, client_info: &ClientInfo) {
         let player_idx = self.players.len();
-        let up_direction = match self.mode {
-            Mode::Traditional | Mode::Bottle => (0, -1),
+        let down_direction = match self.mode {
+            Mode::Traditional | Mode::Bottle => (0, 1),
             Mode::Ring => {
                 /*
                 prefer opposite directions of existing players
@@ -272,7 +272,7 @@ impl Game {
                 let used: Vec<WorldPoint> = self
                     .players
                     .iter()
-                    .map(|p| p.borrow().up_direction)
+                    .map(|p| p.borrow().down_direction)
                     .collect();
                 let opposites: Vec<WorldPoint> = used.iter().map(|(x, y)| (-x, -y)).collect();
                 let all: &[WorldPoint] = &[(0, -1), (0, 1), (-1, 0), (1, 0)];
@@ -293,7 +293,7 @@ impl Game {
             spawn_point,
             client_info,
             self.score,
-            up_direction,
+            down_direction,
         )));
         self.update_spawn_points();
 
@@ -1150,11 +1150,12 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                let (up_x, up_y) = self.players[player_idx].borrow().up_direction;
+                let (down_x, down_y) = self.players[player_idx].borrow().down_direction;
                 for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
                     for across in (-(RING_INNER_RADIUS as i16))..=(RING_INNER_RADIUS as i16) {
-                        let x = r * up_x + across * up_y;
-                        let y = r * up_y - across * up_x;
+                        // (x, y) = -r*down + across*rotate90(down)
+                        let x = -r * down_x + across * down_y;
+                        let y = -r * down_y - across * down_x;
                         if self.is_valid_landed_block_coords((x, y)) {
                             self.set_landed_square((x, y), None);
                         }

@@ -28,7 +28,7 @@ pub struct Player {
     pub next_block: MovingBlock,
     pub block_in_hold: Option<MovingBlock>,
     pub fast_down: bool,
-    pub up_direction: WorldPoint, // this vector always has length 1
+    pub down_direction: WorldPoint, // this vector always has length 1
 }
 
 impl Player {
@@ -36,7 +36,7 @@ impl Player {
         spawn_point: PlayerPoint,
         client_info: &ClientInfo,
         current_score: usize,
-        up_direction: WorldPoint,
+        down_direction: WorldPoint,
     ) -> Self {
         Self {
             client_id: client_info.client_id,
@@ -47,7 +47,7 @@ impl Player {
             next_block: MovingBlock::new(current_score),
             block_in_hold: None,
             fast_down: false,
-            up_direction,
+            down_direction,
         }
     }
 
@@ -71,9 +71,9 @@ impl Player {
         let (x, y) = point;
         let x = x as i16;
         let y = y as i16;
-        let (up_x, up_y) = self.up_direction;
+        let (down_x, down_y) = self.down_direction;
         // a couple ways to derive this: complex number division, rotation matrices
-        // to check, it should return the point unchanged when up_direction is the usual (0,-1)
-        (up_x * y - up_y * x, -up_x * x - up_y * y)
+        // to check, it should return the point unchanged when down_direction is the usual (0,-1)
+        (down_y * x - down_x * y, down_x * x + down_y * y)
     }
 }

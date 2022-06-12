@@ -95,6 +95,21 @@ fn wrap_text(s: &str, line_maxlen: usize) -> Vec<String> {
     lines
 }
 
+fn wrap_text_ignoring_whitespace(s: &str, line_maxlen: usize) -> Vec<String> {
+    let mut lines: Vec<String> = vec![];
+    let mut last_line_len = line_maxlen;
+
+    for ch in s.chars() {
+        if last_line_len == line_maxlen {
+            lines.push("".to_string());
+            last_line_len = 0;
+        }
+        lines.last_mut().unwrap().push(ch);
+        last_line_len += 1;
+    }
+    lines
+}
+
 /* return values:
 
     'w': new = old
@@ -138,19 +153,24 @@ fn get_ring_game_player_name_and_color(
     this_player_client_id: u64,
     letter: char,
 ) -> (String, Color) {
-    let this_up_dir = players
+    let this_down_dir = players
         .iter()
         .map(|p| p.borrow())
         .find(|p| p.client_id == this_player_client_id)
         .unwrap()
-        .up_direction;
+        .down_direction;
 
     let (width, height) = get_ring_game_name_rect_size(letter);
     return players
         .iter()
         .map(|p| p.borrow())
-        .find(|p| get_relative_direction_letter(this_up_dir, p.up_direction) == letter)
-        .map(|p| (p.get_name_string(width*height), Color { fg: p.color, bg: 0 }))
+        .find(|p| get_relative_direction_letter(this_down_dir, p.down_direction) == letter)
+        .map(|p| {
+            (
+                p.get_name_string(width * height),
+                Color { fg: p.color, bg: 0 },
+            )
+        })
         .unwrap_or_else(|| ("".to_string(), Color::DEFAULT));
 }
 
@@ -158,25 +178,21 @@ fn wrap_player_name(name: &str, letter: char) -> Vec<String> {
     let (width, height) = get_ring_game_name_rect_size(letter);
     let mut wrapped = wrap_text(name, width);
     if wrapped.len() > height {
-        wrapped.clear();
-        let mut chars = name.chars();
-        for _ in 0..height {
-            let mut row = "".to_string();
-            for _ in 0..width {
-                if let Some(c) = chars.next() {
-                    row.push(c);
-                }
-            }
-            wrapped.push(row);
-        }
+        wrapped = wrap_text_ignoring_whitespace(name, width);
+    }
+    assert!(wrapped.len() <= height);
+
+    let unused_height = height - wrapped.len();
+    for _ in 0..(unused_height / 2) {
+        wrapped.insert(0, "".to_string());
     }
 
     let mut result = vec![];
     for row in wrapped {
         result.push(match letter {
-            'w' | 's' => format!("{:^width$}!", row),
-            'a' => format!("{:<width$}!", row),
-            'd' => format!("{:>width$}!", row),
+            'w' | 's' => format!("{:^width$}", row),
+            'a' => format!("{:<width$}", row),
+            'd' => format!("{:>width$}", row),
             _ => panic!(),
         });
     }
@@ -343,7 +359,9 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                         bg: *flash_bg,
                     },
                 );
-            } else if let Some((content, relative_coords)) = game.get_moving_square(world_point, None) {
+            } else if let Some((content, relative_coords)) =
+                game.get_moving_square(world_point, None)
+            {
                 content.render(buffer, buffer_x, buffer_y, Some(relative_coords));
             } else if let Some(content) = game.get_landed_square(world_point) {
                 content.render(buffer, buffer_x, buffer_y, None);
