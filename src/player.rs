@@ -1,4 +1,6 @@
 use crate::blocks::MovingBlock;
+use crate::game_logic::wrap_around;
+use crate::game_logic::Mode;
 use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
@@ -29,6 +31,7 @@ pub struct Player {
     pub block_in_hold: Option<MovingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1
+    game_mode: Mode,
 }
 
 impl Player {
@@ -37,6 +40,7 @@ impl Player {
         client_info: &ClientInfo,
         current_score: usize,
         down_direction: WorldPoint,
+        game_mode: Mode,
     ) -> Self {
         Self {
             client_id: client_info.client_id,
@@ -48,6 +52,7 @@ impl Player {
             block_in_hold: None,
             fast_down: false,
             down_direction,
+            game_mode,
         }
     }
 
@@ -68,7 +73,8 @@ impl Player {
     }
 
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
-        let (x, y) = point;
+        let (x, mut y) = point;
+        wrap_around(self.game_mode, &mut y);
         let x = x as i16;
         let y = y as i16;
         let (down_x, down_y) = self.down_direction;

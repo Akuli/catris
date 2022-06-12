@@ -125,6 +125,14 @@ pub const RING_MAP: &[&str] = &[
 pub const RING_OUTER_RADIUS: usize = 18;
 pub const RING_INNER_RADIUS: usize = 3;
 
+pub fn wrap_around(mode: Mode, y: &mut i32) {
+    if mode == Mode::Ring && *y > 0 {
+        *y += RING_OUTER_RADIUS as i32;
+        *y %= (2 * RING_OUTER_RADIUS + 1) as i32;
+        *y -= RING_OUTER_RADIUS as i32;
+    }
+}
+
 pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
@@ -302,6 +310,7 @@ impl Game {
             client_info,
             self.score,
             down_direction,
+            self.mode,
         )));
         self.update_spawn_points();
 
@@ -473,12 +482,16 @@ impl Game {
     }
 
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
+        let (x, mut y) = point;
         let top_y = match self.mode {
             Mode::Traditional | Mode::Bottle => 0,
             Mode::Ring => -(RING_OUTER_RADIUS as i32),
         };
-        let (x, y) = point;
-        self.is_valid_landed_block_coords((x as i16, max(top_y, y) as i16))
+        if y < top_y {
+            y = top_y;
+        }
+        wrap_around(self.mode, &mut y);
+        self.is_valid_landed_block_coords((x as i16, y as i16))
     }
 
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
@@ -654,7 +667,7 @@ impl Game {
             _ => return vec![],
         };
 
-        // 40 is senough even in ring mode
+        // 40 is enough even in ring mode
         for _ in 0..40 {
             let can_move = working_coords.iter().all(|p| {
                 let (x, mut y) = *p;
