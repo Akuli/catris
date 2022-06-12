@@ -574,11 +574,6 @@ impl Game {
         })
     }
 
-    // TODO: delete
-    fn square_is_occupied(&self, point: WorldPoint, exclude_player_idx: Option<usize>) -> bool {
-        self.get_any_square(point, exclude_player_idx).is_some()
-    }
-
     fn rotate_if_possible(&self, player_idx: usize, prefer_counter_clockwise: bool) -> bool {
         let player = &self.players[player_idx];
         let coords = match &player.borrow().block_or_timer {
@@ -588,8 +583,9 @@ impl Game {
 
         let can_rotate = coords.iter().all(|p| {
             let stays_in_bounds = self.is_valid_moving_block_coords(*p);
-            let goes_on_top_of_something =
-                self.square_is_occupied(player.borrow().player_to_world(*p), Some(player_idx));
+            let goes_on_top_of_something = self
+                .get_any_square(player.borrow().player_to_world(*p), Some(player_idx))
+                .is_some();
             stays_in_bounds && !goes_on_top_of_something
         });
         if can_rotate {
@@ -942,10 +938,11 @@ impl Game {
 
     fn can_add_block(&self, player_idx: usize, block: &MovingBlock) -> bool {
         let overlaps = block.get_coords().iter().any(|p| {
-            self.square_is_occupied(
+            self.get_any_square(
                 self.players[player_idx].borrow().player_to_world(*p),
                 Some(player_idx),
             )
+            .is_some()
         });
         !overlaps
     }
