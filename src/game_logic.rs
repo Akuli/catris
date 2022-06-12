@@ -350,7 +350,7 @@ impl Game {
                 self.players.remove(i);
                 self.wipe_vertical_slice(slice_x, slice_width);
             }
-            _ => unimplemented!(),
+            Mode::Ring => {}
         }
 
         self.update_spawn_points();
@@ -417,8 +417,8 @@ impl Game {
             }
             Mode::Ring => {
                 for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
-                    let mut ring = vec![(-r,-r),(-r,r),(r,-r),(r,r)];
-                    for i in (-r+1)..r {
+                    let mut ring = vec![(-r, -r), (-r, r), (r, -r), (r, r)];
+                    for i in (-r + 1)..r {
                         ring.push((-r, i));
                         ring.push((r, i));
                         ring.push((i, -r));

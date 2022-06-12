@@ -72,6 +72,8 @@ impl Player {
         let x = x as i16;
         let y = y as i16;
         let (up_x, up_y) = self.up_direction;
+        // a couple ways to derive this: complex number division, rotation matrices
+        // to check, it should return the point unchanged when up_direction is the usual (0,-1)
         (up_x * y - up_y * x, -up_x * x - up_y * y)
     }
 }
