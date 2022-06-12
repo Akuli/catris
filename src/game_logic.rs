@@ -747,6 +747,31 @@ impl Game {
         need_render
     }
 
+    fn flip_view(&mut self) -> bool {
+        if self.mode != Mode::Ring || self.players.len() != 1 {
+            return false;
+        }
+
+        let mut player = self.players[0].borrow_mut();
+        let coords = match &player.block_or_timer {
+            BlockOrTimer::Block(block) => block.get_coords(),
+            _ => return false,
+        };
+
+        for (x, y) in coords {
+            let flipped_point = player.player_to_world((-x, -y));
+            if self.is_valid_landed_block_coords(flipped_point)
+                && self.get_landed_square(flipped_point).is_some()
+            {
+                return false;
+            }
+        }
+
+        player.down_direction.0 *= -1;
+        player.down_direction.1 *= -1;
+        true
+    }
+
     pub fn animate_drills(&mut self) -> bool {
         let mut something_changed = false;
         let mut handle_block = |block: &mut MovingBlock| {
@@ -796,6 +821,7 @@ impl Game {
             KeyPress::Up | KeyPress::Character('W') | KeyPress::Character('w') => {
                 self.rotate_if_possible(player_idx, client_prefers_rotating_counter_clockwise)
             }
+            KeyPress::Character('F') | KeyPress::Character('f') => self.flip_view(),
             KeyPress::Character('H') | KeyPress::Character('h') => self.hold_block(player_idx),
             _ => {
                 println!("Unhandled Key Press!! {:?}", key);

@@ -1,7 +1,6 @@
 ring game + drill blocks
 ring game clearing rows
 ring game wrapping
-ring game flip
 check println calls
 initial "Now serving" print
 when leaving, print num connected clients
