@@ -184,6 +184,19 @@ impl Game {
         self.landed_rows.len()
     }
 
+    // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
+    pub fn get_bounds_in_player_coords(&self) -> (i32, i32, i32, i32) {
+        match self.mode {
+            Mode::Traditional | Mode::Bottle => {
+                (0, self.get_width() as i32, 0, self.get_height() as i32)
+            }
+            Mode::Ring => {
+                let r = RING_OUTER_RADIUS as i32;
+                (-r, r+1, -r, r+1)
+            }
+        }
+    }
+
     fn update_spawn_points(&self) {
         match self.mode {
             Mode::Traditional => {

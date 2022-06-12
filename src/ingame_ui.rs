@@ -108,7 +108,7 @@ pub fn get_relative_direction_letter(old: WorldPoint, new: WorldPoint) -> char {
     assert!(ox * ox + oy * oy == 1);
     assert!(nx * nx + ny * ny == 1);
 
-    // complex number division, actually just multiply by conjugate
+    // complex number division old/new, actually old*conjugate(new)
     let divided = (ox * nx + oy * ny, oy * nx - ox * ny);
     match divided {
         (1, 0) => 'w',
@@ -117,6 +117,20 @@ pub fn get_relative_direction_letter(old: WorldPoint, new: WorldPoint) -> char {
         (0, -1) => 'd',
         _ => panic!(),
     }
+}
+
+fn get_ring_game_name_rect_size(letter: char) -> (usize, usize) {
+    let counts = RING_MAP
+        .iter()
+        .map(|row| row.matches(letter).count())
+        .filter(|n| *n != 0)
+        .collect::<Vec<usize>>();
+    let width = counts[0];
+    let height = counts.len();
+    for c in counts {
+        assert!(c == width);
+    }
+    (width, height)
 }
 
 fn get_ring_game_player_name_and_color(
@@ -131,26 +145,17 @@ fn get_ring_game_player_name_and_color(
         .unwrap()
         .up_direction;
 
+    let (width, height) = get_ring_game_name_rect_size(letter);
     return players
         .iter()
         .map(|p| p.borrow())
         .find(|p| get_relative_direction_letter(this_up_dir, p.up_direction) == letter)
-        .map(|p| (p.name.clone(), Color { fg: p.color, bg: 0 }))
+        .map(|p| (p.get_name_string(width*height), Color { fg: p.color, bg: 0 }))
         .unwrap_or_else(|| ("".to_string(), Color::DEFAULT));
 }
 
 fn wrap_player_name(name: &str, letter: char) -> Vec<String> {
-    let counts = RING_MAP
-        .iter()
-        .map(|row| row.matches(letter).count())
-        .filter(|n| *n != 0)
-        .collect::<Vec<usize>>();
-    let width = counts[0];
-    let height = counts.len();
-    for c in counts {
-        assert!(c == width);
-    }
-
+    let (width, height) = get_ring_game_name_rect_size(letter);
     let mut wrapped = wrap_text(name, width);
     if wrapped.len() > height {
         wrapped.clear();
@@ -296,7 +301,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         Mode::Traditional => (1, 2),
         Mode::Bottle => (1, 0),
         Mode::Ring => {
-            let r = RING_OUTER_RADIUS as i16;
+            let r = RING_OUTER_RADIUS as i32;
             (1 + 2 * r, 1 + r)
         }
     };
@@ -317,17 +322,18 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     }
     trace_points.retain(|p| !game.flashing_points.contains_key(p));
 
-    // TODO: optimize lol?
-    for x in -100..100 {
-        for y in -100..100 {
-            if !game.is_valid_landed_block_coords((x, y)) {
+    let (x_start, x_end, y_start, y_end) = game.get_bounds_in_player_coords();
+    for x in x_start..x_end {
+        for y in y_start..y_end {
+            let world_point = game.players[player_idx].borrow().player_to_world((x, y));
+            if !game.is_valid_landed_block_coords(world_point) {
                 continue;
             }
 
             let buffer_x = (offset_x + 2 * x) as usize;
             let buffer_y = (offset_y + y) as usize;
 
-            if let Some(flash_bg) = game.flashing_points.get(&(x, y)) {
+            if let Some(flash_bg) = game.flashing_points.get(&world_point) {
                 buffer.add_text_with_color(
                     buffer_x,
                     buffer_y,
@@ -337,13 +343,13 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                         bg: *flash_bg,
                     },
                 );
-            } else if let Some((content, relative_coords)) = game.get_moving_square((x, y), None) {
+            } else if let Some((content, relative_coords)) = game.get_moving_square(world_point, None) {
                 content.render(buffer, buffer_x, buffer_y, Some(relative_coords));
-            } else if let Some(content) = game.get_landed_square((x, y)) {
+            } else if let Some(content) = game.get_landed_square(world_point) {
                 content.render(buffer, buffer_x, buffer_y, None);
             }
 
-            if trace_points.contains(&(x, y))
+            if trace_points.contains(&world_point)
                 && buffer.get_char(buffer_x, buffer_y) == ' '
                 && buffer.get_char(buffer_x + 1, buffer_y) == ' '
             {
