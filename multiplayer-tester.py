@@ -53,7 +53,10 @@ try:
             if b"\x03" in sendbuf:
                 raise KeyboardInterrupt
         if sock in can_read:
-            sys.stdout.buffer.write(sock.recv(1024))
+            data = sock.recv(1024)
+            if not data:
+                break
+            sys.stdout.buffer.write(data)
             sys.stdout.buffer.flush()
         if sock in can_write:
             n = sock.send(bytes(sendbuf))
