@@ -15,7 +15,6 @@ profiling
 code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
 
-Bug: bombs not working in ring game
 Bug: stacking moving blocks easily gets them stuck
 Bug: ring games end in weird state shows e.g. 3/4 players
 Todo: highlight await keyword in my editor

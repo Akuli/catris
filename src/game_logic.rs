@@ -184,6 +184,14 @@ impl Game {
         self.landed_rows.len()
     }
 
+    // Where is world coordinate (0,0) in the landed_rows array?
+    fn get_center_offset(&self) -> (i16, i16) {
+        match self.mode {
+            Mode::Traditional | Mode::Bottle => (0, 0),
+            Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
+        }
+    }
+
     // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
     pub fn get_bounds_in_player_coords(&self) -> (i32, i32, i32, i32) {
         match self.mode {
@@ -531,21 +539,15 @@ impl Game {
     }
 
     pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
-        let (mut x, mut y) = point;
-        if self.mode == Mode::Ring {
-            x += RING_OUTER_RADIUS as i16;
-            y += RING_OUTER_RADIUS as i16;
-        }
-        self.landed_rows[y as usize][x as usize]
+        let (x, y) = point;
+        let (offset_x, offset_y) = self.get_center_offset();
+        self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize]
     }
 
     fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
-        let (mut x, mut y) = point;
-        if self.mode == Mode::Ring {
-            x += RING_OUTER_RADIUS as i16;
-            y += RING_OUTER_RADIUS as i16;
-        }
-        self.landed_rows[y as usize][x as usize] = value;
+        let (x, y) = point;
+        let (offset_x, offset_y) = self.get_center_offset();
+        self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize] = value;
     }
 
     fn move_landed_square(&mut self, from: WorldPoint, to: WorldPoint) {
@@ -1061,9 +1063,10 @@ impl Game {
             self.new_block(player_idx);
         }
 
+        let (offset_x, offset_y) = self.get_center_offset();
         for (y, row) in self.landed_rows.iter_mut().enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let point = (x as i16, y as i16);
+                let point = (x as i16 - offset_x, y as i16 - offset_y);
                 if let Some(content) = cell {
                     if !f(point, content, None) {
                         *cell = None;
