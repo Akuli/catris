@@ -1,5 +1,4 @@
 ring game + drill blocks
-ring game clearing rows
 ring game wrapping
 check println calls
 initial "Now serving" print
@@ -8,7 +7,6 @@ high scores file bump ver num
 trace color for bombs
 grep TODO
 grep FIXME
-grep unimpl
 motd
 check max players
 websocket support

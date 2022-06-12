@@ -548,6 +548,14 @@ impl Game {
         self.landed_rows[y as usize][x as usize] = value;
     }
 
+    fn move_landed_square(&mut self, from: WorldPoint, to: WorldPoint) {
+        let value_to_move = self.get_landed_square(from);
+        self.set_landed_square(from, None);
+        if value_to_move.is_some() {
+            self.set_landed_square(to, value_to_move);
+        }
+    }
+
     pub fn get_any_square(
         &self,
         point: WorldPoint,
@@ -873,7 +881,44 @@ impl Game {
                     }
                 }
             }
-            _ => unimplemented!(),
+            Mode::Ring => {
+                let mut counts = vec![0; RING_OUTER_RADIUS + 1];
+                for (x, y) in full {
+                    self.set_landed_square((*x, *y), None);
+                    counts[max(x.abs(), y.abs()) as usize] += 1;
+                }
+
+                // removing a ring shifts outer radiuses, so go inwards
+                for (r, count) in counts.iter().enumerate().rev() {
+                    if r == 0 || *count != 8 * r {
+                        continue;
+                    }
+                    let r = r as i16;
+
+                    // clear destination radius where outer blocks will go
+                    // moving the squares doesn't overwrite, if source (outer) square is None
+                    for i in (-r)..=r {
+                        self.set_landed_square((-r, i), None);
+                        self.set_landed_square((r, i), None);
+                        self.set_landed_square((i, -r), None);
+                        self.set_landed_square((i, r), None);
+                    }
+
+                    for dest_r in r..(RING_OUTER_RADIUS as i16) {
+                        let source_r = dest_r + 1;
+                        for i in (-source_r + 1)..source_r {
+                            self.move_landed_square((-source_r, i), (-dest_r, i));
+                            self.move_landed_square((source_r, i), (dest_r, i));
+                            self.move_landed_square((i, -source_r), (i, -dest_r));
+                            self.move_landed_square((i, source_r), (i, dest_r));
+                        }
+                        self.move_landed_square((-source_r, -source_r), (-dest_r, -dest_r));
+                        self.move_landed_square((-source_r, source_r), (-dest_r, dest_r));
+                        self.move_landed_square((source_r, -source_r), (dest_r, -dest_r));
+                        self.move_landed_square((source_r, source_r), (dest_r, dest_r));
+                    }
+                }
+            }
         }
 
         // Moving landed squares can cause them to overlap moving squares
