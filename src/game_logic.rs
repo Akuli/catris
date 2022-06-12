@@ -1129,11 +1129,11 @@ impl Game {
     }
 
     fn clear_playing_area(&mut self, player_idx: usize) {
-        let w = self.get_width_per_player();
         match self.mode {
             Mode::Traditional => {
-                let left = w.unwrap() * player_idx;
-                let right = w.unwrap() * (player_idx + 1);
+                let w = self.get_width_per_player().unwrap();
+                let left = w * player_idx;
+                let right = w * (player_idx + 1);
                 for row in self.landed_rows.iter_mut() {
                     for square_ref in row[left..right].iter_mut() {
                         *square_ref = None;
@@ -1150,14 +1150,13 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                let (down_x, down_y) = self.players[player_idx].borrow().down_direction;
-                for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
-                    for across in (-(RING_INNER_RADIUS as i16))..=(RING_INNER_RADIUS as i16) {
-                        // (x, y) = -r*down + across*rotate90(down)
-                        let x = -r * down_x + across * down_y;
-                        let y = -r * down_y - across * down_x;
-                        if self.is_valid_landed_block_coords((x, y)) {
-                            self.set_landed_square((x, y), None);
+                for y_abs in 0..=(RING_OUTER_RADIUS as i32) {
+                    for x in (-y_abs)..=y_abs {
+                        let point = self.players[player_idx]
+                            .borrow()
+                            .player_to_world((x, -y_abs));
+                        if self.is_valid_landed_block_coords(point) {
+                            self.set_landed_square(point, None);
                         }
                     }
                 }

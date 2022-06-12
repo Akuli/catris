@@ -1,4 +1,5 @@
 ring game + drill blocks
+ring game clearing rows
 ring game wrapping
 check println calls
 initial "Now serving" print
@@ -16,9 +17,9 @@ profiling
 code compare with python implementation, to ensure all features in
 prod with RUST_BACKTRACE=1
 
-Bug: ring game is upside down
+Bug: bombs not working in ring game
 Bug: stacking moving blocks easily gets them stuck
-Bug: joining ring game while other player still looking at high scores
+Bug: ring games end in weird state shows e.g. 3/4 players
 Todo: highlight await keyword in my editor
 Todo: highlight 2usize properly
 Todo: highlight "static ref" properly

@@ -73,7 +73,7 @@ impl Player {
         let y = y as i16;
         let (down_x, down_y) = self.down_direction;
         // a couple ways to derive this: complex number division, rotation matrices
-        // to check, it should return the point unchanged when down_direction is the usual (0,-1)
-        (down_y * x - down_x * y, down_x * x + down_y * y)
+        // to check, it should return the point unchanged when down_direction is the usual (0,1)
+        (x * down_y + y * down_x, -x * down_x + y * down_y)
     }
 }
