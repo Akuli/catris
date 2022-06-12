@@ -371,7 +371,9 @@ impl Game {
                 self.players.remove(i);
                 self.wipe_vertical_slice(slice_x, slice_width);
             }
-            Mode::Ring => {}
+            Mode::Ring => {
+                self.players.remove(i);
+            }
         }
 
         self.update_spawn_points();
