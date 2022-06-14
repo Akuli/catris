@@ -5,52 +5,174 @@ use crate::render::RenderBuffer;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
+#[derive(Copy, Clone, Debug)]
+enum DrillDirection {
+    Upwards = 0,
+    Downwards = 1,
+    RightToLeft = 2,
+    LeftToRight = 3,
+}
+
 #[rustfmt::skip]
-const DRILL_PICTURES: [[&str; 5]; 4] = [
-    [
-        r"| /|",
-        r"|/ |",
-        r"| .|",
-        r"|. |",
-        r" \/ ",
+const DRILL_PICTURES: [&[&[&str]]; 4] = [
+    &[
+        &[
+            r" /\ ",
+            r"|. |",
+            r"| /|",
+            r"|/ |",
+            r"| .|",
+        ],
+        &[
+            r" /\ ",
+            r"| .|",
+            r"|. |",
+            r"| /|",
+            r"|/ |",
+        ],
+        &[
+            r" /\ ",
+            r"|/ |",
+            r"| .|",
+            r"|. |",
+            r"| /|",
+        ],
+        &[
+            r" /\ ",
+            r"| /|",
+            r"|/ |",
+            r"| .|",
+            r"|. |",
+        ],
     ],
-    [
-        r"|/ |",
-        r"| .|",
-        r"|. |",
-        r"| /|",
-        r" \/ ",
+    &[
+        &[
+            r"| /|",
+            r"|/ |",
+            r"| .|",
+            r"|. |",
+            r" \/ ",
+        ],
+        &[
+            r"|/ |",
+            r"| .|",
+            r"|. |",
+            r"| /|",
+            r" \/ ",
+        ],
+        &[
+            r"| .|",
+            r"|. |",
+            r"| /|",
+            r"|/ |",
+            r" \/ ",
+        ],
+        &[
+            r"|. |",
+            r"| /|",
+            r"|/ |",
+            r"| .|",
+            r" \/ ",
+        ],
     ],
-    [
-        r"| .|",
-        r"|. |",
-        r"| /|",
-        r"|/ |",
-        r" \/ ",
+    &[
+        &[
+            r" .--------",
+            r"'._\__\__\",
+        ],
+        &[
+            r" .--------",
+            r"'.__\__\__",
+        ],
+        &[
+            r" .--------",
+            r"'.\__\__\_",
+        ],
     ],
-    [
-        r"|. |",
-        r"| /|",
-        r"|/ |",
-        r"| .|",
-        r" \/ ",
+    &[
+        &[
+            r"--------. ",
+            r"_/__/__/.'",
+        ],
+        &[
+            r"--------. ",
+            r"/__/__/_.'",
+        ],
+        &[
+            r"--------. ",
+            r"__/__/__.'",
+        ],
     ],
 ];
 
-fn get_drill_text(animation_counter: u8, relative_coords: BlockRelativeCoords) -> &'static str {
-    let (relative_x, relative_y) = relative_coords;
-    let a_index = animation_counter as usize;
-    let x_index = (2 * (relative_x + 1)) as usize;
-    let y_index = (relative_y + 2) as usize;
-    &DRILL_PICTURES[a_index][y_index][x_index..(x_index + 2)]
+fn choose_drill_direction(
+    viewer_direction: (i8, i8),
+    driller_direction: (i8, i8),
+) -> DrillDirection {
+    let (x, y) = viewer_direction;
+
+    if driller_direction == (x, y) {
+        DrillDirection::Downwards
+    } else if driller_direction == (y, -x) {
+        DrillDirection::LeftToRight
+    } else if driller_direction == (-x, -y) {
+        DrillDirection::Upwards
+    } else if driller_direction == (-y, x) {
+        DrillDirection::RightToLeft
+    } else {
+        panic!()
+    }
+}
+
+fn direction_to_0123(direction: (i8, i8)) -> usize {
+    match direction {
+        (0, -1) => 0,
+        (0, 1) => 1,
+        (-1, 0) => 2,
+        (1, 0) => 3,
+        _ => panic!(),
+    }
+}
+
+fn get_drill_text(
+    animation_counter: u8,
+    direction: DrillDirection,
+    relative_coords: BlockRelativeCoords,
+) -> &'static str {
+    let p_index = direction as usize;
+    let a_index = (animation_counter as usize) % (DRILL_PICTURES[p_index].len());
+
+    // get nonnegative values for relative coords, easier to think about
+    // rotating them will be messy anyway because width=2 and center is between the places
+    let (mut relative_x, mut relative_y) = relative_coords;
+    relative_x += 1;
+    relative_y += 2;
+
+    let (rotated_relative_x, rotated_relative_y) = match direction {
+        DrillDirection::Downwards => (relative_x, relative_y),
+        DrillDirection::Upwards => (1 - relative_x, 4 - relative_y),
+        DrillDirection::RightToLeft => (4 - relative_y, relative_x),
+        DrillDirection::LeftToRight => (relative_y, 1 - relative_x),
+    };
+
+    let x_index = (2 * rotated_relative_x) as usize;
+    let y_index = rotated_relative_y as usize;
+    &DRILL_PICTURES[p_index][a_index][y_index][x_index..(x_index + 2)]
 }
 
 #[derive(Copy, Clone, Debug)]
 pub enum SquareContent {
     Normal([(char, Color); 2]),
-    Bomb { timer: u8, id: Option<u64> },
-    MovingDrill { animation_counter: u8 },
-    LandedDrill { text: [char; 2] },
+    Bomb {
+        timer: u8,
+        id: Option<u64>,
+    },
+    MovingDrill {
+        animation_counter: u8,
+    },
+    LandedDrill {
+        texts_by_viewer_direction: [&'static str; 4], // indexed by direction_to_0123()
+    },
 }
 impl SquareContent {
     pub fn is_bomb(&self) -> bool {
@@ -69,19 +191,30 @@ impl SquareContent {
         match self {
             Self::MovingDrill { animation_counter } => {
                 *animation_counter += 1;
-                *animation_counter %= 4;
+                *animation_counter %= 12; // won't mess up 3-pic or 4-pic animations
                 true
             }
             _ => false,
         }
     }
 
-    pub fn to_landed_content(&self, relative_coords: BlockRelativeCoords) -> Self {
+    pub fn to_landed_content(
+        &self,
+        relative_coords: BlockRelativeCoords,
+        player_direction: (i8, i8),
+    ) -> Self {
         match self {
             Self::MovingDrill { animation_counter } => {
-                let mut chars = get_drill_text(*animation_counter, relative_coords).chars();
+                let mut texts_by_viewer_direction = ["", "", "", ""];
+                for viewer_dir in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    texts_by_viewer_direction[direction_to_0123(viewer_dir)] = get_drill_text(
+                        *animation_counter,
+                        choose_drill_direction(viewer_dir, player_direction),
+                        relative_coords,
+                    );
+                }
                 Self::LandedDrill {
-                    text: [chars.next().unwrap(), chars.next().unwrap()],
+                    texts_by_viewer_direction,
                 }
             }
             other => *other,
@@ -94,7 +227,15 @@ impl SquareContent {
         buffer: &mut RenderBuffer,
         x: usize,
         y: usize,
-        relative_coords: Option<BlockRelativeCoords>,
+        /*
+        (i8, i8) here are always unit vectors, i.e. one component zero and the other +-1.
+        These represent the directions of players, and will be compared with each other.
+
+        Moving blocks need to know what direction is down for the player who owns the moving block.
+        All blocks need to know the direction of the player who will see the rendering result.
+        */
+        moving_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
+        viewer_direction: (i8, i8),
     ) {
         match self {
             Self::Normal(chars_and_colors) => {
@@ -112,12 +253,16 @@ impl SquareContent {
                 buffer.add_text_with_color(x, y, &format!("{:<2}", *timer), color);
             }
             Self::MovingDrill { animation_counter } => {
-                let text = get_drill_text(*animation_counter, relative_coords.unwrap());
+                let (relative_coords, driller_direction) = moving_block_data.unwrap();
+                let direction = choose_drill_direction(viewer_direction, driller_direction);
+                let text = get_drill_text(*animation_counter, direction, relative_coords);
                 buffer.add_text(x, y, text);
             }
-            Self::LandedDrill { text } => {
-                buffer.set_char_with_color(x, y, text[0], Color::GRAY_BACKGROUND);
-                buffer.set_char_with_color(x + 1, y, text[1], Color::GRAY_BACKGROUND);
+            Self::LandedDrill {
+                texts_by_viewer_direction,
+            } => {
+                let text = texts_by_viewer_direction[direction_to_0123(viewer_direction)];
+                buffer.add_text_with_color(x, y, text, Color::GRAY_BACKGROUND);
             }
         };
     }

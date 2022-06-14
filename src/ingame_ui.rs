@@ -310,6 +310,8 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     }
     trace_points.retain(|p| !game.flashing_points.contains_key(p));
 
+    let (viewer_dir_x, viewer_dir_y) = game.players[player_idx].borrow().down_direction;
+
     let (x_start, x_end, y_start, y_end) = game.get_bounds_in_player_coords();
     for x in x_start..x_end {
         for y in y_start..y_end {
@@ -331,12 +333,25 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                         bg: *flash_bg,
                     },
                 );
-            } else if let Some((content, relative_coords)) =
+            } else if let Some((content, relative_coords, owner_idx)) =
                 game.get_moving_square(world_point, None)
             {
-                content.render(buffer, buffer_x, buffer_y, Some(relative_coords));
+                let (moving_x, moving_y) = game.players[owner_idx].borrow().down_direction;
+                content.render(
+                    buffer,
+                    buffer_x,
+                    buffer_y,
+                    Some((relative_coords, (moving_x as i8, moving_y as i8))),
+                    (viewer_dir_x as i8, viewer_dir_y as i8),
+                );
             } else if let Some(content) = game.get_landed_square(world_point) {
-                content.render(buffer, buffer_x, buffer_y, None);
+                content.render(
+                    buffer,
+                    buffer_x,
+                    buffer_y,
+                    None,
+                    (viewer_dir_x as i8, viewer_dir_y as i8),
+                );
             }
 
             if trace_points.contains(&world_point)
@@ -384,7 +399,8 @@ fn render_block(
             buffer,
             (center_x + 2 * (*x as isize)) as usize,
             (center_y + (*y as isize)) as usize,
-            Some((*x, *y)),
+            Some(((*x, *y), (0, 1))),
+            (0, 1),
         );
     }
 }

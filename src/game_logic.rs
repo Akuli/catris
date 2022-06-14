@@ -530,8 +530,8 @@ impl Game {
     pub fn get_moving_square(
         &self,
         point: WorldPoint,
-        exclude_player_idx: Option<usize>,
-    ) -> Option<(SquareContent, BlockRelativeCoords)> {
+        exclude_player_idx: Option<usize>, // TODO: get rid of this, can use return value
+    ) -> Option<(SquareContent, BlockRelativeCoords, usize)> {
         for (player_idx, player) in self.players.iter().enumerate() {
             if exclude_player_idx != Some(player_idx) {
                 match &player.borrow().block_or_timer {
@@ -542,7 +542,7 @@ impl Game {
                             .zip(block.get_relative_coords().iter())
                         {
                             if player.borrow().player_to_world(*player_coords) == point {
-                                return Some((block.square_content, *relative_coords));
+                                return Some((block.square_content, *relative_coords, player_idx));
                             }
                         }
                     }
@@ -585,7 +585,7 @@ impl Game {
         };
         landed.or_else(|| {
             self.get_moving_square(point, exclude_player_idx)
-                .map(|(content, _)| content)
+                .map(|(content, _, _)| content)
         })
     }
 
@@ -753,8 +753,11 @@ impl Game {
                     .all(|p| self.is_valid_landed_block_coords(*p))
                 {
                     // land the block
+                    let (down_x, down_y) = player.borrow().down_direction;
                     for (w, r) in world_coords.iter().zip(relative_coords.iter()) {
-                        self.set_landed_square(*w, Some(square_content.to_landed_content(*r)));
+                        let landed_content =
+                            square_content.to_landed_content(*r, (down_x as i8, down_y as i8));
+                        self.set_landed_square(*w, Some(landed_content));
                     }
                     self.new_block(*player_idx);
                 } else {

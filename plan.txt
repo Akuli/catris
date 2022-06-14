@@ -1,4 +1,3 @@
-ring game + drill blocks
 check println calls
 initial "Now serving" print
 when leaving, print num connected clients
