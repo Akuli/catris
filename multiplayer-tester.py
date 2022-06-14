@@ -11,7 +11,7 @@ import socket
 import re
 
 INTERACTIVE_CLIENT_INDEX = 1  # which client will you control on terminal?
-GAME_MODE = "t"  # first letter, e.g. r = ring game, t = traditional
+GAME_MODE = "r"  # first letter, e.g. r = ring game, t = traditional
 
 sockets = []
 received = []

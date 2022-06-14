@@ -3,7 +3,6 @@ use crate::blocks::MovingBlock;
 use crate::client::Client;
 use crate::game_logic::Game;
 use crate::game_logic::Mode;
-use crate::game_logic::WorldPoint;
 use crate::game_logic::BOTTLE_MAP;
 use crate::game_logic::RING_MAP;
 use crate::game_logic::RING_OUTER_RADIUS;
@@ -110,31 +109,7 @@ fn wrap_text_ignoring_whitespace(s: &str, line_maxlen: usize) -> Vec<String> {
     lines
 }
 
-/* return values:
-
-    'w': new = old
-    'a': new = rotate90(old)      (rotation done clockwise, with y axis upside down as usual)
-    's': new = rotate90(rotate90(old))
-    'd': new = rotate90(rotate90(rotate90(old))
-*/
-pub fn get_relative_direction_letter(old: WorldPoint, new: WorldPoint) -> char {
-    let (ox, oy) = old;
-    let (nx, ny) = new;
-    assert!(ox * ox + oy * oy == 1);
-    assert!(nx * nx + ny * ny == 1);
-
-    // complex number division old/new, actually old*conjugate(new)
-    let divided = (ox * nx + oy * ny, oy * nx - ox * ny);
-    match divided {
-        (1, 0) => 'w',
-        (0, 1) => 'a',
-        (-1, 0) => 's',
-        (0, -1) => 'd',
-        _ => panic!(),
-    }
-}
-
-fn get_ring_game_name_rect_size(letter: char) -> (usize, usize) {
+fn get_wrapped_name(player: &Player, letter: char) -> String {
     let counts = RING_MAP
         .iter()
         .map(|row| row.matches(letter).count())
@@ -145,51 +120,25 @@ fn get_ring_game_name_rect_size(letter: char) -> (usize, usize) {
     for c in counts {
         assert!(c == width);
     }
-    (width, height)
-}
 
-fn get_ring_game_player_name_and_color(
-    players: &[RefCell<Player>],
-    this_player_client_id: u64,
-    letter: char,
-) -> (String, Color) {
-    let this_down_dir = players
-        .iter()
-        .map(|p| p.borrow())
-        .find(|p| p.client_id == this_player_client_id)
-        .unwrap()
-        .down_direction;
-
-    let (width, height) = get_ring_game_name_rect_size(letter);
-    return players
-        .iter()
-        .map(|p| p.borrow())
-        .find(|p| get_relative_direction_letter(this_down_dir, p.down_direction) == letter)
-        .map(|p| {
-            (
-                p.get_name_string(width * height),
-                Color { fg: p.color, bg: 0 },
-            )
-        })
-        .unwrap_or_else(|| ("".to_string(), Color::DEFAULT));
-}
-
-fn wrap_player_name(name: &str, letter: char) -> Vec<String> {
-    let (width, height) = get_ring_game_name_rect_size(letter);
-    let mut wrapped = wrap_text(name, width);
+    let unwrapped_name = player.get_name_string(width * height);
+    let mut wrapped = wrap_text(&unwrapped_name, width);
     if wrapped.len() > height {
-        wrapped = wrap_text_ignoring_whitespace(name, width);
+        wrapped = wrap_text_ignoring_whitespace(&unwrapped_name, width);
     }
     assert!(wrapped.len() <= height);
 
+    let mut result = "".to_string();
+
     let unused_height = height - wrapped.len();
     for _ in 0..(unused_height / 2) {
-        wrapped.insert(0, "".to_string());
+        for _ in 0..width {
+            result.push(' ');
+        }
     }
 
-    let mut result = vec![];
     for row in wrapped {
-        result.push(match letter {
+        result.push_str(&match letter {
             'w' | 's' => format!("{:^width$}", row),
             'a' => format!("{:<width$}", row),
             'd' => format!("{:>width$}", row),
@@ -197,6 +146,34 @@ fn wrap_player_name(name: &str, letter: char) -> Vec<String> {
         });
     }
     result
+}
+
+fn prepare_player_for_ring_game_rendering(
+    players: &[RefCell<Player>],
+    this_player_client_id: u64,
+    letter: char,
+) -> (String, Color) {
+    let (down_x, down_y) = players
+        .iter()
+        .map(|p| p.borrow())
+        .find(|p| p.client_id == this_player_client_id)
+        .unwrap()
+        .down_direction;
+
+    let other_down_dir = match letter {
+        'w' => (down_x, down_y),
+        'a' => (down_y, -down_x),
+        's' => (-down_x, -down_y),
+        'd' => (-down_y, down_x),
+        _ => panic!(),
+    };
+
+    players
+        .iter()
+        .map(|p| p.borrow())
+        .find(|p| p.down_direction == other_down_dir)
+        .map(|p| (get_wrapped_name(&*p, letter), Color { fg: p.color, bg: 0 }))
+        .unwrap_or_else(|| ("".to_string(), Color::DEFAULT))
 }
 
 fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
@@ -260,24 +237,19 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             );
         }
         Mode::Ring => {
-            let (w_name, w_color) =
-                get_ring_game_player_name_and_color(&game.players, client_id, 'w');
-            let (a_name, a_color) =
-                get_ring_game_player_name_and_color(&game.players, client_id, 'a');
-            let (s_name, s_color) =
-                get_ring_game_player_name_and_color(&game.players, client_id, 's');
-            let (d_name, d_color) =
-                get_ring_game_player_name_and_color(&game.players, client_id, 'd');
-            let w_text = wrap_player_name(&w_name, 'w').join("");
-            let a_text = wrap_player_name(&a_name, 'a').join("");
-            let s_text = wrap_player_name(&s_name, 's').join("");
-            let d_text = wrap_player_name(&d_name, 'd').join("");
+            let (w_text, w_color) =
+                prepare_player_for_ring_game_rendering(&game.players, client_id, 'w');
+            let (a_text, a_color) =
+                prepare_player_for_ring_game_rendering(&game.players, client_id, 'a');
+            let (s_text, s_color) =
+                prepare_player_for_ring_game_rendering(&game.players, client_id, 's');
+            let (d_text, d_color) =
+                prepare_player_for_ring_game_rendering(&game.players, client_id, 'd');
             let mut w_chars = w_text.chars();
             let mut a_chars = a_text.chars();
             let mut s_chars = s_text.chars();
             let mut d_chars = d_text.chars();
 
-            // TODO: render names properly, in color (includes border) and with wrapping
             for (y, line) in RING_MAP.iter().enumerate() {
                 for (x, spec_char) in line.chars().enumerate() {
                     let ch = match spec_char {
@@ -285,10 +257,10 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                         'a' => a_chars.next().unwrap_or(' '),
                         's' => s_chars.next().unwrap_or(' '),
                         'd' => d_chars.next().unwrap_or(' '),
+                        'x' | ' ' => continue,
                         other => other,
                     };
                     let color = match spec_char {
-                        'x' | ' ' => continue,
                         'w' => w_color,
                         'a' => a_color,
                         's' => s_color,
