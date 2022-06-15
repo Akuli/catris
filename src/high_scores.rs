@@ -5,8 +5,10 @@ use std::io::ErrorKind;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
+use tokio::io::SeekFrom;
 
 #[derive(Debug, Clone)]
 pub struct GameResult {
@@ -24,11 +26,14 @@ fn mode_to_string(mode: Mode) -> &'static str {
     }
 }
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+// if format changes, please add auto-upgrading code and update version in Cargo.toml
+const VERSION: &str = env!("CARGO_PKG_VERSION_MAJOR");
 
 fn log(message: &str) {
     println!("[high scores] {}", message);
 }
+
+const HEADER_PREFIX: &'static str = "catris high scores file v";
 
 async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
     match OpenOptions::new()
@@ -39,12 +44,64 @@ async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
     {
         Ok(mut file) => {
             log(&format!("Creating {}", filename));
-            file.write_all(format!("catris high scores file v{}\n", VERSION).as_bytes())
+            file.write_all(format!("{}{}\n", HEADER_PREFIX, VERSION).as_bytes())
                 .await?;
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
+    }
+}
+
+async fn append_update_comment(filename: &str, old_version: &str) -> Result<(), io::Error> {
+    log(&format!(
+        "upgrading {} from v{} to v{}",
+        filename, old_version, VERSION
+    ));
+    let mut file = OpenOptions::new().append(true).open(filename).await?;
+    file.write_all(
+        format!("# --- upgraded from v{} to v{} ---\n", old_version, VERSION).as_bytes(),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn update_version_number(filename: &str) -> Result<(), io::Error> {
+    let mut file = OpenOptions::new().write(true).open(filename).await?;
+    file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))
+        .await?;
+    file.write_all(VERSION.as_bytes()).await?;
+    Ok(())
+}
+
+async fn upgrade_if_needed(filename: &str) -> Result<(), Box<dyn Error>> {
+    let first_line = {
+        let mut file = OpenOptions::new().read(true).open(filename).await?;
+        BufReader::new(&mut file)
+            .lines()
+            .next_line()
+            .await?
+            .ok_or("high scores file is empty")?
+    };
+
+    if let Some(old_version) = first_line.strip_prefix(HEADER_PREFIX) {
+        match old_version {
+            "1" | "2" | "3" if VERSION == "4" => {
+                // Previous formats are compatible with v4
+                append_update_comment(filename, old_version).await?;
+                update_version_number(filename).await?;
+            }
+            VERSION => {}
+            _ => {
+                Err(format!("unknown version: {}", old_version))?;
+            }
+        }
+        Ok(())
+    } else {
+        Err(format!(
+            "unexpected first line in high scores file: {:?}",
+            first_line
+        ))?
     }
 }
 
@@ -91,13 +148,6 @@ fn add_game_result_if_high_score(
     }
 }
 
-// Prevent multiple games writing their high scores at once.
-// File name stored here so I won't forget to use this
-lazy_static! {
-    static ref FILE_LOCK: tokio::sync::Mutex<&'static str> =
-        tokio::sync::Mutex::new("catris_high_scores.txt");
-}
-
 async fn read_matching_high_scores(
     filename: &str,
     mode: Mode,
@@ -105,17 +155,10 @@ async fn read_matching_high_scores(
 ) -> Result<Vec<GameResult>, Box<dyn Error>> {
     let mut file = OpenOptions::new().read(true).open(filename).await?;
     let mut lines = BufReader::new(&mut file).lines();
-
-    let first_line = lines.next_line().await?;
-    if first_line != Some(format!("catris high scores file v{}", VERSION)) {
-        return Err(Box::new(io::Error::new(
-            ErrorKind::Other,
-            format!(
-                "unexpected first line in high scores file: {:?}",
-                first_line
-            ),
-        )));
-    }
+    lines
+        .next_line()
+        .await?
+        .ok_or("high scores file is empty")?;
 
     let mut result = vec![];
 
@@ -162,11 +205,19 @@ async fn read_matching_high_scores(
     Ok(result)
 }
 
+// Prevent multiple games writing their high scores at once.
+// File name stored here so I won't forget to use this
+lazy_static! {
+    static ref FILE_LOCK: tokio::sync::Mutex<&'static str> =
+        tokio::sync::Mutex::new("catris_high_scores.txt");
+}
+
 pub async fn add_result_and_get_high_scores(
     result: GameResult,
 ) -> Result<(Vec<GameResult>, Option<usize>), Box<dyn Error>> {
     let filename_handle = FILE_LOCK.lock().await;
     ensure_file_exists(*filename_handle).await?;
+    upgrade_if_needed(*filename_handle).await?;
 
     let mut high_scores =
         read_matching_high_scores(*filename_handle, result.mode, result.players.len() >= 2).await?;

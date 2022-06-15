@@ -1,4 +1,3 @@
-high scores file bump ver num
 grep TODO
 grep FIXME
 motd
