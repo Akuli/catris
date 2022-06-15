@@ -376,22 +376,31 @@ pub async fn choose_game_mode(
         {
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
+
+            let mut selected_game_is_full = false;
             {
                 let idk_why_i_need_this = client.lobby.clone().unwrap();
                 let lobby = idk_why_i_need_this.lock().unwrap();
                 render_lobby_status(client, &mut *render_data, &lobby);
 
                 for (i, mode) in Mode::ALL_MODES.iter().enumerate() {
-                    // TODO: game full error
-                    menu.items[i] = Some(format!(
-                        "{} ({}/{} players)",
-                        mode.name(),
-                        lobby.get_player_count(*mode),
-                        mode.max_players()
-                    ));
+                    let count = lobby.get_player_count(*mode);
+                    let max = mode.max_players();
+                    menu.items[i] = Some(format!("{} ({}/{} players)", mode.name(), count, max));
+                    if i == menu.selected_index && count == max {
+                        selected_game_is_full = true;
+                    }
                 }
             }
+
             menu.render(&mut render_data.buffer, 13);
+            if selected_game_is_full {
+                render_data.buffer.add_centered_text_with_color(
+                    21,
+                    "This game is full.",
+                    Color::RED_FOREGROUND,
+                );
+            }
             render_data.changed.notify_one();
         }
 
