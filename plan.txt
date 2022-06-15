@@ -1,11 +1,7 @@
-check println calls
-initial "Now serving" print
-when leaving, print num connected clients
 high scores file bump ver num
 grep TODO
 grep FIXME
 motd
-check max players
 websocket support
 
 profiling

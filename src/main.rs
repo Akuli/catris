@@ -1,11 +1,15 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
+use crate::client::Client;
+use crate::client::ClientLogger;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
 use std::net::IpAddr;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -30,7 +34,7 @@ mod render;
 mod views;
 
 async fn handle_receiving(
-    mut client: client::Client,
+    mut client: Client,
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
@@ -86,7 +90,7 @@ async fn handle_sending(
 }
 
 fn log_ip_if_connects_a_lot(
-    logger: &client::ClientLogger,
+    logger: ClientLogger,
     ip: IpAddr,
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
 ) {
@@ -111,20 +115,43 @@ fn log_ip_if_connects_a_lot(
     }
 }
 
+struct DecrementClientCoundOnDrop {
+    client_counter: Arc<AtomicU64>,
+    logger: ClientLogger,
+}
+impl Drop for DecrementClientCoundOnDrop {
+    fn drop(&mut self) {
+        let old_value = self.client_counter.fetch_sub(1, Ordering::SeqCst);
+        self.logger.log(&format!(
+            "There are now {} connected clients",
+            old_value - 1
+        ));
+    }
+}
+
 pub async fn handle_connection(
     socket: TcpStream,
     ip: IpAddr,
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
+    client_counter: Arc<AtomicU64>,
 ) {
     // TODO: max concurrent connections from same ip?
     let (reader, mut writer) = socket.into_split();
 
-    let client = client::Client::new(reader);
+    let client = Client::new(reader);
     let logger = client.logger();
     logger.log("New connection");
-    log_ip_if_connects_a_lot(&logger, ip, recent_ips);
+
+    // not sure what ordering to use, so choosing the one with most niceness guarantees
+    client_counter.fetch_add(1, Ordering::SeqCst);
+    let _decrementer = DecrementClientCoundOnDrop {
+        client_counter,
+        logger,
+    };
+
+    log_ip_if_connects_a_lot(logger, ip, recent_ips);
     let render_data = client.render_data.clone();
 
     let result: Result<(), io::Error> = tokio::select! {
@@ -147,11 +174,13 @@ pub async fn handle_connection(
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
-
     let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
     let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
+    let client_counter = Arc::new(AtomicU64::new(0));
+
+    let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
+    println!("Listening on port 12345...");
 
     loop {
         let (socket, sockaddr) = listener.accept().await.unwrap();
@@ -162,6 +191,7 @@ async fn main() {
             lobbies.clone(),
             used_names.clone(),
             recent_ips.clone(),
+            client_counter.clone(),
         ));
     }
 }

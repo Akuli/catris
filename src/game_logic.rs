@@ -852,10 +852,7 @@ impl Game {
             }
             KeyPress::Character('F') | KeyPress::Character('f') => self.flip_view(),
             KeyPress::Character('H') | KeyPress::Character('h') => self.hold_block(player_idx),
-            _ => {
-                println!("Unhandled Key Press!! {:?}", key);
-                false
-            }
+            _ => false,
         };
 
         self.players[player_idx].borrow_mut().fast_down = false;

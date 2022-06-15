@@ -20,6 +20,7 @@ use tokio::sync::Notify;
 use tokio::time::timeout;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
+#[derive(Copy, Clone)]
 pub struct ClientLogger {
     pub client_id: u64,
 }
