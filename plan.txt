@@ -1,3 +1,4 @@
+error message if game full
 check println calls
 initial "Now serving" print
 when leaving, print num connected clients

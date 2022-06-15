@@ -105,7 +105,7 @@ impl Lobby {
         self.mark_changed();
     }
 
-    fn join_game(&mut self, client_id: u64, mode: Mode) -> Arc<GameWrapper> {
+    fn join_game(&mut self, client_id: u64, mode: Mode) -> Option<Arc<GameWrapper>> {
         let client_info = self
             .clients
             .iter()
@@ -113,12 +113,15 @@ impl Lobby {
             .unwrap();
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
-            wrapper.game.lock().unwrap().add_player(client_info);
+            if !wrapper.game.lock().unwrap().add_player(client_info) {
+                return None;
+            }
             wrapper.mark_changed();
             wrapper.clone()
         } else {
             let mut game = Game::new(mode);
-            game.add_player(&client_info);
+            let ok = game.add_player(&client_info);
+            assert!(ok);
             let wrapper = Arc::new(GameWrapper::new(game));
             game_wrapper::start_tasks(wrapper.clone());
             self.game_wrappers.insert(mode, wrapper.clone());
@@ -126,7 +129,7 @@ impl Lobby {
         };
 
         self.mark_changed();
-        wrapper
+        Some(wrapper)
     }
 
     pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
@@ -170,16 +173,18 @@ pub fn join_game_in_a_lobby(
     lobby: Arc<Mutex<Lobby>>,
     client_id: u64,
     mode: Mode,
-) -> (Arc<GameWrapper>, PlayingToken) {
-    let game_wrapper = lobby.lock().unwrap().join_game(client_id, mode);
-    (
-        game_wrapper,
-        PlayingToken {
-            client_id,
-            mode,
-            lobby,
-        },
-    )
+) -> Option<(Arc<GameWrapper>, PlayingToken)> {
+    let game_wrapper_if_not_full = lobby.lock().unwrap().join_game(client_id, mode);
+    game_wrapper_if_not_full.map(|game_wrapper| {
+        (
+            game_wrapper,
+            PlayingToken {
+                client_id,
+                mode,
+                lobby,
+            },
+        )
+    })
 }
 
 pub type Lobbies = Arc<Mutex<WeakValueHashMap<String, Weak<Mutex<Lobby>>>>>;

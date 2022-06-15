@@ -538,8 +538,16 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         selected_index: 0,
     };
 
-    let (game_wrapper, auto_leave_token) =
-        join_game_in_a_lobby(client.lobby.as_ref().unwrap().clone(), client.id, mode);
+    let (game_wrapper, auto_leave_token) = {
+        if let Some(result) =
+            join_game_in_a_lobby(client.lobby.as_ref().unwrap().clone(), client.id, mode)
+        {
+            result
+        } else {
+            // game full
+            return Ok(());
+        }
+    };
 
     // TODO: should these be .subscribe()? grep for subscribe to find another place that needs it
     let mut receiver = game_wrapper.status_receiver.clone();

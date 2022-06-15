@@ -275,7 +275,11 @@ impl Game {
         }
     }
 
-    pub fn add_player(&mut self, client_info: &ClientInfo) {
+    pub fn add_player(&mut self, client_info: &ClientInfo) -> bool {
+        if self.players.len() == self.mode.max_players() {
+            return false;
+        }
+
         let player_idx = self.players.len();
         let down_direction = match self.mode {
             Mode::Traditional | Mode::Bottle => (0, 1),
@@ -344,6 +348,7 @@ impl Game {
         }
 
         self.new_block(player_idx);
+        true
     }
 
     pub fn remove_player_if_exists(&mut self, client_id: u64) {
