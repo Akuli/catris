@@ -221,6 +221,19 @@ impl SquareContent {
         }
     }
 
+    pub fn get_trace_color(&self) -> Color {
+        match self {
+            Self::Bomb { timer, .. } => {
+                if *timer > 3 {
+                    Color::YELLOW_FOREGROUND
+                } else {
+                    Color::RED_FOREGROUND
+                }
+            }
+            _ => Color::DEFAULT,
+        }
+    }
+
     // relative coords needed only for moving drill blocks
     pub fn render(
         &self,
@@ -245,11 +258,7 @@ impl SquareContent {
                 buffer.set_char_with_color(x + 1, y, char2, color2);
             }
             Self::Bomb { timer, .. } => {
-                let color = if *timer > 3 {
-                    Color::YELLOW_FOREGROUND
-                } else {
-                    Color::RED_FOREGROUND
-                };
+                let color = self.get_trace_color();
                 buffer.add_text_with_color(x, y, &format!("{:<2}", *timer), color);
             }
             Self::MovingDrill { animation_counter } => {

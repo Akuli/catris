@@ -297,6 +297,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     let mut trace_points = game.predict_landing_place(player_idx);
 
     // Don't trace on top of current player's moving block or flashing
+    let mut trace_color = Color::DEFAULT;
     {
         let player = game.players[player_idx].borrow();
         match &player.block_or_timer {
@@ -304,6 +305,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 for point in block.get_coords() {
                     trace_points.retain(|p| *p != player.player_to_world(point));
                 }
+                trace_color = block.square_content.get_trace_color();
             }
             _ => {}
         }
@@ -358,7 +360,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 && buffer.get_char(buffer_x, buffer_y) == ' '
                 && buffer.get_char(buffer_x + 1, buffer_y) == ' '
             {
-                buffer.add_text_without_changing_color(buffer_x, buffer_y, "::");
+                buffer.add_text_with_foreground_color(buffer_x, buffer_y, "::", trace_color.fg);
             }
         }
     }

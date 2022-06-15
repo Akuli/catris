@@ -51,9 +51,6 @@ impl RenderBuffer {
     pub fn set_char(&mut self, x: usize, y: usize, ch: char) {
         self.set_char_with_color(x, y, ch, ansi::Color::DEFAULT);
     }
-    pub fn set_char_without_changing_color(&mut self, x: usize, y: usize, ch: char) {
-        self.chars[y][x] = ch;
-    }
     pub fn set_char_with_color(&mut self, x: usize, y: usize, ch: char, colors: ansi::Color) {
         self.chars[y][x] = ch;
         self.colors[y][x] = colors;
@@ -74,15 +71,24 @@ impl RenderBuffer {
             self.set_char_with_color(x, y, ch, colors);
             x += 1;
         }
-        return x;
+        x
     }
-    pub fn add_text_without_changing_color(&mut self, x: usize, y: usize, text: &str) -> usize {
+
+    // does not change background colors
+    pub fn add_text_with_foreground_color(
+        &mut self,
+        x: usize,
+        y: usize,
+        text: &str,
+        fg: u8,
+    ) -> usize {
         let mut x = x;
         for ch in text.chars() {
-            self.set_char_without_changing_color(x, y, ch);
+            self.colors[y][x].fg = fg;
+            self.chars[y][x] = ch;
             x += 1;
         }
-        return x;
+        x
     }
 
     // returns start and end of range of x coordinates where text ended up
