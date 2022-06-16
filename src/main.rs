@@ -200,20 +200,80 @@ async fn main() {
 
 use tokio_tungstenite::tungstenite::Message;
 
-use std::io::Error;
+use std::error::Error;
 use futures_util::SinkExt;
 use futures_util::{future, StreamExt, TryStreamExt};
+use futures_util::stream::SplitStream;
+use tokio_tungstenite::WebSocketStream;
+use tokio::sync::mpsc;
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
-    let try_socket = TcpListener::bind("127.0.0.1:54321").await;
-    let listener = try_socket.expect("Failed to bind");
+async fn main() -> Result<(), io::Error> {
+    let listener = TcpListener::bind("127.0.0.1:54321").await?;
     println!("Listening");
 
     while let Ok((stream, _)) = listener.accept().await {
         tokio::spawn(accept_connection(stream));
     }
 
+    Ok(())
+}
+
+enum Receiver {
+    WebSocket{stream: SplitStream<WebSocketStream<TcpStream>>, pings: mpsc::Sender<Vec<u8>>},
+    RawTcp{stream: TcpStream},
+}
+impl Receiver {
+    async fn recv(&mut self, target: &mut [u8]) -> Result<usize, Box<dyn Error>> {
+        match self {
+            Self::WebSocket{stream, pings} =>{
+                loop {
+                    let item = stream.next().await;
+                    if item.is_none() {
+                        return Ok(0);  // connection closed
+                    }
+                    match item.unwrap()? {
+                        Message::Binary(bytes) => {
+                            // TODO: what if client send 1GB message of bytes at once?
+                            // would be already fucked up, because Vec<u8> of 1GB was allocated
+                            if bytes.len() > target.len() {
+                                Err(format!("too long websocket message: {} > {}", bytes.len(), target.len()))?;
+                            }
+                            for i in 0..bytes.len() {
+                                target[i] = bytes[i];
+                            }
+                            return Ok(bytes.len());
+                        }
+                        Message::Close(_) => {
+                            return Ok(0);
+                        }
+                        Message::Text(bytes) => {
+                            // everything should be done with Binary messages
+                            Err("unexpected websocket text data received")?
+                        }
+                        Message::Ping(bytes) => {
+                            // TODO: rate limit
+                            pings.send(bytes).await?;
+                        }
+                        Message::Pong(_) => {
+                            // we never send ping, so client should never send pong
+                            Err("unexpected websocket pong")?
+                        }
+                        Message::Frame(_) => {
+                            panic!("this is impossible according to docs");
+                        }
+                    }
+                }
+            }
+            Self::RawTcp{..} => unimplemented!(),
+        }
+    }
+}
+
+async fn foo(mut receiver: Receiver) -> Result<(), Box<dyn Error>> {
+    let mut buf = [0 as u8; 100];
+    let n = receiver.recv(&mut buf).await?;
+    println!("{} {:?}", n, buf);
     Ok(())
 }
 
@@ -227,7 +287,9 @@ async fn accept_connection(stream: TcpStream) {
 
     println!("New WebSocket connection: {}", addr);
 
-    let (mut write, mut read) = ws_stream.split();
-    _ = write.send(Message::binary(vec![b'h',b'e',b'l',b'l',b'o'])).await;
-    println!("{:?}", read.next().await);
+    let (mut ws_writer, mut ws_reader) = ws_stream.split();
+    let (ping_sender, ping_receiver) = mpsc::channel(5);
+    let mut receiver = Receiver::WebSocket{stream: ws_reader, pings: ping_sender};
+    _ = ws_writer.send(Message::binary(vec![b'h',b'e',b'l',b'l',b'o'])).await;
+    _ = foo(receiver).await;
 }
