@@ -14,6 +14,7 @@ use crate::render;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::io;
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -294,7 +295,7 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
                 "New lobby" => Ok(true),
                 "Join an existing lobby" => Ok(false),
                 "Quit" => Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
+                    ErrorKind::ConnectionAborted,
                     "user selected \"Quit\" in menu",
                 )),
                 _ => panic!(),
@@ -416,7 +417,7 @@ pub async fn choose_game_mode(
                             return match menu.selected_text() {
                                 "Gameplay tips" => Ok(None),
                                 "Quit" => Err(io::Error::new(
-                                    io::ErrorKind::ConnectionAborted,
+                                    ErrorKind::ConnectionAborted,
                                     "user selected \"Quit\" in menu",
                                 )),
                                 _ => Ok(Some(Mode::ALL_MODES[menu.selected_index])),

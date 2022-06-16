@@ -3,6 +3,9 @@ extern crate lazy_static;
 
 use crate::client::Client;
 use crate::client::ClientLogger;
+use crate::connection::initialize_connection;
+use crate::connection::Receiver;
+use crate::connection::Sender;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -15,7 +18,6 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::AsyncWriteExt;
-use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -24,6 +26,7 @@ use weak_table::WeakValueHashMap;
 mod ansi;
 mod blocks;
 mod client;
+mod connection;
 mod game_logic;
 mod game_wrapper;
 mod high_scores;
@@ -32,7 +35,6 @@ mod lobby;
 mod player;
 mod render;
 mod views;
-/*
 
 async fn handle_receiving(
     mut client: Client,
@@ -62,7 +64,7 @@ async fn handle_receiving(
 }
 
 async fn handle_sending(
-    writer: &mut OwnedWriteHalf,
+    sender: &mut Sender,
     render_data: Arc<Mutex<render::RenderData>>,
 ) -> Result<(), io::Error> {
     // pseudo optimization: double buffering to prevent copying between buffers
@@ -81,7 +83,7 @@ async fn handle_sending(
         if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
             let to_send =
                 buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
-            writer.write_all(to_send.as_bytes()).await?;
+            sender.send_message(to_send.as_bytes()).await?;
         }
 
         next_idx = 1 - next_idx;
@@ -130,6 +132,8 @@ impl Drop for DecrementClientCoundOnDrop {
     }
 }
 
+static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
 pub async fn handle_connection(
     socket: TcpStream,
     ip: IpAddr,
@@ -137,40 +141,55 @@ pub async fn handle_connection(
     used_names: Arc<Mutex<HashSet<String>>>,
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
     client_counter: Arc<AtomicU64>,
+    is_websocket: bool,
 ) {
-    // TODO: max concurrent connections from same ip?
-    let (reader, mut writer) = socket.into_split();
-
-    let client = Client::new(reader);
-    let logger = client.logger();
-    logger.log("New connection");
-
+    // https://stackoverflow.com/a/32936288
     // not sure what ordering to use, so choosing the one with most niceness guarantees
+    let client_id = CLIENT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+    let logger = ClientLogger { client_id };
+    if is_websocket {
+        logger.log("New connection");
+    } else {
+        logger.log("New raw TCP connection");
+    }
+
+    // client counter decrements when client quits, id counter does not
+    // TODO: is fetch_add() really needed, we only need to add not fetch?
     client_counter.fetch_add(1, Ordering::SeqCst);
     let _decrementer = DecrementClientCoundOnDrop {
         client_counter,
         logger,
     };
 
+    // TODO: max concurrent connections from same ip?
     log_ip_if_connects_a_lot(logger, ip, recent_ips);
-    let render_data = client.render_data.clone();
 
-    let result: Result<(), io::Error> = tokio::select! {
-        res = handle_receiving(client, lobbies, used_names) => res,
-        res = handle_sending(&mut writer, render_data) => res,
+    let error: io::Error = match initialize_connection(socket, is_websocket).await {
+        Ok((mut sender, mut receiver, ping_receiver)) => {
+            let client = Client::new(client_id, receiver);
+            let render_data = client.render_data.clone();
+            let error = tokio::select! {
+                res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
+                res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
+            };
+
+            // Try to leave the terminal in a sane state
+            let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
+                + &ansi::move_cursor_horizontally(0)
+                + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
+            _ = timeout(
+                Duration::from_millis(500),
+                sender.send_message(cleanup_ansi_codes.as_bytes()),
+            )
+            .await;
+
+            error
+        }
+        Err(e) => e,
     };
 
-    // Try to leave the terminal in a sane state
-    let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
-        + &ansi::move_cursor_horizontally(0)
-        + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
-    _ = timeout(
-        Duration::from_millis(500),
-        writer.write_all(cleanup_ansi_codes.as_bytes()),
-    )
-    .await;
-
-    logger.log(&format!("Disconnected: {}", result.unwrap_err()));
+    logger.log(&format!("Disconnected: {}", error));
 }
 
 #[tokio::main]
@@ -180,23 +199,42 @@ async fn main() {
     let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
     let client_counter = Arc::new(AtomicU64::new(0));
 
-    let listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
-    println!("Listening on port 12345...");
+    let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
+    println!("Listening for raw TCP connections on port 12345...");
+
+    let ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
+    println!("Listening for websocket connections on port 54321...");
 
     loop {
-        let (socket, sockaddr) = listener.accept().await.unwrap();
-        let lobbies = lobbies.clone();
-        tokio::spawn(handle_connection(
-            socket,
-            sockaddr.ip(),
-            lobbies.clone(),
-            used_names.clone(),
-            recent_ips.clone(),
-            client_counter.clone(),
-        ));
+        tokio::select! {
+            result = raw_listener.accept() => {
+                let (socket, sockaddr) = result.unwrap();
+                tokio::spawn(handle_connection(
+                    socket,
+                    sockaddr.ip(),
+                    lobbies.clone(),
+                    used_names.clone(),
+                    recent_ips.clone(),
+                    client_counter.clone(),
+                    false,
+                ));
+            }
+            result = ws_listener.accept() => {
+                let (socket, sockaddr) = result.unwrap();
+                tokio::spawn(handle_connection(
+                    socket,
+                    sockaddr.ip(),
+                    lobbies.clone(),
+                    used_names.clone(),
+                    recent_ips.clone(),
+                    client_counter.clone(),
+                    true,
+                ));
+            }
+        }
     }
 }
-*/
+/*
 
 use tokio_tungstenite::tungstenite::Message;
 
@@ -219,56 +257,6 @@ async fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-enum Receiver {
-    WebSocket{stream: SplitStream<WebSocketStream<TcpStream>>, pings: mpsc::Sender<Vec<u8>>},
-    RawTcp{stream: TcpStream},
-}
-impl Receiver {
-    async fn recv(&mut self, target: &mut [u8]) -> Result<usize, Box<dyn Error>> {
-        match self {
-            Self::WebSocket{stream, pings} =>{
-                loop {
-                    let item = stream.next().await;
-                    if item.is_none() {
-                        return Ok(0);  // connection closed
-                    }
-                    match item.unwrap()? {
-                        Message::Binary(bytes) => {
-                            // TODO: what if client send 1GB message of bytes at once?
-                            // would be already fucked up, because Vec<u8> of 1GB was allocated
-                            if bytes.len() > target.len() {
-                                Err(format!("too long websocket message: {} > {}", bytes.len(), target.len()))?;
-                            }
-                            for i in 0..bytes.len() {
-                                target[i] = bytes[i];
-                            }
-                            return Ok(bytes.len());
-                        }
-                        Message::Close(_) => {
-                            return Ok(0);
-                        }
-                        Message::Text(bytes) => {
-                            // everything should be done with Binary messages
-                            Err("unexpected websocket text data received")?
-                        }
-                        Message::Ping(bytes) => {
-                            // TODO: rate limit
-                            pings.send(bytes).await?;
-                        }
-                        Message::Pong(_) => {
-                            // we never send ping, so client should never send pong
-                            Err("unexpected websocket pong")?
-                        }
-                        Message::Frame(_) => {
-                            panic!("this is impossible according to docs");
-                        }
-                    }
-                }
-            }
-            Self::RawTcp{..} => unimplemented!(),
-        }
-    }
-}
 
 async fn foo(mut receiver: Receiver) -> Result<(), Box<dyn Error>> {
     let mut buf = [0 as u8; 100];
@@ -289,7 +277,9 @@ async fn accept_connection(stream: TcpStream) {
 
     let (mut ws_writer, mut ws_reader) = ws_stream.split();
     let (ping_sender, ping_receiver) = mpsc::channel(5);
+    let x: u8 = ws_writer;
     let mut receiver = Receiver::WebSocket{stream: ws_reader, pings: ping_sender};
     _ = ws_writer.send(Message::binary(vec![b'h',b'e',b'l',b'l',b'o'])).await;
     _ = foo(receiver).await;
 }
+*/

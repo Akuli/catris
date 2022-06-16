@@ -1,5 +1,6 @@
 use crate::ansi;
 use crate::ansi::KeyPress;
+use crate::connection::Receiver;
 use crate::lobby;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;
@@ -8,14 +9,11 @@ use crate::render::RenderData;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::io::AsyncReadExt;
-use tokio::net::tcp::OwnedReadHalf;
 use tokio::sync::Notify;
 use tokio::time::timeout;
 
@@ -36,20 +34,16 @@ pub struct Client {
     recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
     recv_buffer_size: usize,
     key_press_times: VecDeque<Instant>,
-    reader: OwnedReadHalf,
+    receiver: Receiver,
     pub lobby: Option<Arc<Mutex<Lobby>>>,
     pub lobby_id_hidden: bool,
     pub prefer_rotating_counter_clockwise: bool,
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
-
-static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
-
 impl Client {
-    pub fn new(reader: OwnedReadHalf) -> Client {
+    pub fn new(id: u64, receiver: Receiver) -> Client {
         Client {
-            // https://stackoverflow.com/a/32936288
-            id: ID_COUNTER.fetch_add(1, Ordering::SeqCst),
+            id,
             render_data: Arc::new(Mutex::new(RenderData {
                 buffer: RenderBuffer::new(),
                 cursor_pos: None,
@@ -58,7 +52,7 @@ impl Client {
             recv_buffer: [0 as u8; 100],
             recv_buffer_size: 0,
             key_press_times: VecDeque::new(),
-            reader,
+            receiver,
             lobby: None,
             lobby_id_hidden: false,
             prefer_rotating_counter_clockwise: false,
@@ -99,7 +93,7 @@ impl Client {
         }
         if self.key_press_times.len() > 100 {
             return Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
+                ErrorKind::ConnectionAborted,
                 "received more than 100 key presses / sec",
             ));
         }
@@ -111,7 +105,7 @@ impl Client {
             match ansi::parse_key_press(&self.recv_buffer[..self.recv_buffer_size]) {
                 Some((KeyPress::Quit, _)) => {
                     return Err(io::Error::new(
-                        io::ErrorKind::ConnectionAborted,
+                        ErrorKind::ConnectionAborted,
                         "received quit key press",
                     ));
                 }
@@ -125,12 +119,15 @@ impl Client {
                 }
                 None => {
                     // Receive more data
-                    let read_target = &mut self.recv_buffer[self.recv_buffer_size..];
-                    let n = timeout(Duration::from_secs(10 * 60), self.reader.read(read_target))
-                        .await??;
+                    let dest = &mut self.recv_buffer[self.recv_buffer_size..];
+                    let n = timeout(
+                        Duration::from_secs(10 * 60),
+                        self.receiver.receive_into(dest),
+                    )
+                    .await??;
                     if n == 0 {
                         return Err(io::Error::new(
-                            io::ErrorKind::ConnectionAborted,
+                            ErrorKind::ConnectionAborted,
                             "connection closed",
                         ));
                     }
