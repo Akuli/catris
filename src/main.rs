@@ -1,4 +1,4 @@
-/*#[macro_use(lazy_static)]
+#[macro_use(lazy_static)]
 extern crate lazy_static;
 
 use crate::client::Client;
@@ -32,6 +32,7 @@ mod lobby;
 mod player;
 mod render;
 mod views;
+/*
 
 async fn handle_receiving(
     mut client: Client,
@@ -197,22 +198,17 @@ async fn main() {
 }
 */
 
+use tokio_tungstenite::tungstenite::Message;
 
-
-use std::{env, io::Error};
-
+use std::io::Error;
+use futures_util::SinkExt;
 use futures_util::{future, StreamExt, TryStreamExt};
-use log::info;
-use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let addr = env::args().nth(1).unwrap_or_else(|| "127.0.0.1:54321".to_string());
-
-    // Create the event loop and TCP listener we'll accept connections on.
-    let try_socket = TcpListener::bind(&addr).await;
+    let try_socket = TcpListener::bind("127.0.0.1:54321").await;
     let listener = try_socket.expect("Failed to bind");
-    info!("Listening on: {}", addr);
+    println!("Listening");
 
     while let Ok((stream, _)) = listener.accept().await {
         tokio::spawn(accept_connection(stream));
@@ -222,19 +218,16 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn accept_connection(stream: TcpStream) {
-    let addr = stream.peer_addr().expect("connected streams should have a peer address");
-    info!("Peer address: {}", addr);
+    let addr = stream.peer_addr().unwrap();
+    println!("Peer address: {}", addr);
 
-    let ws_stream = tokio_tungstenite::accept_async(stream)
+    let mut ws_stream = tokio_tungstenite::accept_async(stream)
         .await
         .expect("Error during the websocket handshake occurred");
 
-    info!("New WebSocket connection: {}", addr);
+    println!("New WebSocket connection: {}", addr);
 
-    let (write, read) = ws_stream.split();
-    // We should not forward messages other than text or binary.
-    read.try_filter(|msg| future::ready(msg.is_text() || msg.is_binary()))
-        .forward(write)
-        .await
-        .expect("Failed to forward messages")
+    let (mut write, mut read) = ws_stream.split();
+    _ = write.send(Message::binary(vec![b'h',b'e',b'l',b'l',b'o'])).await;
+    println!("{:?}", read.next().await);
 }
