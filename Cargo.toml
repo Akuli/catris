@@ -10,3 +10,7 @@ tokio = { version = "1", features = ["full"] }
 weak-table = "*"
 rand = "*"
 lazy_static = "*"
+tokio-tungstenite = "*"
+log = "0.4"  # TODO: remove
+# futures-util copied from tokio-tungstenite's Cargo.toml
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
