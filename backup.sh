@@ -38,5 +38,4 @@ if [ -e $filename ]; then
     echo "Error: refusing to overwrite $filename" >&2
     exit 1
 fi
-#scp catris:/home/catris/catris_high_scores.txt $filename
-echo hi > $filename
+scp catris:/home/catris/catris_high_scores.txt $filename
