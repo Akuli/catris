@@ -4,7 +4,6 @@ extern crate lazy_static;
 use crate::client::Client;
 use crate::client::ClientLogger;
 use crate::connection::initialize_connection;
-use crate::connection::Receiver;
 use crate::connection::Sender;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
@@ -17,9 +16,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
@@ -66,29 +65,41 @@ async fn handle_receiving(
 async fn handle_sending(
     sender: &mut Sender,
     render_data: Arc<Mutex<render::RenderData>>,
+    mut ping_receiver: mpsc::Receiver<Vec<u8>>,
 ) -> Result<(), io::Error> {
     // pseudo optimization: double buffering to prevent copying between buffers
     let mut buffers = [RenderBuffer::new(), RenderBuffer::new()];
     let mut next_idx = 0;
+    let change_notify = render_data.lock().unwrap().changed.clone();
+    let mut received_end_of_pings = false;
 
     loop {
-        let cursor_pos;
-        {
-            let render_data = render_data.lock().unwrap();
-            render_data.buffer.copy_into(&mut buffers[next_idx]);
-            cursor_pos = render_data.cursor_pos;
-        }
+        tokio::select! {
+            _ = change_notify.notified() => {
+                let cursor_pos;
+                {
+                    let render_data = render_data.lock().unwrap();
+                    render_data.buffer.copy_into(&mut buffers[next_idx]);
+                    cursor_pos = render_data.cursor_pos;
+                }
 
-        // In the beginning of a connection, the buffer isn't ready yet
-        if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
-            let to_send =
-                buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
-            sender.send_message(to_send.as_bytes()).await?;
-        }
+                // In the beginning of a connection, the buffer isn't ready yet
+                if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
+                    let to_send =
+                        buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
+                    sender.send_message(to_send.as_bytes()).await?;
+                }
 
-        next_idx = 1 - next_idx;
-        let change_notify = render_data.lock().unwrap().changed.clone();
-        change_notify.notified().await;
+                next_idx = 1 - next_idx;
+            }
+            ping_data = ping_receiver.recv(), if !received_end_of_pings => {
+                if let Some(bytes) = ping_data {
+                    sender.send_websocket_ping(bytes).await?;
+                } else {
+                    received_end_of_pings = true;
+                }
+            }
+        }
     }
 }
 
@@ -166,12 +177,12 @@ pub async fn handle_connection(
     log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
-        Ok((mut sender, mut receiver, ping_receiver)) => {
+        Ok((mut sender, receiver, ping_receiver)) => {
             let client = Client::new(client_id, receiver);
             let render_data = client.render_data.clone();
             let error = tokio::select! {
                 res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
-                res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
+                res = handle_sending(&mut sender, render_data, ping_receiver) => res.unwrap_err(),
             };
 
             // Try to leave the terminal in a sane state

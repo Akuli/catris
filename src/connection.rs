@@ -2,7 +2,6 @@ use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
-use futures_util::TryStreamExt;
 use std::io;
 use std::io::ErrorKind;
 use tokio::io::AsyncReadExt;
@@ -137,10 +136,15 @@ pub async fn initialize_connection(
     let receiver;
 
     if is_websocket {
-        let mut ws = tokio_tungstenite::accept_async(socket).await.map_err(convert_error)?;
+        let ws = tokio_tungstenite::accept_async(socket)
+            .await
+            .map_err(convert_error)?;
         let (ws_writer, ws_reader) = ws.split();
-        sender = Sender::WebSocket{ws_writer};
-        receiver = Receiver::WebSocket{ws_reader,pings:ws_ping_sender};
+        sender = Sender::WebSocket { ws_writer };
+        receiver = Receiver::WebSocket {
+            ws_reader,
+            pings: ws_ping_sender,
+        };
     } else {
         let (read_half, write_half) = socket.into_split();
         sender = Sender::RawTcp { write_half };
