@@ -1,8 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const COLORS = {
     // taken from mate-terminal with a color picker program
-    '0': {fg: '#FFFFFF', bg: '#000000'},  // reset all colors
-
     '30': {fg: '#555753'},
     '31': {fg: '#EF2929'},
     '32': {fg: '#8AE234'},
@@ -64,10 +62,13 @@ document.addEventListener("DOMContentLoaded", () => {
       this._cursorX = 0;  // after initial resize: 0 <= _cursorX < width
       this._cursorY = 0;  // after initial resize: 0 <= _cursorY < height
       this._cursorIsShowing = true;
-      this.fgColor = COLORS['0'].fg;
-      this.bgColor = COLORS['0'].bg;
-
+      this._resetColors();
       this._resize(80, 24);
+    }
+
+    _resetColors() {
+      this.fgColor = '#FFFFFF';
+      this.bgColor = '#000000';
     }
 
     _fixCursorPos() {
@@ -207,11 +208,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const colorInfo = COLORS[ansiCode.slice(4, -1)];
         if (colorInfo.fg) this.fgColor = colorInfo.fg;
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
+      } else if (ansiCode == "\x1b[0m") {
+        this._resetColors();
       } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
         const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
         this._resize(width, height);
       } else {
-        console.warn("Unknown ANSI escape sequence: " + ansiCode);
+        console.warn(`Unknown ANSI escape sequence: '${ansiCode}'`);
       }
     }
 
