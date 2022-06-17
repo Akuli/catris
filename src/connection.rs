@@ -1,15 +1,21 @@
+use crate::ansi::parse_key_press;
+use crate::ansi::KeyPress;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
+use std::collections::VecDeque;
 use std::io;
 use std::io::ErrorKind;
+use std::time::Duration;
+use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio::time::timeout;
 use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
@@ -20,45 +26,82 @@ fn convert_error(e: tungstenite::Error) -> io::Error {
     io::Error::new(ErrorKind::Other, format!("websocket error: {:?}", e))
 }
 
+fn connection_closed_error() -> io::Error {
+    io::Error::new(ErrorKind::ConnectionAborted, "connection closed")
+}
+
+// TODO: replace with a method?
+fn shift_buffer(buffer: &mut [u8], buffer_size: &mut usize, n: usize) {
+    for i in n..*buffer_size {
+        buffer[i - n] = buffer[i];
+    }
+    *buffer_size -= n;
+}
+
+fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<(), io::Error> {
+    key_press_times.push_back(Instant::now());
+    while key_press_times.len() != 0 && key_press_times[0].elapsed().as_secs_f32() > 1.0 {
+        key_press_times.pop_front();
+    }
+    if key_press_times.len() > 100 {
+        return Err(io::Error::new(
+            ErrorKind::ConnectionAborted,
+            "received more than 100 key presses / sec",
+        ));
+    }
+    Ok(())
+}
+
 pub enum Receiver {
     WebSocket {
         ws_reader: SplitStream<WebSocketStream<TcpStream>>,
         pings: mpsc::Sender<Vec<u8>>,
+        key_press_times: VecDeque<Instant>,
     },
     RawTcp {
         read_half: OwnedReadHalf,
+        buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
+        buffer_size: usize,
+        key_press_times: VecDeque<Instant>,
     },
 }
 impl Receiver {
-    pub async fn receive_into(&mut self, target: &mut [u8]) -> Result<usize, io::Error> {
+    pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
         match self {
-            Self::WebSocket { ws_reader, pings } => {
+            Self::WebSocket {
+                ws_reader,
+                pings,
+                key_press_times,
+            } => {
                 loop {
                     let item = ws_reader.next().await;
                     if item.is_none() {
-                        return Ok(0); // connection closed
+                        return Err(connection_closed_error());
                     }
+
+                    // Receiving anything from the websocket counts as a key press
+                    check_key_press_frequency(key_press_times)?;
+
                     match item.unwrap().map_err(convert_error)? {
                         Message::Binary(bytes) => {
                             // TODO: what if client send 1GB message of bytes at once?
                             // would be already fucked up, because Vec<u8> of 1GB was allocated
-                            if bytes.len() > target.len() {
-                                return Err(io::Error::new(
-                                    ErrorKind::Other,
-                                    format!(
-                                        "too long websocket message: {} > {}",
-                                        bytes.len(),
-                                        target.len()
-                                    ),
-                                ));
+                            match parse_key_press(&bytes) {
+                                // Websocket never splits a key press to multiple messages.
+                                // Also can't have multiple key presses inside the same message.
+                                Some((key, n)) if n == bytes.len() => {
+                                    return Ok(key);
+                                }
+                                Some(_) | None => {
+                                    return Err(io::Error::new(
+                                        ErrorKind::Other,
+                                        "received bad key press from websocket",
+                                    ))
+                                }
                             }
-                            for i in 0..bytes.len() {
-                                target[i] = bytes[i];
-                            }
-                            return Ok(bytes.len());
                         }
                         Message::Close(_) => {
-                            return Ok(0);
+                            return Err(connection_closed_error());
                         }
                         Message::Text(_) => {
                             // web ui uses binary messages for everything
@@ -68,14 +111,13 @@ impl Receiver {
                             ));
                         }
                         Message::Ping(bytes) => {
-                            // TODO: rate limit
-                            pings
-                                .send(bytes)
-                                .await
-                                .map_err(|_| io::Error::new(
-                                    ErrorKind::Other,
-                                    "can't respond to websocket ping because sending task has stopped"
-                                ))?;
+                            pings.send(bytes).await.map_err(|_| {
+                                io::Error::new(
+                                // hopefully this error never actually happens
+                                ErrorKind::Other,
+                                "can't respond to websocket ping because sending task has stopped"
+                            )
+                            })?;
                         }
                         Message::Pong(_) => {
                             // we never send ping, so client should never send pong
@@ -90,7 +132,33 @@ impl Receiver {
                     }
                 }
             }
-            Self::RawTcp { read_half } => read_half.read(target).await,
+
+            Self::RawTcp {
+                read_half,
+                buffer,
+                buffer_size,
+                key_press_times,
+            } => {
+                loop {
+                    match parse_key_press(&buffer[..*buffer_size]) {
+                        Some((key, bytes_used)) => {
+                            check_key_press_frequency(key_press_times)?;
+                            shift_buffer(buffer, buffer_size, bytes_used);
+                            return Ok(key);
+                        }
+                        None => {
+                            // Receive more data
+                            let dest = &mut buffer[*buffer_size..];
+                            let n = timeout(Duration::from_secs(10 * 60), read_half.read(dest))
+                                .await??;
+                            if n == 0 {
+                                return Err(connection_closed_error());
+                            }
+                            *buffer_size += n;
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -144,11 +212,17 @@ pub async fn initialize_connection(
         receiver = Receiver::WebSocket {
             ws_reader,
             pings: ws_ping_sender,
+            key_press_times: VecDeque::new(),
         };
     } else {
         let (read_half, write_half) = socket.into_split();
         sender = Sender::RawTcp { write_half };
-        receiver = Receiver::RawTcp { read_half };
+        receiver = Receiver::RawTcp {
+            read_half,
+            buffer: [0u8; 100],
+            buffer_size: 0,
+            key_press_times: VecDeque::new(),
+        };
     }
 
     Ok((sender, receiver, ws_ping_receiver))

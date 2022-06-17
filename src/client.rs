@@ -1,4 +1,3 @@
-use crate::ansi;
 use crate::ansi::KeyPress;
 use crate::connection::Receiver;
 use crate::lobby;
@@ -7,15 +6,11 @@ use crate::lobby::Lobby;
 use crate::render::RenderBuffer;
 use crate::render::RenderData;
 use std::collections::HashSet;
-use std::collections::VecDeque;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
-use std::time::Instant;
 use tokio::sync::Notify;
-use tokio::time::timeout;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 #[derive(Copy, Clone)]
@@ -31,9 +26,6 @@ impl ClientLogger {
 pub struct Client {
     pub id: u64,
     pub render_data: Arc<Mutex<RenderData>>,
-    recv_buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
-    recv_buffer_size: usize,
-    key_press_times: VecDeque<Instant>,
     receiver: Receiver,
     pub lobby: Option<Arc<Mutex<Lobby>>>,
     pub lobby_id_hidden: bool,
@@ -50,9 +42,6 @@ impl Client {
                 changed: Arc::new(Notify::new()),
                 force_redraw: false,
             })),
-            recv_buffer: [0 as u8; 100],
-            recv_buffer_size: 0,
-            key_press_times: VecDeque::new(),
             receiver,
             lobby: None,
             lobby_id_hidden: false,
@@ -85,67 +74,22 @@ impl Client {
         true
     }
 
-    fn check_key_press_frequency(&mut self) -> Result<(), io::Error> {
-        self.key_press_times.push_back(Instant::now());
-        while self.key_press_times.len() != 0
-            && self.key_press_times[0].elapsed().as_secs_f32() > 1.0
-        {
-            self.key_press_times.pop_front();
-        }
-        if self.key_press_times.len() > 100 {
-            return Err(io::Error::new(
-                ErrorKind::ConnectionAborted,
-                "received more than 100 key presses / sec",
-            ));
-        }
-        Ok(())
-    }
-
-    fn shift_recv_buffer(&mut self, n: usize) {
-        for i in n..self.recv_buffer_size {
-            self.recv_buffer[i - n] = self.recv_buffer[i];
-        }
-        self.recv_buffer_size -= n;
-    }
-
     pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
         loop {
-            match ansi::parse_key_press(&self.recv_buffer[..self.recv_buffer_size]) {
-                Some((KeyPress::Quit, _)) => {
+            match self.receiver.receive_key_press().await? {
+                KeyPress::Quit => {
                     return Err(io::Error::new(
                         ErrorKind::ConnectionAborted,
                         "received quit key press",
                     ));
                 }
-                Some((KeyPress::RefreshRequest, bytes_used)) => {
-                    self.check_key_press_frequency()?;
-                    {
-                        let mut render_data = self.render_data.lock().unwrap();
-                        render_data.force_redraw = true;
-                        render_data.changed.notify_one();
-                    }
-                    self.shift_recv_buffer(bytes_used);
+                KeyPress::RefreshRequest => {
+                    let mut render_data = self.render_data.lock().unwrap();
+                    render_data.force_redraw = true;
+                    render_data.changed.notify_one();
                 }
-                Some((key, bytes_used)) => {
-                    self.check_key_press_frequency()?;
-                    self.shift_recv_buffer(bytes_used);
+                key => {
                     return Ok(key);
-                }
-                None => {
-                    // Receive more data
-                    let dest = &mut self.recv_buffer[self.recv_buffer_size..];
-                    let n = timeout(
-                        Duration::from_secs(10 * 60),
-                        self.receiver.receive_into(dest),
-                    )
-                    .await??;
-                    if n == 0 {
-                        return Err(io::Error::new(
-                            ErrorKind::ConnectionAborted,
-                            "connection closed",
-                        ));
-                    }
-                    self.recv_buffer_size += n;
                 }
             }
         }
