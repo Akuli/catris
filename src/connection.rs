@@ -5,6 +5,7 @@ use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use std::io;
 use std::io::ErrorKind;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
@@ -22,7 +23,7 @@ fn convert_error(e: tungstenite::Error) -> io::Error {
 
 pub enum Receiver {
     WebSocket {
-        stream: SplitStream<WebSocketStream<TcpStream>>,
+        ws_reader: SplitStream<WebSocketStream<TcpStream>>,
         pings: mpsc::Sender<Vec<u8>>,
     },
     RawTcp {
@@ -32,9 +33,9 @@ pub enum Receiver {
 impl Receiver {
     pub async fn receive_into(&mut self, target: &mut [u8]) -> Result<usize, io::Error> {
         match self {
-            Self::WebSocket { stream, pings } => {
+            Self::WebSocket { ws_reader, pings } => {
                 loop {
-                    let item = stream.next().await;
+                    let item = ws_reader.next().await;
                     if item.is_none() {
                         return Ok(0); // connection closed
                     }
@@ -90,7 +91,7 @@ impl Receiver {
                     }
                 }
             }
-            Self::RawTcp { .. } => unimplemented!(),
+            Self::RawTcp { read_half } => read_half.read(target).await,
         }
     }
 }
@@ -129,9 +130,22 @@ pub async fn initialize_connection(
     socket: TcpStream,
     is_websocket: bool,
 ) -> Result<(Sender, Receiver, mpsc::Receiver<Vec<u8>>), io::Error> {
+    // Support websocket pings just in case someone's browser uses them.
+    // We don't really need them for anything, because the server uses tcp keepalive.
+    let (ws_ping_sender, ws_ping_receiver) = mpsc::channel(3);
+    let sender;
+    let receiver;
+
     if is_websocket {
-        unimplemented!();
+        let mut ws = tokio_tungstenite::accept_async(socket).await.map_err(convert_error)?;
+        let (ws_writer, ws_reader) = ws.split();
+        sender = Sender::WebSocket{ws_writer};
+        receiver = Receiver::WebSocket{ws_reader,pings:ws_ping_sender};
     } else {
-        unimplemented!();
+        let (read_half, write_half) = socket.into_split();
+        sender = Sender::RawTcp { write_half };
+        receiver = Receiver::RawTcp { read_half };
     }
+
+    Ok((sender, receiver, ws_ping_receiver))
 }
