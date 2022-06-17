@@ -18,7 +18,6 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
@@ -65,41 +64,30 @@ async fn handle_receiving(
 async fn handle_sending(
     sender: &mut Sender,
     render_data: Arc<Mutex<render::RenderData>>,
-    mut ping_receiver: mpsc::Receiver<Vec<u8>>,
 ) -> Result<(), io::Error> {
     let mut last_render = RenderBuffer::new();
     let mut current_render = RenderBuffer::new(); // Please get rid of this if copying turns out to be slow
     let change_notify = render_data.lock().unwrap().changed.clone();
-    let mut received_end_of_pings = false;
 
     loop {
-        tokio::select! {
-            _ = change_notify.notified() => {
-                let cursor_pos;
-                let force_redraw;
-                {
-                    let mut render_data = render_data.lock().unwrap();
-                    render_data.buffer.copy_into(&mut current_render);
-                    cursor_pos = render_data.cursor_pos;
-                    force_redraw = render_data.force_redraw;
-                    render_data.force_redraw = false;
-                }
+        change_notify.notified().await;
 
-                // In the beginning of a connection, the buffer isn't ready yet
-                if current_render.width != 0 && current_render.height != 0 {
-                    let to_send =
-                        current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
-                    sender.send_message(to_send.as_bytes()).await?;
-                    current_render.copy_into(&mut last_render);
-                }
-            }
-            ping_data = ping_receiver.recv(), if !received_end_of_pings => {
-                if let Some(bytes) = ping_data {
-                    sender.send_websocket_ping(bytes).await?;
-                } else {
-                    received_end_of_pings = true;
-                }
-            }
+        let cursor_pos;
+        let force_redraw;
+        {
+            let mut render_data = render_data.lock().unwrap();
+            render_data.buffer.copy_into(&mut current_render);
+            cursor_pos = render_data.cursor_pos;
+            force_redraw = render_data.force_redraw;
+            render_data.force_redraw = false;
+        }
+
+        // In the beginning of a connection, the buffer isn't ready yet
+        if current_render.width != 0 && current_render.height != 0 {
+            let to_send =
+                current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
+            sender.send(to_send.as_bytes()).await?;
+            current_render.copy_into(&mut last_render);
         }
     }
 }
@@ -178,12 +166,12 @@ pub async fn handle_connection(
     log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
-        Ok((mut sender, receiver, ping_receiver)) => {
+        Ok((mut sender, receiver)) => {
             let client = Client::new(client_id, receiver);
             let render_data = client.render_data.clone();
             let error = tokio::select! {
                 res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
-                res = handle_sending(&mut sender, render_data, ping_receiver) => res.unwrap_err(),
+                res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
             };
 
             // Try to leave the terminal in a sane state
@@ -192,7 +180,7 @@ pub async fn handle_connection(
                 + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
             _ = timeout(
                 Duration::from_millis(500),
-                sender.send_message(cleanup_ansi_codes.as_bytes()),
+                sender.send(cleanup_ansi_codes.as_bytes()),
             )
             .await;
 

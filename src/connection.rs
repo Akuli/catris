@@ -14,7 +14,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -48,7 +47,6 @@ fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<
 pub enum Receiver {
     WebSocket {
         ws_reader: SplitStream<WebSocketStream<TcpStream>>,
-        pings: mpsc::Sender<Vec<u8>>,
         key_press_times: VecDeque<Instant>,
     },
     RawTcp {
@@ -63,7 +61,6 @@ impl Receiver {
         match self {
             Self::WebSocket {
                 ws_reader,
-                pings,
                 key_press_times,
             } => {
                 loop {
@@ -94,31 +91,12 @@ impl Receiver {
                         Message::Close(_) => {
                             return Err(connection_closed_error());
                         }
-                        Message::Text(_) => {
-                            // web ui uses binary messages for everything
+                        Message::Ping(_) => {} // pong is sent automatically, but count this as a key press
+                        other => {
                             return Err(io::Error::new(
                                 ErrorKind::Other,
-                                "received unexpected websocket text frame",
+                                format!("unexpected websocket frame: {:?}", other),
                             ));
-                        }
-                        Message::Ping(bytes) => {
-                            pings.send(bytes).await.map_err(|_| {
-                                io::Error::new(
-                                // hopefully this error never actually happens
-                                ErrorKind::Other,
-                                "can't respond to websocket ping because sending task has stopped"
-                            )
-                            })?;
-                        }
-                        Message::Pong(_) => {
-                            // we never send ping, so client should never send pong
-                            return Err(io::Error::new(
-                                ErrorKind::Other,
-                                "unexpected websocket pong",
-                            ));
-                        }
-                        Message::Frame(_) => {
-                            panic!("this is impossible according to docs");
                         }
                     }
                 }
@@ -164,7 +142,7 @@ pub enum Sender {
     },
 }
 impl Sender {
-    pub async fn send_message(&mut self, data: &[u8]) -> Result<(), io::Error> {
+    pub async fn send(&mut self, data: &[u8]) -> Result<(), io::Error> {
         match self {
             Self::WebSocket { ws_writer } => ws_writer
                 .send(Message::binary(data.to_vec()))
@@ -173,25 +151,12 @@ impl Sender {
             Self::RawTcp { write_half } => write_half.write_all(data).await,
         }
     }
-
-    pub async fn send_websocket_ping(&mut self, ping_data: Vec<u8>) -> Result<(), io::Error> {
-        match self {
-            Self::WebSocket { ws_writer } => ws_writer
-                .send(Message::Ping(ping_data))
-                .await
-                .map_err(convert_error),
-            Self::RawTcp { .. } => panic!(),
-        }
-    }
 }
 
 pub async fn initialize_connection(
     socket: TcpStream,
     is_websocket: bool,
-) -> Result<(Sender, Receiver, mpsc::Receiver<Vec<u8>>), io::Error> {
-    // Support websocket pings just in case someone's browser uses them.
-    // We don't really need them for anything, because the server uses tcp keepalive.
-    let (ws_ping_sender, ws_ping_receiver) = mpsc::channel(3);
+) -> Result<(Sender, Receiver), io::Error> {
     let sender;
     let receiver;
 
@@ -211,7 +176,6 @@ pub async fn initialize_connection(
         sender = Sender::WebSocket { ws_writer };
         receiver = Receiver::WebSocket {
             ws_reader,
-            pings: ws_ping_sender,
             key_press_times: VecDeque::new(),
         };
     } else {
@@ -225,5 +189,5 @@ pub async fn initialize_connection(
         };
     }
 
-    Ok((sender, receiver, ws_ping_receiver))
+    Ok((sender, receiver))
 }
