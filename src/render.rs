@@ -207,10 +207,11 @@ impl RenderBuffer {
         &self,
         old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
+        force_redraw: bool,
     ) -> String {
         let mut result;
 
-        if self.width != old.width || self.height != old.height {
+        if self.width != old.width || self.height != old.height || force_redraw {
             result = self.clear_and_render_entire_screen();
         } else {
             result = self.get_updates_for_what_changed(old, cursor_pos);
@@ -235,6 +236,7 @@ pub struct RenderData {
     pub buffer: RenderBuffer,
     pub cursor_pos: Option<(usize, usize)>,
     pub changed: Arc<Notify>,
+    pub force_redraw: bool,
 }
 
 impl RenderData {

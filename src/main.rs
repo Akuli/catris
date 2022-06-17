@@ -67,9 +67,8 @@ async fn handle_sending(
     render_data: Arc<Mutex<render::RenderData>>,
     mut ping_receiver: mpsc::Receiver<Vec<u8>>,
 ) -> Result<(), io::Error> {
-    // pseudo optimization: double buffering to prevent copying between buffers
-    let mut buffers = [RenderBuffer::new(), RenderBuffer::new()];
-    let mut next_idx = 0;
+    let mut last_render = RenderBuffer::new();
+    let mut current_render = RenderBuffer::new(); // Please get rid of this if copying turns out to be slow
     let change_notify = render_data.lock().unwrap().changed.clone();
     let mut received_end_of_pings = false;
 
@@ -77,20 +76,22 @@ async fn handle_sending(
         tokio::select! {
             _ = change_notify.notified() => {
                 let cursor_pos;
+                let force_redraw;
                 {
-                    let render_data = render_data.lock().unwrap();
-                    render_data.buffer.copy_into(&mut buffers[next_idx]);
+                    let mut render_data = render_data.lock().unwrap();
+                    render_data.buffer.copy_into(&mut current_render);
                     cursor_pos = render_data.cursor_pos;
+                    force_redraw = render_data.force_redraw;
+                    render_data.force_redraw = false;
                 }
 
                 // In the beginning of a connection, the buffer isn't ready yet
-                if buffers[next_idx].width != 0 && buffers[next_idx].height != 0 {
+                if current_render.width != 0 && current_render.height != 0 {
                     let to_send =
-                        buffers[next_idx].get_updates_as_ansi_codes(&buffers[1 - next_idx], cursor_pos);
+                        current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
                     sender.send_message(to_send.as_bytes()).await?;
+                    current_render.copy_into(&mut last_render);
                 }
-
-                next_idx = 1 - next_idx;
             }
             ping_data = ping_receiver.recv(), if !received_end_of_pings => {
                 if let Some(bytes) = ping_data {

@@ -48,6 +48,7 @@ impl Client {
                 buffer: RenderBuffer::new(),
                 cursor_pos: None,
                 changed: Arc::new(Notify::new()),
+                force_redraw: false,
             })),
             recv_buffer: [0 as u8; 100],
             recv_buffer_size: 0,
@@ -100,6 +101,13 @@ impl Client {
         Ok(())
     }
 
+    fn shift_recv_buffer(&mut self, n: usize) {
+        for i in n..self.recv_buffer_size {
+            self.recv_buffer[i - n] = self.recv_buffer[i];
+        }
+        self.recv_buffer_size -= n;
+    }
+
     pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
         loop {
             match ansi::parse_key_press(&self.recv_buffer[..self.recv_buffer_size]) {
@@ -109,12 +117,18 @@ impl Client {
                         "received quit key press",
                     ));
                 }
+                Some((KeyPress::RefreshRequest, bytes_used)) => {
+                    self.check_key_press_frequency()?;
+                    {
+                        let mut render_data = self.render_data.lock().unwrap();
+                        render_data.force_redraw = true;
+                        render_data.changed.notify_one();
+                    }
+                    self.shift_recv_buffer(bytes_used);
+                }
                 Some((key, bytes_used)) => {
                     self.check_key_press_frequency()?;
-                    for i in bytes_used..self.recv_buffer_size {
-                        self.recv_buffer[i - bytes_used] = self.recv_buffer[i];
-                    }
-                    self.recv_buffer_size -= bytes_used;
+                    self.shift_recv_buffer(bytes_used);
                     return Ok(key);
                 }
                 None => {
