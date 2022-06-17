@@ -17,6 +17,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
@@ -76,8 +77,6 @@ impl Receiver {
 
                     match item.unwrap().map_err(convert_error)? {
                         Message::Binary(bytes) => {
-                            // TODO: what if client send 1GB message of bytes at once?
-                            // would be already fucked up, because Vec<u8> of 1GB was allocated
                             match parse_key_press(&bytes) {
                                 // Websocket never splits a key press to multiple messages.
                                 // Also can't have multiple key presses inside the same message.
@@ -197,7 +196,15 @@ pub async fn initialize_connection(
     let receiver;
 
     if is_websocket {
-        let ws = tokio_tungstenite::accept_async(socket)
+        let config = WebSocketConfig {
+            // Prevent various denial-of-service attacks that fill up server's memory.
+            // Most defaults are reasonable, but unnecessarily huge for this program.
+            max_send_queue: Some(10), // TODO: can be 1? https://github.com/snapview/tungstenite-rs/issues/285
+            max_message_size: Some(1024),
+            max_frame_size: Some(1024),
+            ..Default::default()
+        };
+        let ws = tokio_tungstenite::accept_async_with_config(socket, Some(config))
             .await
             .map_err(convert_error)?;
         let (ws_writer, ws_reader) = ws.split();
