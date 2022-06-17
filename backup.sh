@@ -33,7 +33,7 @@ for file in *.txt; do
     fi
 done
 
-filename=$(date +'%Y-%m-%d_%H-%M-%S.txt')
+filename=$(date +'%Y-%m-%d_%H-%M.txt')
 if [ -e $filename ]; then
     echo "Error: refusing to overwrite $filename" >&2
     exit 1
