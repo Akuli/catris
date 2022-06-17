@@ -38,16 +38,49 @@ impl TraditionalGame {
         self.get_width_per_player() * self.players.len()
     }
 
+    fn update_spawn_places(&self) {
+        let w = self.get_width_per_player() as i32;
+        for (player_idx, player) in self.players.iter().enumerate() {
+            let i = player_idx as i32;
+            player.borrow_mut().spawn_point.0 = (i * w) + (w / 2);
+        }
+    }
+
     pub fn add_player(&mut self, client_info: &ClientInfo) {
-        let new_width_per_player = if self.players.len() == 0 { 10 } else { 7 };
-        let spawn_x = self.players.len() * new_width_per_player + new_width_per_player / 2;
         self.players
-            .push(RefCell::new(Player::new((spawn_x as i32, -1), client_info)));
-        assert!(self.get_width_per_player() == new_width_per_player);
+            .push(RefCell::new(Player::new((0, -1), client_info)));
+        self.update_spawn_places();
 
         let w = self.get_width();
         for row in self.landed_rows.iter_mut() {
             row.resize(w, None);
+        }
+    }
+
+    fn wipe_vertical_slice(&mut self, left: usize, width: usize) {
+        let right = left+width;
+        for row in self.landed_rows.iter_mut() {
+            row.splice(left..(left+width), vec![]);
+        }
+
+        let left = left as i32;
+        let width = width as i32;
+        let right = right as i32;
+
+        for player in &self.players {
+            let block = &mut player.borrow_mut().block;
+            // In traditional mode, player points and world points are the same.
+            // So it doesn't matter whether "left" is in world or player points.
+            let old_points = block.get_player_coords();
+            let mut new_points = vec![];
+            for (x, y) in old_points {
+                if (..left).contains(&x) {
+                    new_points.push((x, y));
+                } else if (right..).contains(&x) {
+                    new_points.push((x-width, y));
+                }
+            }
+            block.set_player_coords(&new_points);
         }
     }
 
@@ -57,23 +90,30 @@ impl TraditionalGame {
             .iter()
             .position(|info| info.borrow().client_id == client_id)
         {
+            let slice_x = self.get_width_per_player() * i;
+            let old_width = self.get_width();
             self.players.remove(i);
-            // TODO: wipe a slice of landed squares properly, instead of trim at end
-            let w = self.get_width();
-            for row in self.landed_rows.iter_mut() {
-                row.resize(w, None);
-            }
+            let new_width = self.get_width();
+
+            let slice_width = old_width - new_width;
+            self.wipe_vertical_slice(slice_x, slice_width);
+
+            self.update_spawn_places();
         }
     }
 
     pub fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, y) = point;
-        0 <= x && x < (self.get_width() as i32) && y < (HEIGHT as i32)
+        let w = self.get_width() as i32;
+        let h = HEIGHT as i32;
+        (0..w).contains(&x) && (..h).contains(&y)
     }
 
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
         let (x, y) = point;
-        0 <= x && x < self.get_width() as i8 && 0 <= y && y < HEIGHT as i8
+        let w = self.get_width() as i8;
+        let h = HEIGHT as i8;
+        (0..w).contains(&x) && (0..h).contains(&y)
     }
 
     pub fn square_belongs_to_player(&self, player_idx: usize, point: WorldPoint) -> bool {

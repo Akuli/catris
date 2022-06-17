@@ -104,6 +104,11 @@ impl MovingBlock {
         self.add_center(&self.relative_coords)
     }
 
+    pub fn set_player_coords(&mut self, coords: &[PlayerPoint]) {
+        let (cx, cy) = self.center;
+        self.relative_coords = coords.iter().map(|(x, y)| ((x-cx) as i8, (y-cy) as i8)).collect();
+    }
+
     fn get_moved_relative_coords(&self, dx: i8, dy: i8) -> Vec<BlockRelativeCoords> {
         self.relative_coords
             .iter()
