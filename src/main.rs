@@ -160,7 +160,7 @@ pub async fn handle_connection(
 
     let logger = ClientLogger { client_id };
     if is_websocket {
-        logger.log("New connection");
+        logger.log("New websocket connection");
     } else {
         logger.log("New raw TCP connection");
     }
