@@ -1,7 +1,7 @@
 grep TODO
 grep FIXME
 motd
-websocket support
+Ctrl+R should refresh
 
 profiling
 code compare with python implementation, to ensure all features in
