@@ -81,10 +81,10 @@ const CTRL_R: u8 = b'\x12';
 
 // The usize is how many bytes were consumed.
 pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
-    /*if data == b"" || data == b"\x1b" || data == b"\x1b[" {
+    if data == b"" || data == b"\x1b" || data == b"\x1b[" {
         // Incomplete data: need to receive more
         return None;
-    }*/
+    }
 
     // Arrow keys are 3 bytes each
     if data.len() >= 3 {
