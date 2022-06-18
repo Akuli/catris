@@ -407,7 +407,7 @@ impl Game {
             The scores also feel quite different for single player and multiplayer.
             That's why they are shown separately in the high scores view.
             */
-            add *= 2usize.pow((self.players.len() - 1) as u32);
+            add *= 2usize.pow((self.players.len() as u32) - 1);
         }
         self.score += add;
     }
