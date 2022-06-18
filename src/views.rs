@@ -1,7 +1,7 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client::Client;
-use crate::game_logic::Mode;
+use crate::game_logic::game::Mode;
 use crate::game_wrapper::GameStatus;
 use crate::high_scores::GameResult;
 use crate::ingame_ui;

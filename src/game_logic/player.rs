@@ -1,6 +1,6 @@
-use crate::blocks::MovingBlock;
-use crate::game_logic::wrap_around;
-use crate::game_logic::Mode;
+use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::game::wrap_around;
+use crate::game_logic::game::Mode;
 use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
