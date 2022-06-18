@@ -9,6 +9,71 @@ My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
 
 
+## High-level overview of the code
+
+When the rust program starts, `main()` starts listening on two TCP ports,
+54321 for websocket connections and 12345 for plain TCP connections (e.g. netcat).
+The `web-ui/` folder contains static files served by nginx,
+and the javascript code in `web-ui/` connects a websocket to port 54321.
+
+After a client connects, it mostly doesn't matter whether they use
+a websocket connection or a plain TCP connection,
+as `connection.rs` abstracts the differences away.
+Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) defined in `ansi.rs`.
+This means that the javascript code in `web-ui/` must interpret ANSI codes,
+but this also makes the rust code simpler:
+it needs to use ANSI codes for raw TCP connections anyway.
+
+Next a `Client` object is created.
+It is possible to receive and (indirectly) send through a `Client` object.
+Specifically, `connection.rs` provides a method to receive a single key press,
+and the `Client` object re-exposes it.
+For sending, the `Client` has a `RenderData`.
+Instead of sending bytes with `connection.rs`,
+you usually set the `RenderData`'s `RenderBuffer` to what you want the user to see,
+and then fire a `Notify` which causes a task in `main.rs` to actually send screen updates.
+Only the changes are sent, the entire screen isn't redrawn every time.
+
+Next:
+- We ask the client's name.
+- We ask whether the client wants to create a lobby or join an existing lobby.
+- If the client wants to join an existing lobby, we ask its ID and join it.
+- In the lobby, the client chooses a game.
+- The client plays the game, using `ingame_ui.rs` to keep the `RenderBuffer` up to date.
+
+Each item in the above list is a function in `views.rs`.
+These functions take the `Client` as an argument, and send and receive through it.
+
+Clients own their lobbies: a lobby is dropped automatically when all of its clients disconnect.
+The lobby also knows about what clients it has, but it only contains `ClientInfo` objects,
+not actual `Client` objects.
+Unlike `Client` objects, the `ClientInfo` objects can't be used to send or receive;
+they are purely information for game logic and other clients.
+
+A lobby owns `GameWrapper`s, which take care of the timing and async aspects of a game:
+the underlying `Game` objects from `game_logic.rs` are pure logic.
+For example, there are several async functions in `game_wrapper`
+that call a method of `Game` repeatedly
+to e.g. move the blocks down or decrement counters on bombs.
+
+The `Game` object has `Player`s, and each `Player` has a `MovingBlock`.
+Moving blocks and landed squares use `SquareContent` objects,
+which usually define the color of a square,
+but they can also be a special bomb or drill square.
+These are all purely logic, not e.g. async or IO,
+so the game logic is split into 3 files: `game_logic.rs`, `player.rs` and `squares.rs`.
+
+When a player's block lands, the player gets a new block.
+The block fails to land if it doesn't fit within the visible part of the game.
+When that happens, the player has to wait 30 seconds before they can continue playing.
+During that time, the player has a counter instead of a `MovingBlock`.
+The game ends when all players are waiting simultaneously.
+
+When the game ends, the `GameWrapper` records the game results by calling a function in `high_scores.rs`,
+and sets the `GameWrapper`'s status so that `views.rs` notices it and displays the high scores.
+When the client is done with looking at high scores, they go back to choosing a game.
+
+
 ## Development
 
 You need to install rust (the compiler, not the game). Just google for some instructions.
