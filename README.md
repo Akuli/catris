@@ -92,7 +92,7 @@ Look at `journalctl -fu catris` to make sure nobody is currently playing.
 If in the future there is always someone playing,
 use `/home/catris/catris_motd.txt` to clearly announce the downtime beforehand.
 
-If you changed rust code, build the executable and copy it to the server:
+If you changed rust code, build the executable, copy it to the server, and restart the systemd service:
 
 ```
 $ cargo build --release
