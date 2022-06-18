@@ -129,3 +129,32 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_key_press() {
+        // incomplete ansi code
+        assert_eq!(parse_key_press(b""), None);
+        assert_eq!(parse_key_press(b"\x1b"), None);
+        assert_eq!(parse_key_press(b"\x1b["), None);
+        assert_eq!(parse_key_press(b"\x1b[A"), Some((KeyPress::Up, 3)));
+        assert_eq!(parse_key_press(b"\x1b[Axxx"), Some((KeyPress::Up, 3)));
+        assert_eq!(parse_key_press(b"[Axxx"), Some((KeyPress::Character('['), 1)));
+
+        // incomplete utf-8
+        assert_eq!(parse_key_press(b"\xe2"), None);
+        assert_eq!(parse_key_press(b"\xe2\x82"), None);
+        assert_eq!(parse_key_press(b"\xe2\x82\xac"), Some((KeyPress::Character('€'), 3)));
+
+        // invalid utf-8: consume first byte to allow retrying with the rest
+        assert_eq!(parse_key_press(b"\xe2\xe2"), Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1)));
+        assert_eq!(parse_key_press(b"\x82\xac"), Some((KeyPress::Character(std::char::REPLACEMENT_CHARACTER), 1)));
+
+        assert_eq!(parse_key_press(b"John"), Some((KeyPress::Character('J'), 1)));
+        assert_eq!(parse_key_press("Örkki".as_bytes()), Some((KeyPress::Character('Ö'), 2)));
+        assert_eq!(parse_key_press(b"\r"), Some((KeyPress::Enter, 1)));
+    }
+}
