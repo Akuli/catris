@@ -394,7 +394,7 @@ impl BlockType {
         let items = [
             // Weight x means it's x times as likely as normal block.
             (BlockType::Normal, 1.0),
-            // Cursed blocks only appear at score>=500 and then become very common.
+            // Cursed blocks only appear at score>500 and then become very common.
             // The intent is to surprise new players.
             (BlockType::Cursed, (score_kilos - 0.5).max(0.0) / 20.0),
             // Drills are rare, but always possible.
