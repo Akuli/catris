@@ -58,7 +58,7 @@ impl Color {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum KeyPress {
     Up,
     Down,

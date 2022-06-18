@@ -209,13 +209,11 @@ impl RenderBuffer {
         cursor_pos: Option<(usize, usize)>,
         force_redraw: bool,
     ) -> String {
-        let mut result;
-
-        if self.width != old.width || self.height != old.height || force_redraw {
-            result = self.clear_and_render_entire_screen();
+        let mut result = if self.width != old.width || self.height != old.height || force_redraw {
+            self.clear_and_render_entire_screen()
         } else {
-            result = self.get_updates_for_what_changed(old, cursor_pos);
-        }
+            self.get_updates_for_what_changed(old, cursor_pos)
+        };
 
         match cursor_pos {
             None => {

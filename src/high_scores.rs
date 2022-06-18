@@ -101,7 +101,8 @@ async fn upgrade_if_needed(filename: &str) -> Result<(), Box<dyn Error>> {
         return Err(format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        ).into())
+        )
+        .into());
     }
 }
 

@@ -198,7 +198,7 @@ impl SquareContent {
         }
     }
 
-    pub fn to_landed_content(
+    pub fn get_landed_content(
         &self,
         relative_coords: BlockRelativeCoords,
         player_direction: (i8, i8),

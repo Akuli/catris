@@ -751,7 +751,7 @@ fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
 
 fn render_high_scores_table(
     buffer: &mut RenderBuffer,
-    top_results: &Vec<GameResult>,
+    top_results: &[GameResult],
     this_game_index: Option<usize>,
     multiplayer: bool,
 ) {
@@ -835,11 +835,8 @@ async fn show_high_scores(
                 result.unwrap(); // apparently never fails, not sure why
             }
             key = client.receive_key_press() => {
-                match key? {
-                    KeyPress::Enter => {
-                        return Ok(());
-                    }
-                    _ => {},
+                if key? == KeyPress::Enter {
+                    return Ok(());
                 }
             }
         }

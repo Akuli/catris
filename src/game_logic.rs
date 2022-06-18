@@ -247,30 +247,27 @@ impl Game {
         let right = right as i32;
 
         for player in &self.players {
-            match &mut player.borrow_mut().block_or_timer {
-                BlockOrTimer::Block(block) => {
-                    let old_points = block.get_coords();
-                    let mut new_points = vec![];
-                    for (x, y) in old_points {
-                        // Remove points in (left..right), move points on right side
-                        if (..left).contains(&x) {
-                            new_points.push((x, y));
-                        } else if (right..).contains(&x) {
-                            new_points.push((x - width, y));
-                        }
+            if let BlockOrTimer::Block(block) = &mut player.borrow_mut().block_or_timer {
+                let old_points = block.get_coords();
+                let mut new_points = vec![];
+                for (x, y) in old_points {
+                    // Remove points in (left..right), move points on right side
+                    if (..left).contains(&x) {
+                        new_points.push((x, y));
+                    } else if (right..).contains(&x) {
+                        new_points.push((x - width, y));
                     }
-
-                    // Move center just like other points, except that it can't be removed
-                    let (mut center_x, center_y) = block.center;
-                    if (right..).contains(&center_x) {
-                        center_x -= width;
-                    } else if (left..right).contains(&center_x) {
-                        center_x = left;
-                    }
-
-                    block.set_player_coords(&new_points, (center_x, center_y));
                 }
-                _ => {}
+
+                // Move center just like other points, except that it can't be removed
+                let (mut center_x, center_y) = block.center;
+                if (right..).contains(&center_x) {
+                    center_x -= width;
+                } else if (left..right).contains(&center_x) {
+                    center_x = left;
+                }
+
+                block.set_player_coords(&new_points, (center_x, center_y));
             }
         }
     }
@@ -299,7 +296,8 @@ impl Game {
 
                 *opposites
                     .iter()
-                    .chain(all.iter()).find(|dir| !used.contains(dir))
+                    .chain(all.iter())
+                    .find(|dir| !used.contains(dir))
                     .unwrap()
             }
         };
@@ -535,19 +533,16 @@ impl Game {
     ) -> Option<(SquareContent, BlockRelativeCoords, usize)> {
         for (player_idx, player) in self.players.iter().enumerate() {
             if exclude_player_idx != Some(player_idx) {
-                match &player.borrow().block_or_timer {
-                    BlockOrTimer::Block(block) => {
-                        for (player_coords, relative_coords) in block
-                            .get_coords()
-                            .iter()
-                            .zip(block.get_relative_coords().iter())
-                        {
-                            if player.borrow().player_to_world(*player_coords) == point {
-                                return Some((block.square_content, *relative_coords, player_idx));
-                            }
+                if let BlockOrTimer::Block(block) = &player.borrow().block_or_timer {
+                    for (player_coords, relative_coords) in block
+                        .get_coords()
+                        .iter()
+                        .zip(block.get_relative_coords().iter())
+                    {
+                        if player.borrow().player_to_world(*player_coords) == point {
+                            return Some((block.square_content, *relative_coords, player_idx));
                         }
                     }
-                    _ => {}
                 }
             }
         }
@@ -757,7 +752,7 @@ impl Game {
                     let (down_x, down_y) = player.borrow().down_direction;
                     for (w, r) in world_coords.iter().zip(relative_coords.iter()) {
                         let landed_content =
-                            square_content.to_landed_content(*r, (down_x as i8, down_y as i8));
+                            square_content.get_landed_content(*r, (down_x as i8, down_y as i8));
                         self.set_landed_square(*w, Some(landed_content));
                     }
                     self.new_block(*player_idx);
@@ -807,9 +802,8 @@ impl Game {
 
         for player_ref in &self.players {
             let mut player = player_ref.borrow_mut();
-            match &mut player.block_or_timer {
-                BlockOrTimer::Block(b) => handle_block(b),
-                _ => {}
+            if let BlockOrTimer::Block(b) = &mut player.block_or_timer {
+                handle_block(b);
             }
             handle_block(&mut player.next_block);
             if let Some(b) = &mut player.block_in_hold {
@@ -968,12 +962,11 @@ impl Game {
 
         let block = {
             let mut player = self.players[player_idx].borrow_mut();
-            let mut block;
-            if from_hold_if_possible && player.block_in_hold.is_some() {
-                block = replace(&mut player.block_in_hold, None).unwrap();
+            let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
+                replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                block = replace(&mut player.next_block, MovingBlock::new(self.score));
-            }
+                replace(&mut player.next_block, MovingBlock::new(self.score))
+            };
             block.spawn_at(player.spawn_point);
             block
         };
@@ -1092,8 +1085,8 @@ impl Game {
     // returns bomb locations that were affected
     pub fn finish_explosion(
         &mut self,
-        old_bomb_points: &Vec<WorldPoint>,
-        old_flashing_points: &Vec<WorldPoint>,
+        old_bomb_points: &[WorldPoint],
+        old_flashing_points: &[WorldPoint],
     ) -> Vec<WorldPoint> {
         let mut bomb_locations = vec![];
 

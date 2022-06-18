@@ -77,7 +77,8 @@ impl Lobby {
         ));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
-            .iter().find(|color| !used_colors.contains(*color))
+            .iter()
+            .find(|color| !used_colors.contains(*color))
             .unwrap();
         self.clients.push(ClientInfo {
             client_id: logger.client_id,
