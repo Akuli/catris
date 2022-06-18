@@ -37,7 +37,7 @@ Please create an issue if this is a problem for you.
 
 ## Development
 
-You need to install rust. Just google for some instructions.
+You need to install rust (the compiler, not the game). Just google for some instructions.
 I'm on a Debian-based linux distro, so I first tried `sudo apt install cargo`,
 but it was too old and I had to use `rustup` instead.
 You might have better luck with your distro's package manager
