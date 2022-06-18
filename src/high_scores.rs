@@ -90,19 +90,17 @@ async fn upgrade_if_needed(filename: &str) -> Result<(), Box<dyn Error>> {
                 // Previous formats are compatible with v4
                 append_update_comment(filename, old_version).await?;
                 update_version_number(filename).await?;
+                Ok(())
             }
-            VERSION => {}
-            _ => {
-                return Err(format!("unknown version: {}", old_version).into());
-            }
+            VERSION => Ok(()),
+            _ => Err(format!("unknown version: {}", old_version).into()),
         }
-        Ok(())
     } else {
-        return Err(format!(
+        let message = format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        )
-        .into());
+        );
+        Err(message.into())
     }
 }
 
