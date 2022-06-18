@@ -21,7 +21,8 @@ a websocket connection or a plain TCP connection,
 as `connection.rs` abstracts the differences away.
 Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) defined in `ansi.rs`.
 This means that the javascript code in `web-ui/` must interpret ANSI codes,
-but it simplifies the rust code a lot.
+but this also makes the rust code simpler:
+it needs to use ANSI codes for raw TCP connections anyway.
 
 Next a `Client` object is created.
 It is possible to receive and (indirectly) send through a `Client` object.
