@@ -9,7 +9,7 @@ This file explains how to do that.
 
 ## Running the server(s)
 
-Install rust and run the server as explained in
+Install rust and run the catris server with `cargo` as explained in
 [the development section of the README](README.md#development).
 Also run the web server if you want to use the web UI.
 
