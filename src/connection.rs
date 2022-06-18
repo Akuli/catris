@@ -44,16 +44,23 @@ fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<
     Ok(())
 }
 
+fn get_timeout(last_recv: Instant) -> Duration {
+    let deadline = last_recv + Duration::from_secs(10*60);
+    deadline.saturating_duration_since(Instant::now())
+}
+
 pub enum Receiver {
     WebSocket {
         ws_reader: SplitStream<WebSocketStream<TcpStream>>,
         key_press_times: VecDeque<Instant>,
+        last_recv: Instant,
     },
     RawTcp {
         read_half: OwnedReadHalf,
         buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
         buffer_size: usize,
         key_press_times: VecDeque<Instant>,
+        last_recv: Instant,
     },
 }
 impl Receiver {
@@ -62,18 +69,19 @@ impl Receiver {
             Self::WebSocket {
                 ws_reader,
                 key_press_times,
+                last_recv,
             } => {
                 loop {
-                    let item = ws_reader.next().await;
+                    let item = timeout(get_timeout(*last_recv), ws_reader.next()).await?;
                     if item.is_none() {
                         return Err(connection_closed_error());
                     }
-
-                    // Receiving anything from the websocket counts as a key press
+                    let item = item.unwrap();
                     check_key_press_frequency(key_press_times)?;
 
-                    match item.unwrap().map_err(convert_error)? {
+                    match item.map_err(convert_error)? {
                         Message::Binary(bytes) => {
+                            *last_recv = Instant::now();
                             match parse_key_press(&bytes) {
                                 // Websocket never splits a key press to multiple messages.
                                 // Also can't have multiple key presses inside the same message.
@@ -91,7 +99,18 @@ impl Receiver {
                         Message::Close(_) => {
                             return Err(connection_closed_error());
                         }
-                        Message::Ping(_) => {} // pong is sent automatically, but count this as a key press
+                        /*
+                        Pings can't make the connection stay open for more than 10min.
+                        That would cause confusion when people use different browsers and
+                        not all browsers send pings.
+
+                        Pings are counted as key presses, so that you will be disconnected
+                        if you spam the server with lots of pings.
+
+                        We don't have to send pongs, because tungstenite does it
+                        automatically.
+                        */
+                        Message::Ping(_) => {}
                         other => {
                             return Err(io::Error::new(
                                 ErrorKind::Other,
@@ -107,6 +126,7 @@ impl Receiver {
                 buffer,
                 buffer_size,
                 key_press_times,
+                last_recv,
             } => {
                 loop {
                     match parse_key_press(&buffer[..*buffer_size]) {
@@ -119,12 +139,12 @@ impl Receiver {
                         None => {
                             // Receive more data
                             let dest = &mut buffer[*buffer_size..];
-                            let n = timeout(Duration::from_secs(10 * 60), read_half.read(dest))
-                                .await??;
+                            let n = timeout(get_timeout(*last_recv), read_half.read(dest)).await??;
                             if n == 0 {
                                 return Err(connection_closed_error());
                             }
                             *buffer_size += n;
+                            *last_recv = Instant::now();
                         }
                     }
                 }
@@ -177,6 +197,7 @@ pub async fn initialize_connection(
         receiver = Receiver::WebSocket {
             ws_reader,
             key_press_times: VecDeque::new(),
+            last_recv: Instant::now(),
         };
     } else {
         let (read_half, write_half) = socket.into_split();
@@ -186,6 +207,7 @@ pub async fn initialize_connection(
             buffer: [0u8; 100],
             buffer_size: 0,
             key_press_times: VecDeque::new(),
+            last_recv: Instant::now(),
         };
     }
 
