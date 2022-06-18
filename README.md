@@ -53,14 +53,22 @@ A lobby owns `GameWrapper`s, which take care of the timing and async aspects of 
 the underlying `Game` objects from `game_logic.rs` are pure logic.
 For example, there are several async functions in `game_wrapper`
 that call a method of `Game` repeatedly
-to e.g. move the blocks down or increment counters on bombs.
+to e.g. move the blocks down or decrement counters on bombs.
 
-The `Game` object also has `Player`s, and each `Player` has a `MovingBlock`.
-Moving blocks and landed squares are both `SquareContent` objects.
+The `Game` object has `Player`s, and each `Player` has a `MovingBlock`.
+Moving blocks and landed squares use `SquareContent` objects,
+which usually define the color of a square,
+but they can also be a special bomb or drill square.
 These are all purely logic, not e.g. async or IO,
 so the game logic is split into 3 files: `game_logic.rs`, `player.rs` and `squares.rs`.
 
-When a game ends, the `GameWrapper` records the game results by calling a function in `high_scores.rs`,
+When a player's block lands, the player gets a new block.
+The block fails to land if it doesn't fit within the visible part of the game.
+When that happens, the player has to wait 30 seconds before they can continue playing.
+During that time, the player has a counter instead of a `MovingBlock`.
+The game ends when all players are waiting simultaneously.
+
+When the game ends, the `GameWrapper` records the game results by calling a function in `high_scores.rs`,
 and sets the `GameWrapper`'s status so that `views.rs` notices it and displays the high scores.
 When the client is done with looking at high scores, they go back to choosing a game.
 
