@@ -1,35 +1,9 @@
 # catris
 
 This is a Tetris clone for multiple players that connect to a server with netcat or a web interface.
+You can play it here: https://akuli.github.io/catris/
 
 ![Screenshot](screenshot.png)
-
-If you aren't using Windows,
-you can play on my server by running this command on a terminal:
-
-```
-$ stty raw; nc 172.104.132.97 12345; stty cooked
-```
-
-<details>
-<summary>Explanation of what the command does</summary>
-
-The `stty raw` is needed to send key presses to the server
-as you press the keys, without first waiting for you to press Enter.
-If you forget it, you will get an error message that tells you to use it.
-
-Here `nc`, short for netcat, opens a TCP connection to my server.
-It sends its input (your key presses) to the server
-and displays what it receives on the terminal.
-
-On some systems, the `stty` and `nc` commands must be ran at once using e.g. `;` as shown above,
-instead of entering them separately.
-
-</details>
-
-There's also a web UI, which is useful especially for windows users.
-[Click here](http://172.104.132.97) to play.
-You can also type `akuli.github.io/catris` to your browser's address bar.
 
 My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
