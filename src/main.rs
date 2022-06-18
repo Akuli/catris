@@ -101,7 +101,7 @@ fn log_ip_if_connects_a_lot(
     {
         let mut recent_ips = recent_ips.lock().unwrap();
         recent_ips.push_back((Instant::now(), ip));
-        while recent_ips.len() != 0 && recent_ips[0].0.elapsed().as_secs_f32() > 60.0 {
+        while !recent_ips.is_empty() && recent_ips[0].0.elapsed().as_secs_f32() > 60.0 {
             recent_ips.pop_front();
         }
         n = recent_ips
