@@ -1,4 +1,4 @@
-use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::wrap_around;
 use crate::game_logic::game::Mode;
 use crate::game_logic::PlayerPoint;
@@ -7,7 +7,7 @@ use crate::lobby::ClientInfo;
 
 #[derive(Debug)]
 pub enum BlockOrTimer {
-    Block(MovingBlock),
+    Block(FallingBlock),
     TimerPending,
     Timer(u8),
 }
@@ -27,8 +27,8 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
-    pub next_block: MovingBlock,
-    pub block_in_hold: Option<MovingBlock>,
+    pub next_block: FallingBlock,
+    pub block_in_hold: Option<FallingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1
     game_mode: Mode,
@@ -47,8 +47,8 @@ impl Player {
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point,
-            block_or_timer: BlockOrTimer::Block(MovingBlock::new(current_score)),
-            next_block: MovingBlock::new(current_score),
+            block_or_timer: BlockOrTimer::Block(FallingBlock::from_score(current_score)),
+            next_block: FallingBlock::from_score(current_score),
             block_in_hold: None,
             fast_down: false,
             down_direction,

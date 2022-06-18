@@ -58,15 +58,15 @@ that call methods of `Game` repeatedly
 to e.g. move the blocks down or decrement counters on bombs.
 
 Inside the `game_logic/` folder,
-the `Game` object has `Player`s, and each `Player` has a `MovingBlock`.
-Moving blocks and landed squares use `SquareContent` objects,
+the `Game` object has `Player`s, and each `Player` has a `FallingBlock`.
+Falling blocks and landed squares use `SquareContent` objects,
 which usually define the color of a square,
 but they can also be a special bomb or drill square.
 
 When a player's block lands, the player gets a new block.
 The block fails to land if it doesn't fit within the visible part of the game.
 When that happens, the player has to wait 30 seconds before they can continue playing.
-During that time, the player has a counter instead of a `MovingBlock`.
+During that time, the player has a counter instead of a `FallingBlock`.
 The game ends when all players are waiting simultaneously.
 
 When the game ends, the `GameWrapper` records the game results by calling a function in `high_scores.rs`,

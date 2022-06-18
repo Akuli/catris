@@ -1,6 +1,6 @@
 use crate::ansi::Color;
 use crate::client::Client;
-use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
 use crate::game_logic::game::BOTTLE_MAP;
@@ -375,7 +375,7 @@ fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
 pub const SCORE_TEXT_COLOR: Color = Color::CYAN_FOREGROUND;
 
 fn render_block(
-    block: &MovingBlock,
+    block: &FallingBlock,
     buffer: &mut RenderBuffer,
     text_x: usize,
     text_y: usize,

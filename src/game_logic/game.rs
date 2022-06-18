@@ -1,6 +1,7 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::blocks::BlockType;
+use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::player::BlockOrTimer;
 use crate::game_logic::player::Player;
@@ -793,7 +794,7 @@ impl Game {
 
     pub fn animate_drills(&mut self) -> bool {
         let mut something_changed = false;
-        let mut handle_block = |block: &mut MovingBlock| {
+        let mut handle_block = |block: &mut FallingBlock| {
             if block.square_content.animate() {
                 something_changed = true;
             }
@@ -945,7 +946,7 @@ impl Game {
         }
     }
 
-    fn can_add_block(&self, player_idx: usize, block: &MovingBlock) -> bool {
+    fn can_add_block(&self, player_idx: usize, block: &FallingBlock) -> bool {
         let overlaps = block.get_coords().iter().any(|p| {
             self.get_any_square(
                 self.players[player_idx].borrow().player_to_world(*p),
@@ -964,7 +965,7 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                replace(&mut player.next_block, MovingBlock::new(self.score))
+                replace(&mut player.next_block, FallingBlock::from_score(self.score))
             };
             block.spawn_at(player.spawn_point);
             block
@@ -991,7 +992,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, MovingBlock::new(self.score))
+                replace(b, FallingBlock::new(BlockType::Normal))
             }
             _ => return false,
         };

@@ -2,6 +2,8 @@ use crate::ansi::Color;
 use crate::game_logic::BlockRelativeCoords;
 use crate::game_logic::PlayerPoint;
 use crate::render::RenderBuffer;
+use rand::distributions::Distribution;
+use rand::distributions::WeightedIndex;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
@@ -377,53 +379,89 @@ fn maybe(probability: f32) -> bool {
     rand::thread_rng().gen_range(0.0..100.0) < probability
 }
 
+#[derive(Copy, Clone)]
+pub enum BlockType {
+    Normal,
+    Cursed,
+    Drill,
+    Bomb,
+}
+
+impl BlockType {
+    pub fn from_score(score: usize) -> Self {
+        let score_kilos = score as f32 / 1000.0;
+
+        let items = [
+            // Weight x means it's x times as likely as normal block.
+            (BlockType::Normal, 1.0),
+            // Cursed blocks only appear at score>500 and then become very common.
+            // The intent is to surprise new players.
+            (BlockType::Cursed, (score_kilos - 0.5).max(0.0) / 20.0),
+            // Drills are rare, but always possible.
+            // They're also very powerful when you happen to get one.
+            (BlockType::Drill, score_kilos / 200.0),
+            // Bombs are initially just 1% of normal squares.
+            // But they get much more common as you get more points.
+            (BlockType::Bomb, score_kilos / 80.0 + 0.01),
+        ];
+        let distribution = WeightedIndex::new(items.iter().map(|(_, weight)| weight)).unwrap();
+        let index = distribution.sample(&mut rand::thread_rng());
+        let (result, _) = items[index];
+        result
+    }
+}
+
 #[derive(Debug)]
-pub struct MovingBlock {
+pub struct FallingBlock {
     pub square_content: SquareContent,
     pub has_been_in_hold: bool,
     pub center: PlayerPoint,
     relative_coords: Vec<BlockRelativeCoords>,
     rotate_mode: RotateMode,
 }
-impl MovingBlock {
-    pub fn new(score: usize) -> MovingBlock {
-        let score = score as f32;
+impl FallingBlock {
+    pub fn new(block_type: BlockType) -> FallingBlock {
+        let content;
+        let mut coords;
 
-        let bomb_probability = score / 800.0 + 1.0;
-        let drill_probability = score / 2000.0;
-        let cursed_probability = (score - 500.0) / 200.0;
-
-        let (content, coords) = if maybe(bomb_probability) {
-            let content = SquareContent::Bomb {
-                timer: if maybe(20.0) { 3 } else { 15 },
-                id: None,
-            };
-            (content, O_COORDS.to_vec())
-        } else if maybe(drill_probability) {
-            (
-                SquareContent::MovingDrill {
-                    animation_counter: 0,
-                },
-                DRILL_COORDS.to_vec(),
-            )
-        } else {
-            let (color, coords) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
-            let mut coords = coords.to_vec();
-            if maybe(cursed_probability) {
+        match block_type {
+            BlockType::Normal => {
+                let (color, coord_array) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
+                content = SquareContent::Normal([(' ', *color), (' ', *color)]);
+                coords = coord_array.to_vec();
+            }
+            BlockType::Cursed => {
+                let (color, coord_array) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
+                content = SquareContent::Normal([(' ', *color), (' ', *color)]);
+                coords = coord_array.to_vec();
                 add_extra_square(&mut coords);
             }
-            (
-                SquareContent::Normal([(' ', *color), (' ', *color)]),
-                coords,
-            )
-        };
-        MovingBlock {
+            BlockType::Drill => {
+                content = SquareContent::MovingDrill {
+                    animation_counter: 0,
+                };
+                coords = DRILL_COORDS.to_vec();
+            }
+            BlockType::Bomb => {
+                content = SquareContent::Bomb {
+                    timer: if maybe(20.0) { 3 } else { 15 },
+                    id: None,
+                };
+                coords = O_COORDS.to_vec();
+            }
+        }
+
+        FallingBlock {
             square_content: content,
             center: (0, 0), // dummy value, should be changed when spawning the block
             rotate_mode: choose_initial_rotate_mode(&coords, &content),
             relative_coords: coords,
             has_been_in_hold: false,
         }
+    }
+
+    pub fn from_score(score: usize) -> Self {
+        Self::new(BlockType::from_score(score))
     }
 
     pub fn spawn_at(&mut self, spawn_point: PlayerPoint) {
@@ -509,5 +547,23 @@ impl MovingBlock {
             RotateMode::NextClockwiseThenBack => RotateMode::NextCounterClockwiseThenBack,
             other => other,
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constructing() {
+        let normal = FallingBlock::new(BlockType::Normal);
+        let cursed = FallingBlock::new(BlockType::Cursed);
+        let drill = FallingBlock::new(BlockType::Drill);
+        let bomb = FallingBlock::new(BlockType::Bomb);
+
+        assert!(normal.relative_coords.len() == 4);
+        assert!(cursed.relative_coords.len() == 5);
+        assert!(drill.relative_coords.len() == 10);
+        assert!(bomb.relative_coords.len() == 4);
     }
 }
