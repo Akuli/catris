@@ -1,5 +1,6 @@
 /target
 /catris_high_scores.txt
+/catris_motd.txt
 
 # web-ui stuff
 /node_modules/
