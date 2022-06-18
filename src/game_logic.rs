@@ -299,9 +299,7 @@ impl Game {
 
                 *opposites
                     .iter()
-                    .chain(all.iter())
-                    .filter(|dir| !used.contains(dir))
-                    .next()
+                    .chain(all.iter()).find(|dir| !used.contains(dir))
                     .unwrap()
             }
         };
@@ -442,12 +440,10 @@ impl Game {
                                 }
                             }
                         }
-                    } else {
-                        if !row.iter().any(|cell| cell.is_none()) {
-                            full_count_everyone += 1;
-                            for (x, _) in row.iter().enumerate() {
-                                full_points.push((x as i16, y as i16));
-                            }
+                    } else if !row.iter().any(|cell| cell.is_none()) {
+                        full_count_everyone += 1;
+                        for (x, _) in row.iter().enumerate() {
+                            full_points.push((x as i16, y as i16));
                         }
                     }
                 }

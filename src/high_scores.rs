@@ -33,7 +33,7 @@ fn log(message: &str) {
     println!("[high scores] {}", message);
 }
 
-const HEADER_PREFIX: &'static str = "catris high scores file v";
+const HEADER_PREFIX: &str = "catris high scores file v";
 
 async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
     match OpenOptions::new()
@@ -93,15 +93,15 @@ async fn upgrade_if_needed(filename: &str) -> Result<(), Box<dyn Error>> {
             }
             VERSION => {}
             _ => {
-                Err(format!("unknown version: {}", old_version))?;
+                return Err(format!("unknown version: {}", old_version).into());
             }
         }
         Ok(())
     } else {
-        Err(format!(
+        return Err(format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        ))?
+        ).into())
     }
 }
 
@@ -166,7 +166,7 @@ async fn read_matching_high_scores(
     while let Some(line) = lines.next_line().await? {
         lineno += 1;
 
-        if line.trim().len() == 0 || line.trim().starts_with('#') {
+        if line.trim().is_empty() || line.trim().starts_with('#') {
             continue;
         }
 
@@ -187,7 +187,7 @@ async fn read_matching_high_scores(
         let duration_secs_string = parts.next().ok_or_else(split_error)?;
 
         let players: Vec<String> = parts.map(|s| s.to_string()).collect();
-        assert!(players.len() != 0);
+        assert!(!players.is_empty());
 
         if mode_name == mode_to_string(mode) && (players.len() >= 2) == multiplayer {
             add_game_result_if_high_score(

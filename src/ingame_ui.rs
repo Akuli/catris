@@ -428,7 +428,7 @@ fn render_stuff_on_side(
     );
 
     if client.prefer_rotating_counter_clockwise {
-        buffer.add_text(x_offset, 6, &"Counter-clockwise");
+        buffer.add_text(x_offset, 6, "Counter-clockwise");
     }
 
     let player = game

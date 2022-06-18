@@ -8,7 +8,6 @@ use std::sync::Mutex;
 use std::sync::Weak;
 use std::time::Duration;
 use std::time::Instant;
-use tokio;
 use tokio::sync::watch;
 use tokio::time::timeout;
 
@@ -180,7 +179,7 @@ async fn move_blocks_down(weak_wrapper: Weak<GameWrapper>, fast: bool) {
         } else if let Some(wrapper) = weak_wrapper.upgrade() {
             let minutes = wrapper.get_duration().as_secs_f32() / 60.0;
             // TODO: should speed up more if you play badly
-            let moves_per_second = 2.0 * (1.07 as f32).powf(minutes);
+            let moves_per_second = 2.0 * 1.07_f32.powf(minutes);
             Duration::from_secs_f32(1. / moves_per_second)
         } else {
             return;
