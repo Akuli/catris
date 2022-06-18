@@ -11,7 +11,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
       with:
-        rust-version: stable-2022-05-18
+        rust-version: stable-1.60.0
     - run: cargo check
   cargo-fmt:
     runs-on: ubuntu-latest
@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
       with:
-        rust-version: stable-2022-05-18
+        rust-version: stable-1.60.0
     - run: cargo fmt --check
   eslint:
     runs-on: ubuntu-latest
