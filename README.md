@@ -50,18 +50,19 @@ not actual `Client` objects.
 Unlike `Client` objects, the `ClientInfo` objects can't be used to send or receive;
 they are purely information for game logic and other clients.
 
-A lobby owns `GameWrapper`s, which take care of the timing and async aspects of a game:
-the underlying `Game` objects from `game_logic.rs` are pure logic.
-For example, there are several async functions in `game_wrapper`
-that call a method of `Game` repeatedly
+A lobby owns `GameWrapper`s, which take care of the timing and async aspects of a game.
+It has an underlying `Game` object, from `game_logic/game.rs`,
+and it is purely game logic just like the rest of the `game_logic/` folder:
+there's no async functions or IO inside `game_logic/`.
+For example, there are several async functions in `game_wrapper.rs`
+that call methods of `Game` repeatedly
 to e.g. move the blocks down or decrement counters on bombs.
 
-The `Game` object has `Player`s, and each `Player` has a `MovingBlock`.
+Inside the `game_logic/` folder,
+the `Game` object has `Player`s, and each `Player` has a `MovingBlock`.
 Moving blocks and landed squares use `SquareContent` objects,
 which usually define the color of a square,
 but they can also be a special bomb or drill square.
-These are all purely logic, not e.g. async or IO,
-so the game logic is split into 3 files: `game_logic.rs`, `player.rs` and `squares.rs`.
 
 When a player's block lands, the player gets a new block.
 The block fails to land if it doesn't fit within the visible part of the game.

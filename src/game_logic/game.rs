@@ -1,19 +1,18 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::blocks::MovingBlock;
-use crate::blocks::SquareContent;
+use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::blocks::SquareContent;
+use crate::game_logic::player::BlockOrTimer;
+use crate::game_logic::player::Player;
+use crate::game_logic::BlockRelativeCoords;
+use crate::game_logic::PlayerPoint;
+use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
-use crate::player::BlockOrTimer;
-use crate::player::Player;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
-
-pub type PlayerPoint = (i32, i32); // must be big, these don't wrap around in ring mode
-pub type WorldPoint = (i16, i16);
-pub type BlockRelativeCoords = (i8, i8);
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum Mode {

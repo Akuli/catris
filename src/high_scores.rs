@@ -1,4 +1,4 @@
-use crate::game_logic::Mode;
+use crate::game_logic::game::Mode;
 use std::error::Error;
 use std::io;
 use std::io::ErrorKind;

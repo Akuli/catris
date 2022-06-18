@@ -22,7 +22,6 @@ use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
 mod ansi;
-mod blocks;
 mod client;
 mod connection;
 mod game_logic;
@@ -30,7 +29,6 @@ mod game_wrapper;
 mod high_scores;
 mod ingame_ui;
 mod lobby;
-mod player;
 mod render;
 mod views;
 
