@@ -20,6 +20,7 @@ jobs:
     - uses: ATiltedTree/setup-rust@v1
       with:
         rust-version: 1.60.0
+        components: rustfmt
     - run: cargo fmt --check
   eslint:
     runs-on: ubuntu-latest
