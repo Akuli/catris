@@ -7,6 +7,8 @@ on:
 jobs:
   compile-and-test:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
