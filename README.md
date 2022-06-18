@@ -78,6 +78,16 @@ These instructions are mostly for me.
 If you want to run catris in a local network, see [local-playing.md](local-playing.md).
 If you run a bigger catris server, please let me know by creating an issue :)
 
+Tag a release (use the correct version number, of course):
+
+```
+$ your_favorite_editor Cargo.toml
+$ git add Cargo.toml
+$ git commit -m "Bump version to 4.2.0"
+$ git tag v4.2.0
+$ git push --tags origin main
+```
+
 Look at `journalctl -fu catris` to make sure nobody is currently playing.
 If in the future there is always someone playing,
 use `/home/catris/catris_motd.txt` to clearly announce the downtime beforehand.
