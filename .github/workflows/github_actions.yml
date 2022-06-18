@@ -5,8 +5,10 @@ on:
   pull_request:
 
 jobs:
-  compile:
+  compile-and-test:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
@@ -14,7 +16,8 @@ jobs:
         # In case this fails in the future: "rustc --version" says 1.60.0 to me.
         # So this should work:   rust-version: 1.60.0
         rust-version: stable
-    - run: cargo check
+    - run: cargo build
+    - run: cargo test
   cargo-fmt:
     runs-on: ubuntu-latest
     steps:
