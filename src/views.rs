@@ -30,7 +30,9 @@ const ASCII_ART: &[&str] = &[
     r" / _)   / _ \  |_   _| |  __ \ |_   _| / __)",
     r"| (_   / /_\ \   | |   |  _  /  _| |_  \__ \",
     r" \__) /_/   \_\  |_|   |_| \_\ |_____| (___/",
-    "https://github.com/Akuli/catris",
+    "",
+    "Play online: https://akuli.github.io/catris",
+    "Code: https://github.com/Akuli/catris",
     "",
 ];
 
