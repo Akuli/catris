@@ -1,8 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const COLORS = {
     // taken from mate-terminal with a color picker program
-    '0': {fg: '#FFFFFF', bg: '#000000'},  // reset all colors
-
     '30': {fg: '#555753'},
     '31': {fg: '#EF2929'},
     '32': {fg: '#8AE234'},
@@ -64,10 +62,13 @@ document.addEventListener("DOMContentLoaded", () => {
       this._cursorX = 0;  // after initial resize: 0 <= _cursorX < width
       this._cursorY = 0;  // after initial resize: 0 <= _cursorY < height
       this._cursorIsShowing = true;
-      this.fgColor = COLORS['0'].fg;
-      this.bgColor = COLORS['0'].bg;
-
+      this._resetColors();
       this._resize(80, 24);
+    }
+
+    _resetColors() {
+      this.fgColor = '#FFFFFF';
+      this.bgColor = '#000000';
     }
 
     _fixCursorPos() {
@@ -207,11 +208,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const colorInfo = COLORS[ansiCode.slice(4, -1)];
         if (colorInfo.fg) this.fgColor = colorInfo.fg;
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
+      } else if (ansiCode == "\x1b[0m") {
+        this._resetColors();
       } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
         const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
         this._resize(width, height);
       } else {
-        console.warn("Unknown ANSI escape sequence: " + ansiCode);
+        console.warn(`Unknown ANSI escape sequence: '${ansiCode}'`);
       }
     }
 
@@ -241,7 +244,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
 
-  function sendText(text) {
+  function sendKeyPress(text) {
     const utf8 = new TextEncoder().encode(text);
     if(ws.readyState === WebSocket.OPEN) {
       ws.send(utf8);
@@ -250,7 +253,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.addEventListener("paste", event => {
     const pastedText = event.clipboardData.getData("text/plain");
-    sendText(pastedText.replace(/\n|\r|\x1b/g, ""));
+    for (const character of pastedText.replace(/\n|\r|\x1b/g, "")) {
+      sendKeyPress(character);
+    }
   });
 
   document.onkeydown = (event) => {
@@ -259,19 +264,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (event.key.length === 1) {
-      sendText(event.key);
+      sendKeyPress(event.key);
     } else if (event.key === "ArrowUp") {
-      sendText("\x1b[A");
+      sendKeyPress("\x1b[A");
     } else if (event.key === "ArrowDown") {
-      sendText("\x1b[B");
+      sendKeyPress("\x1b[B");
     } else if (event.key === "ArrowRight") {
-      sendText("\x1b[C");
+      sendKeyPress("\x1b[C");
     } else if (event.key === "ArrowLeft") {
-      sendText("\x1b[D");
+      sendKeyPress("\x1b[D");
     } else if (event.key === "Backspace") {
-      sendText("\x7f");
+      sendKeyPress("\x7f");
     } else if (event.key === "Enter") {
-      sendText("\r");
+      sendKeyPress("\r");
     } else {
       console.log("Unrecognized key:", event.key);
       return;

@@ -1,0 +1,18 @@
+[package]
+name = "catris"
+version = "4.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+debug = true
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+weak-table = "*"
+rand = "*"
+lazy_static = "*"
+tokio-tungstenite = "*"
+# futures-util copied from tokio-tungstenite's Cargo.toml
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }

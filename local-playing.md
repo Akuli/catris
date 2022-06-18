@@ -7,48 +7,11 @@ with several computers connected to the same router with Ethernet cables.
 This file explains how to do that.
 
 
-## Running the server
+## Running the server(s)
 
-If you're on Windows, use `py` instead of `python3` and `env\Scripts\activate` instead of `source env/bin/activate` below.
-
-Install Python and download this repository.
-If you already have Git, you can use it:
-
-```
-git clone https://github.com/Akuli/catris
-cd catris
-```
-
-Or you can [download a zip file by clicking here](https://github.com/Akuli/catris/archive/refs/heads/main.zip),
-extract it and `cd` into it.
-Either way, if you run `dir` or `ls`,
-you should see files named `local-playing.md` and `README.md` among other things.
-If you see a file named `__init__.py`, you have `cd`'d too deep
-and you need to go back up with `cd ..`.
-
-Next, create a virtualenv and install the dependencies.
-This is needed for the web interface,
-but you don't need to do this if all players will connect with netcat.
-
-```
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
-```
-
-We are now ready to run the server:
-
-```
-python3 -m catris
-```
-
-If you want to use the web UI, you also need to start a web server in a second terminal.
-The server must be started from the `web-ui` directory.
-
-```
-cd web-ui
-python3 -m http.server
-```
+Install rust and run the catris server with `cargo` as explained in
+[the development section of the README](README.md#development).
+Also run the web server if you want to use the web UI.
 
 
 ## Finding the server's IP address
