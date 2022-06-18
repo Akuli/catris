@@ -97,6 +97,8 @@ If you changed rust code, build the executable, copy it to the server, and resta
 ```
 $ cargo build --release
 $ scp target/release/catris catris:/home/catris/catris
+$ ssh catris
+$ sudo systemctl restart catris
 ```
 
 If you modified the web UI, copy the contents of the `web-ui` directory to the server:
