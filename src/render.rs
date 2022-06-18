@@ -130,7 +130,7 @@ impl RenderBuffer {
         let mut result = "".to_string();
 
         result.push_str(&ansi::resize_terminal(self.width, self.height));
-        result.push_str(&ansi::CLEAR_SCREEN);
+        result.push_str(ansi::CLEAR_SCREEN);
         for y in 0..self.height {
             result.push_str(&ansi::move_cursor(0, y));
             for x in 0..self.width {
@@ -142,7 +142,7 @@ impl RenderBuffer {
             }
         }
         if current_color != ansi::Color::DEFAULT {
-            result.push_str(&ansi::RESET_COLORS);
+            result.push_str(ansi::RESET_COLORS);
         }
         result
     }
@@ -193,7 +193,7 @@ impl RenderBuffer {
                 }
             }
             if current_color != ansi::Color::DEFAULT {
-                result.push_str(&ansi::RESET_COLORS);
+                result.push_str(ansi::RESET_COLORS);
             }
             if !cursor_at_xy {
                 result.push_str(&ansi::move_cursor(end, y));
@@ -209,13 +209,11 @@ impl RenderBuffer {
         cursor_pos: Option<(usize, usize)>,
         force_redraw: bool,
     ) -> String {
-        let mut result;
-
-        if self.width != old.width || self.height != old.height || force_redraw {
-            result = self.clear_and_render_entire_screen();
+        let mut result = if self.width != old.width || self.height != old.height || force_redraw {
+            self.clear_and_render_entire_screen()
         } else {
-            result = self.get_updates_for_what_changed(old, cursor_pos);
-        }
+            self.get_updates_for_what_changed(old, cursor_pos)
+        };
 
         match cursor_pos {
             None => {

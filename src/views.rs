@@ -101,9 +101,7 @@ where
                 }
             }
             KeyPress::BackSpace => {
-                if current_text.len() > 0 {
-                    current_text.pop();
-                }
+                current_text.pop();
             }
             KeyPress::Enter => {
                 if last_enter_press == None
@@ -147,7 +145,7 @@ pub async fn ask_name(
         client,
         "Name: ",
         |name, client| {
-            if name.len() == 0 {
+            if name.is_empty() {
                 return Some("Please write a name before pressing Enter.".to_string());
             }
             for ch in name.chars() {
@@ -209,7 +207,7 @@ struct Menu {
 
 impl Menu {
     fn selected_text(&self) -> &str {
-        &self.items[self.selected_index].as_ref().unwrap()
+        self.items[self.selected_index].as_ref().unwrap()
     }
 
     fn render(&self, buffer: &mut RenderBuffer, top_y: usize) {
@@ -264,7 +262,7 @@ impl Menu {
             }
             _ => {}
         }
-        return false;
+        false
     }
 }
 
@@ -505,11 +503,10 @@ pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
         render_data.clear(80, 24);
 
         let mut color = Color::DEFAULT;
-        let mut lines = GAMEPLAY_TIPS.iter();
         let mut y = 0;
 
-        while let Some(item) = lines.next() {
-            let mut line = *item;
+        for line_ref in GAMEPLAY_TIPS {
+            let mut line = *line_ref;
             if line.contains("Ctrl+") && client.is_connected_with_websocket() {
                 continue;
             }
@@ -754,7 +751,7 @@ fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
 
 fn render_high_scores_table(
     buffer: &mut RenderBuffer,
-    top_results: &Vec<GameResult>,
+    top_results: &[GameResult],
     this_game_index: Option<usize>,
     multiplayer: bool,
 ) {
@@ -838,11 +835,8 @@ async fn show_high_scores(
                 result.unwrap(); // apparently never fails, not sure why
             }
             key = client.receive_key_press() => {
-                match key? {
-                    KeyPress::Enter => {
-                        return Ok(());
-                    }
-                    _ => {},
+                if key? == KeyPress::Enter {
+                    return Ok(());
                 }
             }
         }

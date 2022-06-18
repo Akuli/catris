@@ -46,7 +46,7 @@ impl Player {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
             color: client_info.color,
-            spawn_point: spawn_point,
+            spawn_point,
             block_or_timer: BlockOrTimer::Block(MovingBlock::new(current_score)),
             next_block: MovingBlock::new(current_score),
             block_in_hold: None,

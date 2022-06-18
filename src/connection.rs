@@ -32,7 +32,7 @@ fn connection_closed_error() -> io::Error {
 
 fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<(), io::Error> {
     key_press_times.push_back(Instant::now());
-    while key_press_times.len() != 0 && key_press_times[0].elapsed().as_secs_f32() > 1.0 {
+    while !key_press_times.is_empty() && key_press_times[0].elapsed().as_secs_f32() > 1.0 {
         key_press_times.pop_front();
     }
     if key_press_times.len() > 100 {

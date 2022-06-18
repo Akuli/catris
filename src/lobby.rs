@@ -4,13 +4,11 @@ use crate::game_logic::Game;
 use crate::game_logic::Mode;
 use crate::game_wrapper;
 use crate::game_wrapper::GameWrapper;
-use rand;
 use rand::Rng;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
-use tokio;
 use tokio::sync::watch;
 use weak_table::WeakValueHashMap;
 
@@ -80,8 +78,7 @@ impl Lobby {
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
-            .filter(|color| !used_colors.contains(*color))
-            .next()
+            .find(|color| !used_colors.contains(*color))
             .unwrap();
         self.clients.push(ClientInfo {
             client_id: logger.client_id,
@@ -120,7 +117,7 @@ impl Lobby {
             wrapper.clone()
         } else {
             let mut game = Game::new(mode);
-            let ok = game.add_player(&client_info);
+            let ok = game.add_player(client_info);
             assert!(ok);
             let wrapper = Arc::new(GameWrapper::new(game));
             game_wrapper::start_tasks(wrapper.clone());

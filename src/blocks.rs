@@ -198,7 +198,7 @@ impl SquareContent {
         }
     }
 
-    pub fn to_landed_content(
+    pub fn get_landed_content(
         &self,
         relative_coords: BlockRelativeCoords,
         player_direction: (i8, i8),
@@ -322,8 +322,8 @@ enum RotateMode {
 // Checks if a and b are the same shape, but possibly in different locations.
 fn shapes_match(a: &[BlockRelativeCoords], b: &[BlockRelativeCoords]) -> bool {
     // Also assumes that a and b don't have duplicates, couldn't figure out easy way to assert that
-    assert!(a.len() != 0);
-    assert!(b.len() != 0);
+    assert!(!a.is_empty());
+    assert!(!b.is_empty());
     assert!(a.len() == b.len());
 
     // Try to find the vector v that produces b when added to elements of a.

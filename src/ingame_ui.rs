@@ -13,6 +13,7 @@ use crate::render::RenderData;
 use std::cell::RefCell;
 use std::cmp::max;
 
+#[allow(clippy::too_many_arguments)]
 fn render_name_lines(
     players: &[RefCell<Player>],
     highlight_client_id: u64,
@@ -300,14 +301,11 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
     let mut trace_color = Color::DEFAULT;
     {
         let player = game.players[player_idx].borrow();
-        match &player.block_or_timer {
-            BlockOrTimer::Block(block) => {
-                for point in block.get_coords() {
-                    trace_points.retain(|p| *p != player.player_to_world(point));
-                }
-                trace_color = block.square_content.get_trace_color();
+        if let BlockOrTimer::Block(block) = &player.block_or_timer {
+            for point in block.get_coords() {
+                trace_points.retain(|p| *p != player.player_to_world(point));
             }
-            _ => {}
+            trace_color = block.square_content.get_trace_color();
         }
     }
     trace_points.retain(|p| !game.flashing_points.contains_key(p));
@@ -428,7 +426,7 @@ fn render_stuff_on_side(
     );
 
     if client.prefer_rotating_counter_clockwise {
-        buffer.add_text(x_offset, 6, &"Counter-clockwise");
+        buffer.add_text(x_offset, 6, "Counter-clockwise");
     }
 
     let player = game
