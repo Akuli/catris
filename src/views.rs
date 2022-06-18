@@ -595,7 +595,6 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
         }
     };
 
-    // TODO: should these be .subscribe()? grep for subscribe to find another place that needs it
     let mut receiver = game_wrapper.status_receiver.clone();
     let mut paused = false;
 
