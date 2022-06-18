@@ -1,6 +1,5 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::player::BlockOrTimer;
@@ -526,6 +525,7 @@ impl Game {
         }
     }
 
+    // TODO: rename moving --> falling
     pub fn get_moving_square(
         &self,
         point: WorldPoint,
@@ -992,7 +992,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, FallingBlock::new(BlockType::Normal))
+                replace(b, FallingBlock::from_score(0))
             }
             _ => return false,
         };
