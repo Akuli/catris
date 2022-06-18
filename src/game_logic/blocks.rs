@@ -412,15 +412,15 @@ impl BlockType {
 }
 
 #[derive(Debug)]
-pub struct MovingBlock {
+pub struct FallingBlock {
     pub square_content: SquareContent,
     pub has_been_in_hold: bool,
     pub center: PlayerPoint,
     relative_coords: Vec<BlockRelativeCoords>,
     rotate_mode: RotateMode,
 }
-impl MovingBlock {
-    pub fn new(block_type: BlockType) -> MovingBlock {
+impl FallingBlock {
+    pub fn new(block_type: BlockType) -> FallingBlock {
         let content;
         let mut coords;
 
@@ -451,7 +451,7 @@ impl MovingBlock {
             }
         }
 
-        MovingBlock {
+        FallingBlock {
             square_content: content,
             center: (0, 0), // dummy value, should be changed when spawning the block
             rotate_mode: choose_initial_rotate_mode(&coords, &content),
@@ -556,10 +556,10 @@ mod tests {
 
     #[test]
     fn test_constructing() {
-        let normal = MovingBlock::new(BlockType::Normal);
-        let cursed = MovingBlock::new(BlockType::Cursed);
-        let drill = MovingBlock::new(BlockType::Drill);
-        let bomb = MovingBlock::new(BlockType::Bomb);
+        let normal = FallingBlock::new(BlockType::Normal);
+        let cursed = FallingBlock::new(BlockType::Cursed);
+        let drill = FallingBlock::new(BlockType::Drill);
+        let bomb = FallingBlock::new(BlockType::Bomb);
 
         assert!(normal.relative_coords.len() == 4);
         assert!(cursed.relative_coords.len() == 5);
