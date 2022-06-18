@@ -19,7 +19,7 @@ and the javascript code in `web-ui/` connects a websocket to port 54321.
 After a client connects, it mostly doesn't matter whether they use
 a websocket connection or a plain TCP connection,
 as `connection.rs` abstracts the differences away.
-Both connections send ANSI escape codes.
+Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) defined in `ansi.rs`.
 This means that the javascript code in `web-ui/` must interpret ANSI codes,
 but it simplifies the rust code a lot.
 
