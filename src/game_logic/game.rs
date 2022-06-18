@@ -1,6 +1,7 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::game_logic::blocks::MovingBlock;
+use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::player::BlockOrTimer;
 use crate::game_logic::player::Player;
@@ -964,7 +965,7 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                replace(&mut player.next_block, MovingBlock::new(self.score))
+                replace(&mut player.next_block, MovingBlock::from_score(self.score))
             };
             block.spawn_at(player.spawn_point);
             block
@@ -991,7 +992,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, MovingBlock::new(self.score))
+                replace(b, MovingBlock::new(BlockType::Normal))
             }
             _ => return false,
         };
