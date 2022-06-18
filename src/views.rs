@@ -19,6 +19,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncBufReadExt;
+use tokio::io::BufReader;
 use tokio::sync::watch;
 
 const ASCII_ART: &[&str] = &[
@@ -263,7 +266,31 @@ impl Menu {
     }
 }
 
+async fn read_motd() -> Result<Vec<String>, io::Error> {
+    let file = OpenOptions::new()
+        .read(true)
+        .open("catris_motd.txt")
+        .await?;
+    let buf_reader = BufReader::new(file);
+    let mut lines = buf_reader.lines();
+    let mut result = vec![];
+    while let Some(line) = lines.next_line().await? {
+        result.push(line);
+    }
+    Ok(result)
+}
+
 pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
+    let motd = match read_motd().await {
+        Ok(lines) => lines,
+        Err(e) if e.kind() == ErrorKind::NotFound => vec![],
+        Err(e) => {
+            client
+                .logger()
+                .log(&format!("reading motd file failed: {:?}", e));
+            vec![]
+        }
+    };
     let mut menu = Menu {
         items: vec![
             Some("New lobby".to_string()),
@@ -272,6 +299,7 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
         ],
         selected_index: 0,
     };
+
     loop {
         {
             let mut render_data = client.render_data.lock().unwrap();
@@ -281,11 +309,19 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
             menu.render(&mut render_data.buffer, 10);
             render_data
                 .buffer
-                .add_centered_text(18, "If you want to play alone, just make a new lobby.");
+                .add_centered_text(16, "If you want to play alone, just make a new lobby.");
             render_data.buffer.add_centered_text(
-                20,
+                17,
                 "For multiplayer, one player makes a lobby and others join it.",
             );
+            for (i, line) in motd.iter().enumerate() {
+                render_data.buffer.add_centered_text_with_color(
+                    19 + i,
+                    line,
+                    Color::GREEN_FOREGROUND,
+                );
+            }
+
             render_data.changed.notify_one();
         }
 

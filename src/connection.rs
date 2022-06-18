@@ -45,7 +45,7 @@ fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<
 }
 
 fn get_timeout(last_recv: Instant) -> Duration {
-    let deadline = last_recv + Duration::from_secs(10*60);
+    let deadline = last_recv + Duration::from_secs(10 * 60);
     deadline.saturating_duration_since(Instant::now())
 }
 
@@ -139,7 +139,8 @@ impl Receiver {
                         None => {
                             // Receive more data
                             let dest = &mut buffer[*buffer_size..];
-                            let n = timeout(get_timeout(*last_recv), read_half.read(dest)).await??;
+                            let n =
+                                timeout(get_timeout(*last_recv), read_half.read(dest)).await??;
                             if n == 0 {
                                 return Err(connection_closed_error());
                             }

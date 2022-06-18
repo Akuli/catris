@@ -1,8 +1,7 @@
 grep TODO
-motd
 
-profiling
 code compare with python implementation, to ensure all features in
+update docs everywhere
 prod with RUST_BACKTRACE=1
 
 Todo: highlight await keyword in my editor
@@ -11,4 +10,4 @@ Todo: highlight "static ref" properly
 Todo: highlight "extern crate lazy_static;" properly
 Todo: highlight "ref" keyword when i try to write .map(|ref| ref.borrow())
 TODO: highlight "Default::default()" somehow nicely?
-Todo: highlight Self consistently, currently "-> Self" doesn't work right
+Todo: highlight Self, both "-> Self" and "Self { ... }"
