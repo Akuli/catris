@@ -52,8 +52,7 @@ they are purely information for game logic and other clients.
 
 A lobby owns `GameWrapper`s, which take care of the timing and async aspects of a game.
 Each `GameWrapper` has an underlying `Game` object from `game_logic/game.rs`,
-and it is purely game logic just like the rest of the `game_logic/` folder:
-there's no async functions or IO inside `game_logic/`.
+and like the rest of the `game_logic/` folder, it's purely game logic without any async or IO.
 For example, there are several async functions in `game_wrapper.rs`
 that call methods of `Game` repeatedly
 to e.g. move the blocks down or decrement counters on bombs.
