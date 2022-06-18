@@ -1,7 +1,7 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
-use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::BlockType;
+use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::player::BlockOrTimer;
 use crate::game_logic::player::Player;
