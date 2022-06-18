@@ -166,6 +166,11 @@ impl Game {
         }
     }
 
+    #[cfg(test)]
+    pub fn truncate_height(&mut self, new_height: usize) {
+        self.landed_rows.truncate(new_height);
+    }
+
     pub fn get_score(&self) -> usize {
         self.score
     }
