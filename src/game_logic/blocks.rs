@@ -565,9 +565,5 @@ mod tests {
         assert!(cursed.relative_coords.len() == 5);
         assert!(drill.relative_coords.len() == 10);
         assert!(bomb.relative_coords.len() == 4);
-
-        assert!(drill.square_content.is_drill());
-        assert!(bomb.square_content.is_bomb());
-        assert!(!bomb.square_content.is_drill());
     }
 }
