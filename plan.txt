@@ -1,8 +1,3 @@
-no lobbies mode
-gameplay tips: when not in websocket mode:
-  <Ctrl+C>, <Ctrl+D> or <Ctrl+Q>: quit
-  <Ctrl+R>: redraw the whole screen (may be needed after resizing the window)
-gameplay tips: prevent writing stuff on bottom
 update docs everywhere
 prod with RUST_BACKTRACE=1
 

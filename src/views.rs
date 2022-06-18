@@ -473,8 +473,9 @@ pub async fn choose_game_mode(
 }
 
 const GAMEPLAY_TIPS: &[&str] = &[
-    "",
     "Keys:",
+    "  [Ctrl+C], [Ctrl+D] or [Ctrl+Q]: quit",
+    "  [Ctrl+R]: redraw the whole screen (may be needed after resizing the window)",
     "  [W]/[A]/[S]/[D] or [↑]/[←]/[↓]/[→]: move and rotate (don't hold down [S] or [↓])",
     "  [H]: hold (aka save) block for later, switch to previously held block if any",
     "  [R]: change rotating direction",
@@ -502,29 +503,38 @@ pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
         render_data.clear(80, 24);
 
         let mut color = Color::DEFAULT;
-        for y in 0..GAMEPLAY_TIPS.len() {
+        let mut lines = GAMEPLAY_TIPS.iter();
+        let mut y = 0;
+
+        while let Some(item) = lines.next() {
+            let mut line = *item;
+            if line.contains("Ctrl+") && client.is_connected_with_websocket() {
+                continue;
+            }
+
             let mut x = 2;
-            let mut string = GAMEPLAY_TIPS[y];
+            y += 1;
+
             loop {
-                match string.chars().next() {
+                match line.chars().next() {
                     Some('[') => {
                         color = Color::MAGENTA_FOREGROUND;
-                        string = &string[1..];
+                        line = &line[1..];
                     }
                     Some('{') => {
                         color = Color::CYAN_FOREGROUND;
-                        string = &string[1..];
+                        line = &line[1..];
                     }
                     Some(']') | Some('}') => {
                         color = Color::DEFAULT;
-                        string = &string[1..];
+                        line = &line[1..];
                     }
                     Some(_) => {
-                        let i = string.find(|c| "[]{}".contains(c)).unwrap_or(string.len());
+                        let i = line.find(|c| "[]{}".contains(c)).unwrap_or(line.len());
                         x = render_data
                             .buffer
-                            .add_text_with_color(x, y, &string[..i], color);
-                        string = &string[i..];
+                            .add_text_with_color(x, y, &line[..i], color);
+                        line = &line[i..];
                     }
                     None => break,
                 }
@@ -535,7 +545,10 @@ pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
         render_data.changed.notify_one();
     }
 
-    while !menu.handle_key_press(client.receive_key_press().await?) {}
+    while !menu.handle_key_press(client.receive_key_press().await?) {
+        // Clear the key that user typed, although no need to re-render
+        client.render_data.lock().unwrap().changed.notify_one();
+    }
     Ok(())
 }
 

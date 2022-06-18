@@ -50,6 +50,13 @@ impl Client {
         }
     }
 
+    pub fn is_connected_with_websocket(&self) -> bool {
+        match self.receiver {
+            Receiver::WebSocket { .. } => true,
+            Receiver::RawTcp { .. } => false,
+        }
+    }
+
     pub fn logger(&self) -> ClientLogger {
         ClientLogger { client_id: self.id }
     }
