@@ -11,8 +11,9 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
       with:
-        # latest stable (rustc --version)
-        rust-version: 1.60.0
+        # In case this fails in the future: "rustc --version" says 1.60.0 to me.
+        # So this should work:   rust-version: 1.60.0
+        rust-version: latest
     - run: cargo check
   cargo-fmt:
     runs-on: ubuntu-latest
@@ -20,9 +21,18 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ATiltedTree/setup-rust@v1
       with:
-        rust-version: 1.60.0
+        rust-version: latest
         components: rustfmt
     - run: cargo fmt --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ATiltedTree/setup-rust@v1
+      with:
+        rust-version: latest
+        components: clippy
+    - run: cargo clippy -- -D warnings
   eslint:
     runs-on: ubuntu-latest
     steps:

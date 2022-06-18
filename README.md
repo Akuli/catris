@@ -43,7 +43,9 @@ $ python3 -m http.server
 
 You can then open `http://localhost:8000/` in your web browser.
 
-I use `cargo fmt` to format my code. GitHub Actions ensures that it was used.
+Other commands (these also run on GitHub Actions):
+- Formatter: `cargo fmt`
+- Linter: `cargo clippy`
 
 
 ## Deploying
