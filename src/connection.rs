@@ -22,7 +22,8 @@ use tokio_tungstenite::WebSocketStream;
 
 // Errors can be io::Error or tungstenite::Error.
 // I can't box them because boxes aren't Send i.e. can't be held across await.
-fn convert_error(e: tungstenite::Error) -> io::Error {
+fn convert_error(e: tungstenite::Error) -> io::Error
+{
     io::Error::new(ErrorKind::Other, format!("websocket error: {:?}", e))
 }
 
