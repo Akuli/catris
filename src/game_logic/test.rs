@@ -7,15 +7,44 @@ use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
 use crate::game_logic::player::BlockOrTimer;
+use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use std::collections::HashSet;
 
 fn dump_game_state(game: &Game) -> Vec<String> {
     let mut result = vec![];
-    for y in 0..game.get_height() {
+    let (x_top, x_bottom, y_top, y_bottom) = game.get_bounds_in_player_coords();
+
+    let x_coords: Vec<i32> = (x_top..x_bottom).collect();
+    let y_coords = match game.mode {
+        Mode::Traditional => (y_top..y_bottom).collect::<Vec<i32>>(),
+        Mode::Bottle => vec![
+            y_top,
+            y_top + 1,
+            y_top + 2,
+            y_top + 3,
+            y_bottom - 4,
+            y_bottom - 3,
+            y_bottom - 2,
+            y_bottom - 1,
+        ],
+        Mode::Ring => unimplemented!(),
+    };
+
+    let mut previous_y = None;
+    for y in y_coords {
+        if previous_y.is_some() && previous_y != Some(y - 1) {
+            result.push("~~~SNIP~~~".to_string());
+        }
+        previous_y = Some(y);
+
         let mut row = "".to_string();
-        for x in 0..game.get_width() {
-            if game.get_moving_square((x as i16, y as i16), None).is_some() {
+        for x in &x_coords {
+            let x = *x;
+            let point = game.players[0].borrow().player_to_world((x, y));
+            if !game.is_valid_landed_block_coords(point) {
+                row.push_str("..");
+            } else if game.get_moving_square((x as i16, y as i16), None).is_some() {
                 row.push_str("FF");
             } else if game.get_landed_square((x as i16, y as i16)).is_some() {
                 row.push_str("LL");
@@ -216,14 +245,75 @@ fn test_traditional_clearing() {
     // two players --> double score
     assert_eq!(game.get_score(), 60);
 
+    let mut expected_full: HashSet<WorldPoint> = HashSet::new();
+    for y in [1, 3] {
+        for x in 0..(game.get_width() as i16) {
+            expected_full.insert((x, y));
+        }
+    }
+    assert_eq!(HashSet::from_iter(full.iter().map(|p| *p)), expected_full);
+
+    assert_eq!(dump_game_state(&game), before_clear);
+    game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), after_clear);
+}
+
+#[test]
+fn test_bottle_clearing() {
+    let mut game = create_game(Mode::Bottle, 2);
+    for y in 0..3 {
+        for x in 2..7 {
+            if (x, y) != (3, 0) && (x, y) != (5, 2) {
+                game.set_landed_square(
+                    (x, y),
+                    Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+                );
+            }
+        }
+    }
+    for y in (game.get_height() as i16 - 3)..(game.get_height() as i16) {
+        for x in 0..(game.get_width() as i16) {
+            if (x, y) != (3, game.get_height() as i16 - 3)
+                && (x, y) != (15, game.get_height() as i16 - 1)
+            {
+                game.set_landed_square(
+                    (x, y),
+                    Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+                );
+            }
+        }
+    }
+
+    let before_clear = vec![
+            "....LL  LLLLLL..........          ....",
+            "....LLLLLLLLLL..........          ....",
+            "....LLLLLL  LL..........          ....",
+            "....          ..........          ....",
+            "~~~SNIP~~~",
+            "                  LL                  ",
+            "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
+    ];
+    let after_clear = vec![
+            "....          ..........          ....",
+            "....          ..........          ....",
+            "....LL  LLLLLL..........          ....",
+            "....LLLLLL  LL..........          ....",
+            "~~~SNIP~~~",
+            "                  LL                  ",
+            "                  LL                  ",
+            "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
+    ];
+
     assert_eq!(
-        full.iter().map(|(x, _)| *x).collect::<HashSet<i16>>(),
-        (0..(game.get_width() as i16)).collect::<HashSet<i16>>()
-    );
-    assert_eq!(
-        full.iter().map(|(_, y)| *y).collect::<HashSet<i16>>(),
-        HashSet::from([1, 3])
-    );
+        dump_game_state(&game),before_clear);
+
+    assert_eq!(game.get_score(), 0);
+    let full = game.find_full_rows_and_increment_score();
+    // 10 points for player-specific row, 2*10 for a row shared with two players
+    assert_eq!(game.get_score(), 30);
 
     assert_eq!(dump_game_state(&game), before_clear);
     game.remove_full_rows(&full);
