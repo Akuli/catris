@@ -15,49 +15,29 @@ fn dump_game_state(game: &Game) -> Vec<String> {
     let mut result: Vec<String> = vec![];
     let (x_top, x_bottom, y_top, y_bottom) = game.get_bounds_in_player_coords();
 
-    let x_coords: Vec<Option<i32>> = match game.mode {
-        Mode::Traditional | Mode::Bottle => (x_top..x_bottom).map(|x| Some(x)).collect(),
-        Mode::Ring => vec![
-            Some(y_top),
-            Some(y_top + 1),
-            Some(y_top + 2),
-            None,
-            Some(-7),
-            Some(-6),
-            Some(-5),
-            Some(-4),
-            Some(-3),
-            Some(-2),
-            Some(-1),
-            Some(0),
-            Some(1),
-            Some(2),
-            Some(3),
-            Some(4),
-            Some(5),
-            Some(6),
-            Some(7),
-            None,
-            Some(y_bottom - 3),
-            Some(y_bottom - 2),
-            Some(y_bottom - 1),
-        ],
-    };
-    let y_coords: Vec<Option<i32>> = match game.mode {
-        Mode::Traditional => (y_top..y_bottom).map(|y| Some(y)).collect(),
-        Mode::Bottle => vec![
-            Some(y_top),
-            Some(y_top + 1),
-            Some(y_top + 2),
-            Some(y_top + 3),
-            None,
-            Some(y_bottom - 4),
-            Some(y_bottom - 3),
-            Some(y_bottom - 2),
-            Some(y_bottom - 1),
-        ],
-        Mode::Ring => x_coords.clone(),
-    };
+    let mut x_coords: Vec<Option<i32>> = vec![];
+    let mut y_coords: Vec<Option<i32>> = vec![];
+
+    match game.mode {
+        Mode::Traditional => {
+            x_coords.append(&mut (x_top..x_bottom).map(Some).collect());
+            y_coords.append(&mut (0..(game.get_height() as i32)).map(Some).collect());
+        }
+        Mode::Bottle => {
+            x_coords.append(&mut (x_top..x_bottom).map(Some).collect());
+            y_coords.append(&mut (0..4).map(Some).collect());
+            y_coords.push(None);
+            y_coords.append(&mut ((y_bottom - 4)..y_bottom).map(Some).collect());
+        }
+        Mode::Ring => {
+            x_coords.append(&mut (y_top..(y_top + 3)).map(Some).collect());
+            x_coords.push(None);
+            x_coords.append(&mut (-7..=7).map(Some).collect());
+            x_coords.push(None);
+            x_coords.append(&mut ((y_bottom - 3)..y_bottom).map(Some).collect());
+            y_coords = x_coords.clone();
+        }
+    }
 
     for y in &y_coords {
         if y.is_none() {
