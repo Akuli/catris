@@ -512,7 +512,7 @@ impl Game {
                         if full.contains(&(((x_left + x_right) / 2) as i16, y as i16)) {
                             // Blocks fall down only on this player's personal area
                             for source_y in (0..y).rev() {
-                                let source_row: Vec<Option<SquareContent>> =
+                                let source_row =
                                     self.landed_rows[source_y][x_left..x_right].to_vec();
                                 self.landed_rows[source_y + 1].splice(x_left..x_right, source_row);
                             }

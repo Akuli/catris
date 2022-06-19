@@ -314,11 +314,20 @@ fn test_bottle_clearing() {
             }
         }
     }
+    // Add unrelated squares to other player's area.
+    // These should move by 1 unit when both players area is cleared.
+    // If it moves down by 2 units, it is a bug.
+    for x in 12..17 {
+        game.set_landed_square(
+            (x, x % 3),
+            Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+        );
+    }
 
     let before_clear = vec![
-        "....LL  LLLLLL..........          ....",
-        "....LLLLLLLLLL..........          ....",
-        "....LLLLLL  LL..........          ....",
+        "....LL  LLLLLL..........LL    LL  ....",
+        "....LLLLLLLLLL..........  LL    LL....",
+        "....LLLLLL  LL..........    LL    ....",
         "....          ..........          ....",
         "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
         "                  LL                  ",
@@ -328,9 +337,9 @@ fn test_bottle_clearing() {
     ];
     let after_clear = vec![
         "....          ..........          ....",
-        "....          ..........          ....",
-        "....LL  LLLLLL..........          ....",
-        "....LLLLLL  LL..........          ....",
+        "....          ..........LL    LL  ....",
+        "....LL  LLLLLL..........  LL    LL....",
+        "....LLLLLL  LL..........    LL    ....",
         "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
         "                  LL                  ",
         "                  LL                  ",
