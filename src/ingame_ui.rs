@@ -334,7 +334,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                     },
                 );
             } else if let Some((content, relative_coords, owner_idx)) =
-                game.get_falling_square(world_point, None)
+                game.get_falling_square(world_point)
             {
                 let (moving_x, moving_y) = game.players[owner_idx].borrow().down_direction;
                 content.render(
