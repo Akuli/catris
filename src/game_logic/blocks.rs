@@ -441,11 +441,6 @@ fn add_extra_square(coords: &mut Vec<BlockRelativeCoords>) {
     }
 }
 
-// TODO: get rid of this function
-fn maybe(probability: f32) -> bool {
-    rand::thread_rng().gen_range(0.0..100.0) < probability
-}
-
 #[derive(Debug)]
 pub struct FallingBlock {
     pub square_content: SquareContent,
@@ -476,8 +471,13 @@ impl FallingBlock {
                 coords = DRILL_COORDS.to_vec();
             }
             BlockType::Bomb => {
+                let initial_timer_value = if rand::thread_rng().gen_range(0..5) == 0 {
+                    3
+                } else {
+                    15
+                };
                 content = SquareContent::Bomb {
-                    timer: if maybe(20.0) { 3 } else { 15 },
+                    timer: initial_timer_value,
                     id: None,
                 };
                 coords = Shape::O.coords().to_vec();
