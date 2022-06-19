@@ -12,35 +12,66 @@ use crate::lobby::ClientInfo;
 use std::collections::HashSet;
 
 fn dump_game_state(game: &Game) -> Vec<String> {
-    let mut result = vec![];
+    let mut result: Vec<String> = vec![];
     let (x_top, x_bottom, y_top, y_bottom) = game.get_bounds_in_player_coords();
 
-    let x_coords: Vec<i32> = (x_top..x_bottom).collect();
-    let y_coords = match game.mode {
-        Mode::Traditional => (y_top..y_bottom).collect::<Vec<i32>>(),
-        Mode::Bottle => vec![
-            y_top,
-            y_top + 1,
-            y_top + 2,
-            y_top + 3,
-            y_bottom - 4,
-            y_bottom - 3,
-            y_bottom - 2,
-            y_bottom - 1,
+    let x_coords: Vec<Option<i32>> = match game.mode {
+        Mode::Traditional | Mode::Bottle => (x_top..x_bottom).map(|x| Some(x)).collect(),
+        Mode::Ring => vec![
+            Some(y_top),
+            Some(y_top + 1),
+            Some(y_top + 2),
+            None,
+            Some(-6),
+            Some(-5),
+            Some(-4),
+            Some(-3),
+            Some(-2),
+            Some(-1),
+            Some(0),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(5),
+            Some(6),
+            None,
+            Some(y_bottom - 3),
+            Some(y_bottom - 2),
+            Some(y_bottom - 1),
         ],
-        Mode::Ring => unimplemented!(),
+    };
+    let y_coords: Vec<Option<i32>> = match game.mode {
+        Mode::Traditional => (y_top..y_bottom).map(|y| Some(y)).collect(),
+        Mode::Bottle => vec![
+            Some(y_top),
+            Some(y_top + 1),
+            Some(y_top + 2),
+            Some(y_top + 3),
+            None,
+            Some(y_bottom - 4),
+            Some(y_bottom - 3),
+            Some(y_bottom - 2),
+            Some(y_bottom - 1),
+        ],
+        Mode::Ring => x_coords.clone(),
     };
 
-    let mut previous_y = None;
-    for y in y_coords {
-        if previous_y.is_some() && previous_y != Some(y - 1) {
-            result.push("~~~SNIP~~~".to_string());
+    for y in &y_coords {
+        if y.is_none() {
+            result.push(result[0].chars().map(|_| '~').collect());
+            continue;
         }
-        previous_y = Some(y);
+        let y = y.unwrap();
 
         let mut row = "".to_string();
         for x in &x_coords {
-            let x = *x;
+            if x.is_none() {
+                row.push_str("~");
+                continue;
+            }
+            let x = x.unwrap();
+
             let point = game.players[0].borrow().player_to_world((x, y));
             if !game.is_valid_landed_block_coords(point) {
                 row.push_str("..");
@@ -285,30 +316,29 @@ fn test_bottle_clearing() {
     }
 
     let before_clear = vec![
-            "....LL  LLLLLL..........          ....",
-            "....LLLLLLLLLL..........          ....",
-            "....LLLLLL  LL..........          ....",
-            "....          ..........          ....",
-            "~~~SNIP~~~",
-            "                  LL                  ",
-            "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
-            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
-            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
+        "....LL  LLLLLL..........          ....",
+        "....LLLLLLLLLL..........          ....",
+        "....LLLLLL  LL..........          ....",
+        "....          ..........          ....",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "                  LL                  ",
+        "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
     ];
     let after_clear = vec![
-            "....          ..........          ....",
-            "....          ..........          ....",
-            "....LL  LLLLLL..........          ....",
-            "....LLLLLL  LL..........          ....",
-            "~~~SNIP~~~",
-            "                  LL                  ",
-            "                  LL                  ",
-            "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
-            "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
+        "....          ..........          ....",
+        "....          ..........          ....",
+        "....LL  LLLLLL..........          ....",
+        "....LLLLLL  LL..........          ....",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "                  LL                  ",
+        "                  LL                  ",
+        "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
     ];
 
-    assert_eq!(
-        dump_game_state(&game),before_clear);
+    assert_eq!(dump_game_state(&game), before_clear);
 
     assert_eq!(game.get_score(), 0);
     let full = game.find_full_rows_and_increment_score();
@@ -318,4 +348,182 @@ fn test_bottle_clearing() {
     assert_eq!(dump_game_state(&game), before_clear);
     game.remove_full_rows(&full);
     assert_eq!(dump_game_state(&game), after_clear);
+}
+
+#[test]
+fn test_ring_mode_clearing() {
+    let mut game = create_game(Mode::Ring, 2);
+    for x in -6..=6 {
+        for y in -6..=6 {
+            if game.is_valid_landed_block_coords((x, y)) && (x, y) != (5, -2) {
+                game.set_landed_square(
+                    (x, y),
+                    Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+                );
+            }
+        }
+    }
+
+    let before_clear = vec![
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLL..............LL  LL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLL..............LLLLLL~      ",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "      ~LLLLLLLLLLLLLLLLLLLLLLLLLL~      ",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+    ];
+    let after_clear = vec![
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "      ~    LLLLLLLLLLLLLLLLLL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............      ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LLLLLLLLLLLLLLLLLL    ~      ",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+    ];
+    assert_eq!(dump_game_state(&game), before_clear);
+
+    assert_eq!(game.get_score(), 0);
+    let full = game.find_full_rows_and_increment_score();
+    // two rows, so 10+20, with double score because two players
+    assert_eq!(game.get_score(), 60);
+
+    game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), after_clear);
+}
+
+// Sometimes, a clear in ring mode causes another clear to trigger.
+// This is because inner rings are smaller, and shoving squares into smaller space can get rid of gaps.
+#[test]
+fn test_ring_mode_double_clear() {
+    let mut game = create_game(Mode::Ring, 2);
+    for x in -5..=5 {
+        for y in -5..=5 {
+            if game.is_valid_landed_block_coords((x, y)) && (x.abs() != 5 || y.abs() != 5) {
+                game.set_landed_square(
+                    (x, y),
+                    Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+                );
+            }
+        }
+    }
+
+    // bigger part of corner missing in top left, shouldn't affect anything
+    game.set_landed_square((-4, -5), None);
+    // also check how this square moves during the clears
+    game.set_landed_square(
+        (5, -6),
+        Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+    );
+
+    let before_clears = vec![
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "      ~                      LL  ~      ",
+        "      ~      LLLLLLLLLLLLLLLL    ~      ",
+        "      ~  LLLLLLLLLLLLLLLLLLLLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLL..............LLLL  ~      ",
+        "      ~  LLLLLLLLLLLLLLLLLLLLLL  ~      ",
+        "      ~    LLLLLLLLLLLLLLLLLL    ~      ",
+        "      ~                          ~      ",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+    ];
+    let between_clears = vec![
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "      ~                          ~      ",
+        "      ~                      LL  ~      ",
+        "      ~    LLLLLLLLLLLLLLLLLL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LL..............LL    ~      ",
+        "      ~    LLLLLLLLLLLLLLLLLL    ~      ",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+    ];
+    let after_clears = vec![
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "      ~                    LL    ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~      ..............      ~      ",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "      ~                          ~      ",
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "......~                          ~......",
+        "......~                          ~......",
+        "......~                          ~......",
+    ];
+
+    assert_eq!(dump_game_state(&game), before_clears);
+    let full = game.find_full_rows_and_increment_score();
+    game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), between_clears);
+    let full = game.find_full_rows_and_increment_score();
+    game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), after_clears);
+
+    // TODO: you should probably get more score for this than you currently do
+    // currently it's 10 per clear, with *2 because two players
+    assert_eq!(game.get_score(), 40);
 }
