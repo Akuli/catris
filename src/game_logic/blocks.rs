@@ -169,7 +169,7 @@ pub enum SquareContent {
         timer: u8,
         id: Option<u64>,
     },
-    MovingDrill {
+    FallingDrill {
         animation_counter: u8,
     },
     LandedDrill {
@@ -186,7 +186,7 @@ impl SquareContent {
     }
 
     pub fn is_drill(&self) -> bool {
-        matches!(self, Self::MovingDrill { .. } | Self::LandedDrill { .. })
+        matches!(self, Self::FallingDrill { .. } | Self::LandedDrill { .. })
     }
 
     pub fn can_drill(&self, other: &SquareContent) -> bool {
@@ -195,7 +195,7 @@ impl SquareContent {
 
     pub fn animate(&mut self) -> bool {
         match self {
-            Self::MovingDrill { animation_counter } => {
+            Self::FallingDrill { animation_counter } => {
                 *animation_counter += 1;
                 *animation_counter %= 12; // won't mess up 3-pic or 4-pic animations
                 true
@@ -210,7 +210,7 @@ impl SquareContent {
         player_direction: (i8, i8),
     ) -> Self {
         match self {
-            Self::MovingDrill { animation_counter } => {
+            Self::FallingDrill { animation_counter } => {
                 let mut texts_by_viewer_direction = ["", "", "", ""];
                 for viewer_dir in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
                     texts_by_viewer_direction[direction_to_0123(viewer_dir)] = get_drill_text(
@@ -240,7 +240,6 @@ impl SquareContent {
         }
     }
 
-    // relative coords needed only for moving drill blocks
     pub fn render(
         &self,
         buffer: &mut RenderBuffer,
@@ -250,10 +249,10 @@ impl SquareContent {
         (i8, i8) here are always unit vectors, i.e. one component zero and the other +-1.
         These represent the directions of players, and will be compared with each other.
 
-        Moving blocks need to know what direction is down for the player who owns the moving block.
+        Falling blocks need to know what direction is down for the player who owns the block.
         All blocks need to know the direction of the player who will see the rendering result.
         */
-        moving_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
+        falling_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
         viewer_direction: (i8, i8),
     ) {
         match self {
@@ -267,8 +266,8 @@ impl SquareContent {
                 let color = self.get_trace_color();
                 buffer.add_text_with_color(x, y, &format!("{:<2}", *timer), color);
             }
-            Self::MovingDrill { animation_counter } => {
-                let (relative_coords, driller_direction) = moving_block_data.unwrap();
+            Self::FallingDrill { animation_counter } => {
+                let (relative_coords, driller_direction) = falling_block_data.unwrap();
                 let direction = choose_drill_direction(viewer_direction, driller_direction);
                 let text = get_drill_text(*animation_counter, direction, relative_coords);
                 buffer.add_text(x, y, text);
@@ -471,7 +470,7 @@ impl FallingBlock {
                 add_extra_square(&mut coords);
             }
             BlockType::Drill => {
-                content = SquareContent::MovingDrill {
+                content = SquareContent::FallingDrill {
                     animation_counter: 0,
                 };
                 coords = DRILL_COORDS.to_vec();

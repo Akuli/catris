@@ -572,7 +572,7 @@ impl Game {
             }
         }
 
-        // Moving landed squares can cause them to overlap moving squares
+        // Moving landed squares can cause them to overlap falling squares
         let mut potential_overlaps: Vec<WorldPoint> = vec![];
 
         for player in &self.players {
@@ -589,7 +589,7 @@ impl Game {
         }
     }
 
-    fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
+    fn is_valid_falling_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
             Mode::Traditional | Mode::Bottle => 0,
@@ -635,8 +635,7 @@ impl Game {
         }
     }
 
-    // TODO: rename moving --> falling
-    pub fn get_moving_square(
+    pub fn get_falling_square(
         &self,
         point: WorldPoint,
         exclude_player_idx: Option<usize>, // TODO: get rid of this, can use return value
@@ -690,7 +689,7 @@ impl Game {
             None
         };
         landed.or_else(|| {
-            self.get_moving_square(point, exclude_player_idx)
+            self.get_falling_square(point, exclude_player_idx)
                 .map(|(content, _, _)| content)
         })
     }
@@ -703,7 +702,7 @@ impl Game {
         };
 
         let can_rotate = coords.iter().all(|p| {
-            let stays_in_bounds = self.is_valid_moving_block_coords(*p);
+            let stays_in_bounds = self.is_valid_falling_block_coords(*p);
             let goes_on_top_of_something = self
                 .get_any_square(player.borrow().player_to_world(*p), Some(player_idx))
                 .is_some();
@@ -737,7 +736,7 @@ impl Game {
             };
 
             coords.iter().all(|p| {
-                let stays_in_bounds = self.is_valid_moving_block_coords(*p);
+                let stays_in_bounds = self.is_valid_falling_block_coords(*p);
                 stays_in_bounds && {
                     let p = player.borrow().player_to_world(*p);
                     if let Some(goes_on_top_of) = self.get_any_square(p, Some(player_idx)) {
@@ -779,7 +778,7 @@ impl Game {
                 let (x, mut y) = *p;
                 y += 1;
 
-                let stays_in_bounds = self.is_valid_moving_block_coords((x, y));
+                let stays_in_bounds = self.is_valid_falling_block_coords((x, y));
                 stays_in_bounds && {
                     let world_point = player.borrow().player_to_world((x, y));
                     if let Some(goes_on_top_of) = self.get_any_square(world_point, Some(player_idx))
@@ -1043,15 +1042,15 @@ impl Game {
             let mut player_coords: Vec<PlayerPoint> = vec![];
             let mut world_coords: Vec<WorldPoint> = vec![];
 
-            if let BlockOrTimer::Block(moving_block) = &player.block_or_timer {
-                player_coords = moving_block.get_coords();
+            if let BlockOrTimer::Block(falling_block) = &player.block_or_timer {
+                player_coords = falling_block.get_coords();
                 world_coords = player_coords
                     .iter()
                     .map(|p| player.player_to_world(*p))
                     .collect();
             }
 
-            if let BlockOrTimer::Block(moving_block) = &mut player.block_or_timer {
+            if let BlockOrTimer::Block(falling_block) = &mut player.block_or_timer {
                 let old_len = player_coords.len();
                 assert!(old_len != 0);
 
@@ -1060,7 +1059,7 @@ impl Game {
                 player_coords.retain(|_| {
                     f(
                         *world_coord_iter.next().unwrap(),
-                        &mut moving_block.square_content,
+                        &mut falling_block.square_content,
                         Some(player_idx),
                     )
                 });
@@ -1073,7 +1072,7 @@ impl Game {
 
                 // this if statement is a pseudo-optimization
                 if player_coords.len() != old_len {
-                    moving_block.set_player_coords(&player_coords, moving_block.center);
+                    falling_block.set_player_coords(&player_coords, falling_block.center);
                 }
             }
         }
@@ -1139,8 +1138,7 @@ impl Game {
 
         // Each player typically has 4 bomb squares associated with the same square content.
         // We want to decrement the counter in the square content only once.
-        let mut moving_block_timer_decremented: Vec<bool> = vec![];
-        moving_block_timer_decremented.resize(self.players.len(), false);
+        let mut falling_block_timer_decremented: Vec<bool> = vec![false; self.players.len()];
 
         self.filter_and_mutate_all_squares_in_place(|point, square_content, player_idx| {
             match square_content {
@@ -1149,7 +1147,7 @@ impl Game {
                     // timer can already be zero, if other bombs are exploding (holds async lock)
                     if *timer > 0
                         && (player_idx.is_none()
-                            || !moving_block_timer_decremented[player_idx.unwrap()])
+                            || !falling_block_timer_decremented[player_idx.unwrap()])
                     {
                         *timer -= 1;
                     }
@@ -1157,7 +1155,7 @@ impl Game {
                         result.push(point);
                     }
                     if let Some(i) = player_idx {
-                        moving_block_timer_decremented[i] = true;
+                        falling_block_timer_decremented[i] = true;
                     }
                 }
                 _ => {}
