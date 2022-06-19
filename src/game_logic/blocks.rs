@@ -177,6 +177,10 @@ pub enum SquareContent {
     },
 }
 impl SquareContent {
+    pub fn with_color(color: Color) -> Self {
+        Self::Normal([(' ', color), (' ', color)])
+    }
+
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
@@ -279,15 +283,54 @@ impl SquareContent {
     }
 }
 
-const L_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (1, -1)];
-const I_COORDS: &[BlockRelativeCoords] = &[(-2, 0), (-1, 0), (0, 0), (1, 0)];
-const J_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (-1, 0), (0, 0), (1, 0)];
-const O_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (0, -1), (-1, -1)];
-const T_COORDS: &[BlockRelativeCoords] = &[(-1, 0), (0, 0), (1, 0), (0, -1)];
-const Z_COORDS: &[BlockRelativeCoords] = &[(-1, -1), (0, -1), (0, 0), (1, 0)];
-const S_COORDS: &[BlockRelativeCoords] = &[(1, -1), (0, -1), (0, 0), (-1, 0)];
+#[derive(Copy, Clone)]
+pub enum Shape {
+    L,
+    I,
+    J,
+    O,
+    T,
+    Z,
+    S,
+}
+const ALL_SHAPES: &[Shape] = &[
+    Shape::L,
+    Shape::I,
+    Shape::J,
+    Shape::O,
+    Shape::T,
+    Shape::Z,
+    Shape::S,
+];
 
-// x coordinates should be same as in O_COORDS
+impl Shape {
+    fn color(&self) -> Color {
+        match self {
+            // Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
+            Self::L => Color::WHITE_BACKGROUND, // should be orange, but wouldn't work on windows cmd
+            Self::I => Color::CYAN_BACKGROUND,
+            Self::J => Color::BLUE_BACKGROUND,
+            Self::O => Color::YELLOW_BACKGROUND,
+            Self::T => Color::MAGENTA_BACKGROUND,
+            Self::Z => Color::RED_BACKGROUND,
+            Self::S => Color::GREEN_BACKGROUND,
+        }
+    }
+
+    fn coords(&self) -> &[BlockRelativeCoords] {
+        match self {
+            Self::L => &[(-1, 0), (0, 0), (1, 0), (1, -1)],
+            Self::I => &[(-2, 0), (-1, 0), (0, 0), (1, 0)],
+            Self::J => &[(-1, -1), (-1, 0), (0, 0), (1, 0)],
+            Self::O => &[(-1, 0), (0, 0), (0, -1), (-1, -1)],
+            Self::T => &[(-1, 0), (0, 0), (1, 0), (0, -1)],
+            Self::Z => &[(-1, -1), (0, -1), (0, 0), (1, 0)],
+            Self::S => &[(1, -1), (0, -1), (0, 0), (-1, 0)],
+        }
+    }
+}
+
+// x coordinates should be same as in O block
 const DRILL_COORDS: &[BlockRelativeCoords] = &[
     (-1, -2),
     (0, -2),
@@ -301,17 +344,41 @@ const DRILL_COORDS: &[BlockRelativeCoords] = &[
     (0, 2),
 ];
 
-#[rustfmt::skip]
-const STANDARD_BLOCKS: &[(Color, &[BlockRelativeCoords])] = &[
-    // Colors from here: https://tetris.fandom.com/wiki/Tetris_Guideline
-    (Color::WHITE_BACKGROUND, L_COORDS),  // should be orange, but wouldn't work on windows cmd
-    (Color::CYAN_BACKGROUND, I_COORDS),
-    (Color::BLUE_BACKGROUND, J_COORDS),
-    (Color::YELLOW_BACKGROUND, O_COORDS),
-    (Color::MAGENTA_BACKGROUND, T_COORDS),
-    (Color::RED_BACKGROUND, Z_COORDS),
-    (Color::GREEN_BACKGROUND, S_COORDS),
-];
+#[derive(Copy, Clone)]
+pub enum BlockType {
+    Normal(Shape),
+    Cursed(Shape),
+    Drill,
+    Bomb,
+}
+
+impl BlockType {
+    pub fn from_score(score: usize) -> Self {
+        let score_kilos = score as f32 / 1000.0;
+        let shape = *ALL_SHAPES.choose(&mut rand::thread_rng()).unwrap();
+
+        let items = [
+            // Weight x means it's x times as likely as normal block.
+            (BlockType::Normal(shape), 1.0),
+            // Cursed blocks only appear at score>500 and then become very common.
+            // The intent is to surprise new players.
+            (
+                BlockType::Cursed(shape),
+                (score_kilos - 0.5).max(0.0) / 20.0,
+            ),
+            // Drills are rare, but always possible.
+            // They're also very powerful when you happen to get one.
+            (BlockType::Drill, score_kilos / 200.0),
+            // Bombs are initially just 1% of normal squares.
+            // But they get much more common as you get more points.
+            (BlockType::Bomb, score_kilos / 80.0 + 0.01),
+        ];
+        let distribution = WeightedIndex::new(items.iter().map(|(_, weight)| weight)).unwrap();
+        let index = distribution.sample(&mut rand::thread_rng());
+        let (result, _) = items[index];
+        result
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 enum RotateMode {
@@ -375,40 +442,9 @@ fn add_extra_square(coords: &mut Vec<BlockRelativeCoords>) {
     }
 }
 
+// TODO: get rid of this function
 fn maybe(probability: f32) -> bool {
     rand::thread_rng().gen_range(0.0..100.0) < probability
-}
-
-#[derive(Copy, Clone)]
-pub enum BlockType {
-    Normal,
-    Cursed,
-    Drill,
-    Bomb,
-}
-
-impl BlockType {
-    pub fn from_score(score: usize) -> Self {
-        let score_kilos = score as f32 / 1000.0;
-
-        let items = [
-            // Weight x means it's x times as likely as normal block.
-            (BlockType::Normal, 1.0),
-            // Cursed blocks only appear at score>500 and then become very common.
-            // The intent is to surprise new players.
-            (BlockType::Cursed, (score_kilos - 0.5).max(0.0) / 20.0),
-            // Drills are rare, but always possible.
-            // They're also very powerful when you happen to get one.
-            (BlockType::Drill, score_kilos / 200.0),
-            // Bombs are initially just 1% of normal squares.
-            // But they get much more common as you get more points.
-            (BlockType::Bomb, score_kilos / 80.0 + 0.01),
-        ];
-        let distribution = WeightedIndex::new(items.iter().map(|(_, weight)| weight)).unwrap();
-        let index = distribution.sample(&mut rand::thread_rng());
-        let (result, _) = items[index];
-        result
-    }
 }
 
 #[derive(Debug)]
@@ -425,15 +461,13 @@ impl FallingBlock {
         let mut coords;
 
         match block_type {
-            BlockType::Normal => {
-                let (color, coord_array) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
-                content = SquareContent::Normal([(' ', *color), (' ', *color)]);
-                coords = coord_array.to_vec();
+            BlockType::Normal(shape) => {
+                content = SquareContent::with_color(shape.color());
+                coords = shape.coords().to_vec();
             }
-            BlockType::Cursed => {
-                let (color, coord_array) = STANDARD_BLOCKS.choose(&mut rand::thread_rng()).unwrap();
-                content = SquareContent::Normal([(' ', *color), (' ', *color)]);
-                coords = coord_array.to_vec();
+            BlockType::Cursed(shape) => {
+                content = SquareContent::with_color(shape.color());
+                coords = shape.coords().to_vec();
                 add_extra_square(&mut coords);
             }
             BlockType::Drill => {
@@ -447,7 +481,7 @@ impl FallingBlock {
                     timer: if maybe(20.0) { 3 } else { 15 },
                     id: None,
                 };
-                coords = O_COORDS.to_vec();
+                coords = Shape::O.coords().to_vec();
             }
         }
 
@@ -458,10 +492,6 @@ impl FallingBlock {
             relative_coords: coords,
             has_been_in_hold: false,
         }
-    }
-
-    pub fn from_score(score: usize) -> Self {
-        Self::new(BlockType::from_score(score))
     }
 
     pub fn spawn_at(&mut self, spawn_point: PlayerPoint) {
@@ -556,8 +586,8 @@ mod tests {
 
     #[test]
     fn test_constructing() {
-        let normal = FallingBlock::new(BlockType::Normal);
-        let cursed = FallingBlock::new(BlockType::Cursed);
+        let normal = FallingBlock::new(BlockType::Normal(Shape::T));
+        let cursed = FallingBlock::new(BlockType::Cursed(Shape::T));
         let drill = FallingBlock::new(BlockType::Drill);
         let bomb = FallingBlock::new(BlockType::Bomb);
 

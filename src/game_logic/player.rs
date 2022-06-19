@@ -38,17 +38,17 @@ impl Player {
     pub fn new(
         spawn_point: PlayerPoint,
         client_info: &ClientInfo,
-        current_score: usize,
         down_direction: WorldPoint,
         game_mode: Mode,
+        mut block_factory: impl FnMut() -> FallingBlock,
     ) -> Self {
         Self {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point,
-            block_or_timer: BlockOrTimer::Block(FallingBlock::from_score(current_score)),
-            next_block: FallingBlock::from_score(current_score),
+            block_or_timer: BlockOrTimer::Block(block_factory()),
+            next_block: block_factory(),
             block_in_hold: None,
             fast_down: false,
             down_direction,
