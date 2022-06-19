@@ -152,9 +152,13 @@ pub async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
+    let old_value = client_counter.fetch_add(1, Ordering::SeqCst);
+    logger.log(&format!(
+        "There are now {} connected clients",
+        old_value + 1
+    ));
+
     // client counter decrements when client quits, id counter does not
-    // TODO: is fetch_add() really needed, we only need to add not fetch?
-    client_counter.fetch_add(1, Ordering::SeqCst);
     let _decrementer = DecrementClientCoundOnDrop {
         client_counter,
         logger,

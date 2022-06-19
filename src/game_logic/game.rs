@@ -638,19 +638,16 @@ impl Game {
     pub fn get_falling_square(
         &self,
         point: WorldPoint,
-        exclude_player_idx: Option<usize>, // TODO: get rid of this, can use return value
     ) -> Option<(SquareContent, BlockRelativeCoords, usize)> {
         for (player_idx, player) in self.players.iter().enumerate() {
-            if exclude_player_idx != Some(player_idx) {
-                if let BlockOrTimer::Block(block) = &player.borrow().block_or_timer {
-                    for (player_coords, relative_coords) in block
-                        .get_coords()
-                        .iter()
-                        .zip(block.get_relative_coords().iter())
-                    {
-                        if player.borrow().player_to_world(*player_coords) == point {
-                            return Some((block.square_content, *relative_coords, player_idx));
-                        }
+            if let BlockOrTimer::Block(block) = &player.borrow().block_or_timer {
+                for (player_coords, relative_coords) in block
+                    .get_coords()
+                    .iter()
+                    .zip(block.get_relative_coords().iter())
+                {
+                    if player.borrow().player_to_world(*player_coords) == point {
+                        return Some((block.square_content, *relative_coords, player_idx));
                     }
                 }
             }
@@ -683,15 +680,19 @@ impl Game {
         point: WorldPoint,
         exclude_player_idx: Option<usize>,
     ) -> Option<SquareContent> {
-        let landed = if self.is_valid_landed_block_coords(point) {
-            self.get_landed_square(point)
-        } else {
-            None
-        };
-        landed.or_else(|| {
-            self.get_falling_square(point, exclude_player_idx)
-                .map(|(content, _, _)| content)
-        })
+        if self.is_valid_landed_block_coords(point) {
+            if let Some(content) = self.get_landed_square(point) {
+                return Some(content);
+            }
+        }
+
+        if let Some((content, _, player_idx)) = self.get_falling_square(point) {
+            if exclude_player_idx != Some(player_idx) {
+                return Some(content);
+            }
+        }
+
+        None
     }
 
     fn rotate_if_possible(&self, player_idx: usize, prefer_counter_clockwise: bool) -> bool {

@@ -57,10 +57,7 @@ fn dump_game_state(game: &Game) -> Vec<String> {
             let point = game.players[0].borrow().player_to_world((x, y));
             if !game.is_valid_landed_block_coords(point) {
                 row.push_str("..");
-            } else if game
-                .get_falling_square((x as i16, y as i16), None)
-                .is_some()
-            {
+            } else if game.get_falling_square((x as i16, y as i16)).is_some() {
                 row.push_str("FF");
             } else if game.get_landed_square((x as i16, y as i16)).is_some() {
                 row.push_str("LL");
