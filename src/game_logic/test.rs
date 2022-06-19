@@ -203,14 +203,9 @@ fn test_wait_counters() {
     ));
 
     // During the next 30 seconds, the timer ticks from 30 to 1. Then the player gets a new block.
-    for _ in 0..28 {
+    for _ in 0..29 {
         assert!(game.tick_please_wait_counter(1));
     }
-    assert!(matches!(
-        game.players[1].borrow().block_or_timer,
-        BlockOrTimer::Timer(2)
-    ));
-    assert!(game.tick_please_wait_counter(1));
     assert!(matches!(
         game.players[1].borrow().block_or_timer,
         BlockOrTimer::Timer(1)
