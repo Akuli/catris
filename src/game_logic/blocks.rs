@@ -490,10 +490,6 @@ impl FallingBlock {
         }
     }
 
-    pub fn from_score(score: usize) -> Self {
-        Self::new(BlockType::from_score(score))
-    }
-
     pub fn spawn_at(&mut self, spawn_point: PlayerPoint) {
         // Position the block just above the spawn point
         let (spawn_x, spawn_y) = spawn_point;

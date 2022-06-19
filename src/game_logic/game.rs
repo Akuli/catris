@@ -1,5 +1,6 @@
 use crate::ansi::Color;
 use crate::ansi::KeyPress;
+use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::player::BlockOrTimer;
@@ -139,6 +140,7 @@ pub struct Game {
     landed_rows: Vec<Vec<Option<SquareContent>>>,
     score: usize,
     bomb_id_counter: u64,
+    block_factory: fn(usize) -> FallingBlock,
 }
 impl Game {
     pub fn new(mode: Mode) -> Self {
@@ -163,12 +165,18 @@ impl Game {
             landed_rows,
             score: 0,
             bomb_id_counter: 0,
+            block_factory: |score| FallingBlock::new(BlockType::from_score(score)),
         }
     }
 
     #[cfg(test)]
     pub fn truncate_height(&mut self, new_height: usize) {
         self.landed_rows.truncate(new_height);
+    }
+
+    #[cfg(test)]
+    pub fn set_block_factory(&mut self, factory: fn(usize) -> FallingBlock) {
+        self.block_factory = factory;
     }
 
     pub fn get_score(&self) -> usize {
@@ -312,9 +320,9 @@ impl Game {
         self.players.push(RefCell::new(Player::new(
             spawn_point,
             client_info,
-            self.score,
             down_direction,
             self.mode,
+            || (self.block_factory)(self.score),
         )));
         self.update_spawn_points();
 
@@ -970,7 +978,7 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                replace(&mut player.next_block, FallingBlock::from_score(self.score))
+                replace(&mut player.next_block, (self.block_factory)(self.score))
             };
             block.spawn_at(player.spawn_point);
             block
@@ -997,7 +1005,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, FallingBlock::from_score(0))
+                replace(b, (self.block_factory)(self.score))
             }
             _ => return false,
         };
