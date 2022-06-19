@@ -297,7 +297,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 
     let mut trace_points = game.predict_landing_place(player_idx);
 
-    // Don't trace on top of current player's moving block or flashing
+    // Don't trace on top of flashing or the current player's falling block
     let mut trace_color = Color::DEFAULT;
     {
         let player = game.players[player_idx].borrow();
@@ -334,7 +334,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                     },
                 );
             } else if let Some((content, relative_coords, owner_idx)) =
-                game.get_moving_square(world_point, None)
+                game.get_falling_square(world_point, None)
             {
                 let (moving_x, moving_y) = game.players[owner_idx].borrow().down_direction;
                 content.render(
