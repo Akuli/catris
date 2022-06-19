@@ -441,6 +441,19 @@ fn add_extra_square(coords: &mut Vec<BlockRelativeCoords>) {
     }
 }
 
+fn fix_rotation_center(coords: &mut [BlockRelativeCoords]) {
+    let x_sum: i8 = coords.iter().map(|(x, _)| *x).sum();
+    let y_sum: i8 = coords.iter().map(|(_, y)| *y).sum();
+
+    let old_center_x = ((x_sum as f32) / (coords.len() as f32)).round() as i8;
+    let old_center_y = ((y_sum as f32) / (coords.len() as f32)).round() as i8;
+
+    for (x, y) in coords {
+        *x -= old_center_x;
+        *y -= old_center_y;
+    }
+}
+
 #[derive(Debug)]
 pub struct FallingBlock {
     pub square_content: SquareContent,
@@ -463,6 +476,7 @@ impl FallingBlock {
                 content = SquareContent::with_color(shape.color());
                 coords = shape.coords().to_vec();
                 add_extra_square(&mut coords);
+                fix_rotation_center(&mut coords);
             }
             BlockType::Drill => {
                 content = SquareContent::FallingDrill {
@@ -582,17 +596,29 @@ impl FallingBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
-    fn test_constructing() {
-        let normal = FallingBlock::new(BlockType::Normal(Shape::T));
-        let cursed = FallingBlock::new(BlockType::Cursed(Shape::T));
-        let drill = FallingBlock::new(BlockType::Drill);
-        let bomb = FallingBlock::new(BlockType::Bomb);
+    fn test_rotation_center_of_cursed_blocks() {
+        for _ in 0..50 {
+            // Random-generate a long cursed I-block. Repeat a few times, in case only some of them are good.
+            let block = loop {
+                let block = FallingBlock::new(BlockType::Cursed(Shape::I));
+                if block.get_relative_coords().iter().all(|(_, y)| *y == 0) {
+                    break block;
+                }
+            };
 
-        assert!(normal.relative_coords.len() == 4);
-        assert!(cursed.relative_coords.len() == 5);
-        assert!(drill.relative_coords.len() == 10);
-        assert!(bomb.relative_coords.len() == 4);
+            // It must be centered around (0,0).
+            // Otherwise it wouldn't rotate around its center.
+            assert_eq!(
+                block
+                    .get_relative_coords()
+                    .iter()
+                    .map(|p| *p)
+                    .collect::<HashSet<BlockRelativeCoords>>(),
+                HashSet::from([(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)])
+            );
+        }
     }
 }
