@@ -492,6 +492,103 @@ impl Game {
         full_points
     }
 
+    pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
+        match self.mode {
+            Mode::Traditional => {
+                for y in 0..self.landed_rows.len() {
+                    if full.contains(&(0, y as i16)) {
+                        self.landed_rows[..(y + 1)].rotate_right(1);
+                        for cell in &mut self.landed_rows[0] {
+                            *cell = None;
+                        }
+                    }
+                }
+            }
+            Mode::Bottle => {
+                for (i, _) in self.players.iter().enumerate() {
+                    for y in 0..BOTTLE_PERSONAL_SPACE_HEIGHT {
+                        let x_left = i * BOTTLE_OUTER_WIDTH;
+                        let x_right = x_left + BOTTLE_INNER_WIDTH;
+                        if full.contains(&(((x_left + x_right) / 2) as i16, y as i16)) {
+                            // Blocks fall down only on this player's personal area
+                            for source_y in (0..y).rev() {
+                                let source_row: Vec<Option<SquareContent>> =
+                                    self.landed_rows[source_y][x_left..x_right].to_vec();
+                                self.landed_rows[source_y + 1].splice(x_left..x_right, source_row);
+                            }
+                            for cell in &mut self.landed_rows[0][x_left..x_right] {
+                                *cell = None;
+                            }
+                        }
+                    }
+                }
+
+                for y in BOTTLE_PERSONAL_SPACE_HEIGHT..self.landed_rows.len() {
+                    if full.contains(&(0, y as i16)) {
+                        self.landed_rows[..(y + 1)].rotate_right(1);
+                        for cell in &mut self.landed_rows[0] {
+                            *cell = None;
+                        }
+                    }
+                }
+            }
+            Mode::Ring => {
+                let mut counts = vec![0; RING_OUTER_RADIUS + 1];
+                for (x, y) in full {
+                    self.set_landed_square((*x, *y), None);
+                    counts[max(x.abs(), y.abs()) as usize] += 1;
+                }
+
+                // removing a ring shifts outer radiuses, so go inwards
+                for (r, count) in counts.iter().enumerate().rev() {
+                    if r == 0 || *count != 8 * r {
+                        continue;
+                    }
+                    let r = r as i16;
+
+                    // clear destination radius where outer blocks will go
+                    // moving the squares doesn't overwrite, if source (outer) square is None
+                    for i in (-r)..=r {
+                        self.set_landed_square((-r, i), None);
+                        self.set_landed_square((r, i), None);
+                        self.set_landed_square((i, -r), None);
+                        self.set_landed_square((i, r), None);
+                    }
+
+                    for dest_r in r..(RING_OUTER_RADIUS as i16) {
+                        let source_r = dest_r + 1;
+                        for i in (-source_r + 1)..source_r {
+                            self.move_landed_square((-source_r, i), (-dest_r, i));
+                            self.move_landed_square((source_r, i), (dest_r, i));
+                            self.move_landed_square((i, -source_r), (i, -dest_r));
+                            self.move_landed_square((i, source_r), (i, dest_r));
+                        }
+                        self.move_landed_square((-source_r, -source_r), (-dest_r, -dest_r));
+                        self.move_landed_square((-source_r, source_r), (-dest_r, dest_r));
+                        self.move_landed_square((source_r, -source_r), (dest_r, -dest_r));
+                        self.move_landed_square((source_r, source_r), (dest_r, dest_r));
+                    }
+                }
+            }
+        }
+
+        // Moving landed squares can cause them to overlap moving squares
+        let mut potential_overlaps: Vec<WorldPoint> = vec![];
+
+        for player in &self.players {
+            let player = player.borrow();
+            for player_point in player.block_or_timer.get_coords() {
+                potential_overlaps.push(player.player_to_world(player_point));
+            }
+        }
+
+        for point in potential_overlaps {
+            if self.is_valid_landed_block_coords(point) {
+                self.set_landed_square(point, None);
+            }
+        }
+    }
+
     fn is_valid_moving_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
@@ -568,7 +665,7 @@ impl Game {
         self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize]
     }
 
-    fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
+    pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         let (x, y) = point;
         let (offset_x, offset_y) = self.get_center_offset();
         self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize] = value;
@@ -860,103 +957,6 @@ impl Game {
 
         self.players[player_idx].borrow_mut().fast_down = false;
         need_render
-    }
-
-    pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
-        match self.mode {
-            Mode::Traditional => {
-                for y in 0..self.landed_rows.len() {
-                    if full.contains(&(0, y as i16)) {
-                        self.landed_rows[..(y + 1)].rotate_right(1);
-                        for cell in &mut self.landed_rows[0] {
-                            *cell = None;
-                        }
-                    }
-                }
-            }
-            Mode::Bottle => {
-                for (i, _) in self.players.iter().enumerate() {
-                    for y in 0..BOTTLE_PERSONAL_SPACE_HEIGHT {
-                        let x_left = i * BOTTLE_OUTER_WIDTH;
-                        let x_right = x_left + BOTTLE_INNER_WIDTH;
-                        if full.contains(&(((x_left + x_right) / 2) as i16, y as i16)) {
-                            // Blocks fall down only on this player's personal area
-                            for source_y in (0..y).rev() {
-                                let source_row: Vec<Option<SquareContent>> =
-                                    self.landed_rows[source_y][x_left..x_right].to_vec();
-                                self.landed_rows[source_y + 1].splice(x_left..x_right, source_row);
-                            }
-                            for cell in &mut self.landed_rows[0][x_left..x_right] {
-                                *cell = None;
-                            }
-                        }
-                    }
-                }
-
-                for y in BOTTLE_PERSONAL_SPACE_HEIGHT..self.landed_rows.len() {
-                    if full.contains(&(0, y as i16)) {
-                        self.landed_rows[..(y + 1)].rotate_right(1);
-                        for cell in &mut self.landed_rows[0] {
-                            *cell = None;
-                        }
-                    }
-                }
-            }
-            Mode::Ring => {
-                let mut counts = vec![0; RING_OUTER_RADIUS + 1];
-                for (x, y) in full {
-                    self.set_landed_square((*x, *y), None);
-                    counts[max(x.abs(), y.abs()) as usize] += 1;
-                }
-
-                // removing a ring shifts outer radiuses, so go inwards
-                for (r, count) in counts.iter().enumerate().rev() {
-                    if r == 0 || *count != 8 * r {
-                        continue;
-                    }
-                    let r = r as i16;
-
-                    // clear destination radius where outer blocks will go
-                    // moving the squares doesn't overwrite, if source (outer) square is None
-                    for i in (-r)..=r {
-                        self.set_landed_square((-r, i), None);
-                        self.set_landed_square((r, i), None);
-                        self.set_landed_square((i, -r), None);
-                        self.set_landed_square((i, r), None);
-                    }
-
-                    for dest_r in r..(RING_OUTER_RADIUS as i16) {
-                        let source_r = dest_r + 1;
-                        for i in (-source_r + 1)..source_r {
-                            self.move_landed_square((-source_r, i), (-dest_r, i));
-                            self.move_landed_square((source_r, i), (dest_r, i));
-                            self.move_landed_square((i, -source_r), (i, -dest_r));
-                            self.move_landed_square((i, source_r), (i, dest_r));
-                        }
-                        self.move_landed_square((-source_r, -source_r), (-dest_r, -dest_r));
-                        self.move_landed_square((-source_r, source_r), (-dest_r, dest_r));
-                        self.move_landed_square((source_r, -source_r), (dest_r, -dest_r));
-                        self.move_landed_square((source_r, source_r), (dest_r, dest_r));
-                    }
-                }
-            }
-        }
-
-        // Moving landed squares can cause them to overlap moving squares
-        let mut potential_overlaps: Vec<WorldPoint> = vec![];
-
-        for player in &self.players {
-            let player = player.borrow();
-            for player_point in player.block_or_timer.get_coords() {
-                potential_overlaps.push(player.player_to_world(player_point));
-            }
-        }
-
-        for point in potential_overlaps {
-            if self.is_valid_landed_block_coords(point) {
-                self.set_landed_square(point, None);
-            }
-        }
     }
 
     fn can_add_block(&self, player_idx: usize, block: &FallingBlock) -> bool {

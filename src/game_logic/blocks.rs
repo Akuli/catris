@@ -177,6 +177,10 @@ pub enum SquareContent {
     },
 }
 impl SquareContent {
+    pub fn with_color(color: Color) -> Self {
+        Self::Normal([(' ', color), (' ', color)])
+    }
+
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
@@ -458,11 +462,11 @@ impl FallingBlock {
 
         match block_type {
             BlockType::Normal(shape) => {
-                content = SquareContent::Normal([(' ', shape.color()), (' ', shape.color())]);
+                content = SquareContent::with_color(shape.color());
                 coords = shape.coords().to_vec();
             }
             BlockType::Cursed(shape) => {
-                content = SquareContent::Normal([(' ', shape.color()), (' ', shape.color())]);
+                content = SquareContent::with_color(shape.color());
                 coords = shape.coords().to_vec();
                 add_extra_square(&mut coords);
             }

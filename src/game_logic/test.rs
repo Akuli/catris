@@ -1,15 +1,14 @@
-// Unit test or integration test? You decide.
-// If you view the game_logic/ subdirectory as a single unit, this is its unit test.
-// If you view it as separate units, each file being a unit, this is an integration test.
 use crate::ansi::Color;
 use crate::client::ClientLogger;
 use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::Shape;
+use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
 use crate::game_logic::player::BlockOrTimer;
 use crate::lobby::ClientInfo;
+use std::collections::HashSet;
 
 fn dump_game_state(game: &Game) -> Vec<String> {
     let mut result = vec![];
@@ -179,4 +178,54 @@ fn test_wait_counters() {
         game.players[1].borrow().block_or_timer,
         BlockOrTimer::Block(_)
     ));
+}
+
+#[test]
+fn test_traditional_clearing() {
+    let mut game = create_game(Mode::Traditional, 2);
+    game.truncate_height(5);
+    for y in 1..5 {
+        for x in 0..(game.get_width() as i16) {
+            if (x, y) != (5, 2) && (x, y) != (8, 4) && (x, y) != (12, 4) {
+                game.set_landed_square(
+                    (x, y),
+                    Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
+                );
+            }
+        }
+    }
+    let before_clear = vec![
+        "                            ",
+        "LLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "LLLLLLLLLL  LLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLL  LLLLLL  LL",
+    ];
+    let after_clear = vec![
+        "                            ",
+        "                            ",
+        "                            ",
+        "LLLLLLLLLL  LLLLLLLLLLLLLLLL",
+        "LLLLLLLLLLLLLLLL  LLLLLL  LL",
+    ];
+    assert_eq!(dump_game_state(&game), before_clear);
+
+    assert_eq!(game.get_score(), 0);
+    let full = game.find_full_rows_and_increment_score();
+    // two full rows --> 10 for first + 20 for second
+    // two players --> double score
+    assert_eq!(game.get_score(), 60);
+
+    assert_eq!(
+        full.iter().map(|(x, _)| *x).collect::<HashSet<i16>>(),
+        (0..(game.get_width() as i16)).collect::<HashSet<i16>>()
+    );
+    assert_eq!(
+        full.iter().map(|(_, y)| *y).collect::<HashSet<i16>>(),
+        HashSet::from([1, 3])
+    );
+
+    assert_eq!(dump_game_state(&game), before_clear);
+    game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), after_clear);
 }
