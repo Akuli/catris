@@ -547,11 +547,17 @@ fn test_ring_mode_double_clear() {
     ];
 
     assert_eq!(dump_game_state(&game), before_clears);
+
     let full = game.find_full_rows_and_increment_score();
     game.remove_full_rows(&full);
     assert_eq!(dump_game_state(&game), between_clears);
+
     let full = game.find_full_rows_and_increment_score();
     game.remove_full_rows(&full);
+    assert_eq!(dump_game_state(&game), after_clears);
+
+    let full = game.find_full_rows_and_increment_score();
+    assert!(full.is_empty());
     assert_eq!(dump_game_state(&game), after_clears);
 
     // TODO: you should probably get more score for this than you currently do
