@@ -119,13 +119,13 @@ These instructions are mostly for me.
 If you want to run catris in a local network, see [local-playing.md](local-playing.md).
 If you run a bigger catris server, please let me know by creating an issue :)
 
-Tag a release (use the correct version number, of course):
+Bump the version number and add a tag (so I know what's currently in production):
 
 ```
 $ your_favorite_editor Cargo.toml
 $ git add Cargo.toml
-$ git commit -m "Bump version to 4.2.0"
-$ git tag v4.2.0
+$ git commit -m "Bump version"
+$ git tag v$(grep ^version Cargo.toml | cut -d'"' -f2)
 $ git push --tags origin main
 ```
 
