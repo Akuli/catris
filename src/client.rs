@@ -3,6 +3,7 @@ use crate::connection::Receiver;
 use crate::lobby;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;
+use crate::render::PingState;
 use crate::render::RenderBuffer;
 use crate::render::RenderData;
 use std::collections::HashSet;
@@ -10,6 +11,8 @@ use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::Weak;
+use std::time::Duration;
 use tokio::sync::Notify;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
@@ -20,6 +23,25 @@ pub struct ClientLogger {
 impl ClientLogger {
     pub fn log(&self, message: &str) {
         println!("[client {}] {}", self.client_id, message);
+    }
+}
+
+async fn ping_task(render_data_ref: Weak<Mutex<RenderData>>) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        if let Some(arc) = render_data_ref.upgrade() {
+            let mut render_data = arc.lock().unwrap();
+            if let Some(ping_state) = &mut render_data.ping_state {
+                ping_state.send_soon = true;
+                render_data.changed.notify_one();
+            } else {
+                continue;
+            }
+        } else {
+            println!("End Ping Task");
+            break;
+        }
     }
 }
 
@@ -34,20 +56,35 @@ pub struct Client {
 }
 impl Client {
     pub fn new(id: u64, receiver: Receiver) -> Client {
+        let render_data = Arc::new(Mutex::new(RenderData {
+            buffer: RenderBuffer::new(),
+            cursor_pos: None,
+            changed: Arc::new(Notify::new()),
+            force_redraw: false,
+            ping_state: None,
+        }));
+        tokio::spawn(ping_task(Arc::downgrade(&render_data)));
         Client {
             id,
-            render_data: Arc::new(Mutex::new(RenderData {
-                buffer: RenderBuffer::new(),
-                cursor_pos: None,
-                changed: Arc::new(Notify::new()),
-                force_redraw: false,
-            })),
+            render_data,
             receiver,
             lobby: None,
             lobby_id_hidden: false,
             prefer_rotating_counter_clockwise: false,
             remove_name_on_disconnect_data: None,
         }
+    }
+
+    pub fn enable_pings(&self) {
+        self.render_data.lock().unwrap().ping_state = Some(PingState {
+            send_soon: false,
+            sent: None,
+            time: None,
+        });
+    }
+
+    pub fn disable_pings(&self) {
+        self.render_data.lock().unwrap().ping_state = None;
     }
 
     pub fn is_connected_with_websocket(&self) -> bool {
@@ -94,6 +131,16 @@ impl Client {
                     let mut render_data = self.render_data.lock().unwrap();
                     render_data.force_redraw = true;
                     render_data.changed.notify_one();
+                }
+                KeyPress::PingResponse => {
+                    let mut render_data = self.render_data.lock().unwrap();
+                    if let Some(ping_state) = &mut render_data.ping_state {
+                        if let Some(ping_sent) = ping_state.sent {
+                            println!("Update Ping!");
+                            ping_state.time = Some(ping_sent.elapsed());
+                            return Ok(KeyPress::PingResponse); // refresh screen to show new ping time
+                        }
+                    }
                 }
                 key => {
                     return Ok(key);

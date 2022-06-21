@@ -5,6 +5,11 @@ pub const RESET_COLORS: &str = "\x1b[0m";
 pub const SHOW_CURSOR: &str = "\x1b[?25h";
 pub const HIDE_CURSOR: &str = "\x1b[?25l";
 
+// This escape code (Device Status Report) is meant to be used for figuring out where the cursor is.
+// It causes the terminal to send back a short response containing the cursor position.
+// We use it to measure ping time between server and client.
+pub const PING: &str = "\x1b[6n";
+
 pub fn resize_terminal(width: usize, height: usize) -> String {
     // https://apple.stackexchange.com/a/47841
     format!("\x1b[8;{};{}t", height, width)
@@ -68,6 +73,7 @@ pub enum KeyPress {
     Enter,
     Quit,
     RefreshRequest,
+    PingResponse,
     Character(char),
 }
 
@@ -81,7 +87,13 @@ const CTRL_R: u8 = b'\x12';
 
 // The usize is how many bytes were consumed.
 pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
-    if data == b"" || data == b"\x1b" || data == b"\x1b[" {
+    if data == b""
+        || data == b"\x1b"
+        || data == b"\x1b["
+        || (data.starts_with(b"\x1b[")
+            && data.len() < 10
+            && data[2..].iter().all(|b| b.is_ascii_digit() || *b == b';'))
+    {
         // Incomplete data: need to receive more
         return None;
     }
@@ -94,6 +106,15 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
             b"\x1b[C" => return Some((KeyPress::Right, 3)),
             b"\x1b[D" => return Some((KeyPress::Left, 3)),
             _ => {}
+        }
+    }
+
+    // Ping response is \x1b[12;34R when cursor is at line 12 column 34
+    if data.starts_with(b"\x1b[") {
+        if let Some(i) = data.iter().position(|c| *c == b'R') {
+            if data[2..i].iter().all(|b| b.is_ascii_digit() || *b == b';') {
+                return Some((KeyPress::PingResponse, i + 1));
+            }
         }
     }
 
@@ -136,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_parse_key_press() {
-        // incomplete ansi code
+        // arrow key
         assert_eq!(parse_key_press(b""), None);
         assert_eq!(parse_key_press(b"\x1b"), None);
         assert_eq!(parse_key_press(b"\x1b["), None);
@@ -147,7 +168,27 @@ mod tests {
             Some((KeyPress::Character('['), 1))
         );
 
-        // incomplete utf-8
+        // ping response (numbers are cursor position)
+        assert_eq!(parse_key_press(b"\x1b[1"), None);
+        assert_eq!(parse_key_press(b"\x1b[12"), None);
+        assert_eq!(parse_key_press(b"\x1b[12;"), None);
+        assert_eq!(parse_key_press(b"\x1b[12;34"), None);
+        assert_eq!(
+            parse_key_press(b"\x1b[12;34R"),
+            Some((KeyPress::PingResponse, 8))
+        );
+        assert_eq!(
+            parse_key_press(b"\x1b[12;34Rxxx"),
+            Some((KeyPress::PingResponse, 8))
+        );
+
+        // ping response too long, not considered to be incomplete
+        assert_eq!(
+            parse_key_press(b"\x1b[1122;3344"),
+            Some((KeyPress::Character('\x1b'), 1))
+        );
+
+        // utf-8 character
         assert_eq!(parse_key_press(b"\xe2"), None);
         assert_eq!(parse_key_press(b"\xe2\x82"), None);
         assert_eq!(

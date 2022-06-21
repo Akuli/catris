@@ -52,6 +52,11 @@ async fn prompt<F>(
 where
     F: FnMut(&str, &mut Client) -> Option<String>,
 {
+    // Pings involve causing terminal to send stuff.
+    // With raw TCP connections, that can show up on the terminal.
+    // Not good for text entries.
+    client.disable_pings();
+
     let mut error = Some("".to_string());
     let mut current_text = "".to_string();
     let mut last_enter_press: Option<Instant> = None;
@@ -130,11 +135,11 @@ const VALID_NAME_CHARS: &str = concat!(
 );
 
 fn add_name_asking_notes(buffer: &mut RenderBuffer) {
-    buffer.add_centered_text(17, "If you play well, your name will be");
-    buffer.add_centered_text(18, "visible to everyone in the high scores.");
+    buffer.add_centered_text(16, "If you play well, your name will be");
+    buffer.add_centered_text(17, "visible to everyone in the high scores.");
 
-    buffer.add_centered_text(20, "Your IP will be logged on the server only if you");
-    buffer.add_centered_text(21, "connect 5 or more times within the same minute.");
+    buffer.add_centered_text(19, "Your IP will be logged on the server only if you");
+    buffer.add_centered_text(20, "connect 5 or more times within the same minute.");
 }
 
 pub async fn ask_name(
@@ -281,6 +286,8 @@ async fn read_motd() -> Result<Vec<String>, io::Error> {
 }
 
 pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
+    client.enable_pings();
+
     let motd = match read_motd().await {
         Ok(lines) => lines,
         Err(e) if e.kind() == ErrorKind::NotFound => vec![],
@@ -322,11 +329,21 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
                 );
             }
 
+            if let Some(duration) = render_data.ping_state.as_ref().and_then(|s| s.time) {
+                println!("Render Ping!!!");
+                render_data
+                    .buffer
+                    .add_centered_text(22, &format!("Ping: {:>2}ms", duration.as_millis()));
+            } else {
+                render_data.buffer.add_centered_text(22, "Ping: ----");
+            }
+
             render_data.changed.notify_one();
         }
 
         let key = client.receive_key_press().await?;
         if menu.handle_key_press(key) {
+            client.render_data.lock().unwrap().disable_pings();
             return match menu.selected_text() {
                 "New lobby" => Ok(true),
                 "Join an existing lobby" => Ok(false),
@@ -390,6 +407,8 @@ pub async fn choose_game_mode(
     client: &mut Client,
     selected_index: &mut usize,
 ) -> Result<Option<Mode>, io::Error> {
+    client.render_data.lock().unwrap().enable_pings();
+
     let mut items = vec![];
     items.resize(Mode::ALL_MODES.len(), None);
     items.push(None);
@@ -493,6 +512,8 @@ const GAMEPLAY_TIPS: &[&str] = &[
 ];
 
 pub async fn show_gameplay_tips(client: &mut Client) -> Result<(), io::Error> {
+    client.disable_pings();
+
     let mut menu = Menu {
         items: vec![Some("Back to menu".to_string())],
         selected_index: 0,
@@ -579,6 +600,9 @@ fn render_pause_screen(buffer: &mut RenderBuffer, menu: &Menu) {
 }
 
 pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error> {
+    // pings could disturb gameplay by inserting stuff to screen at an inappropriate time
+    client.disable_pings();
+
     /*
     Grab lobby ID before we lock the game.
 

@@ -1,5 +1,7 @@
 use crate::ansi;
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
 use tokio::sync::Notify;
 
 pub struct RenderBuffer {
@@ -203,6 +205,7 @@ impl RenderBuffer {
         result
     }
 
+    // TODO: should this be called from a method of RenderData?
     pub fn get_updates_as_ansi_codes(
         &self,
         old: &RenderBuffer,
@@ -230,17 +233,35 @@ impl RenderBuffer {
     }
 }
 
+pub struct PingState {
+    pub send_soon: bool,
+    pub sent: Option<Instant>,
+    pub time: Option<Duration>, // this is the value that is shown in UI
+}
+
 pub struct RenderData {
     pub buffer: RenderBuffer,
     pub cursor_pos: Option<(usize, usize)>,
     pub changed: Arc<Notify>,
     pub force_redraw: bool,
+    pub ping_state: Option<PingState>, // set to None to disable pings
 }
-
 impl RenderData {
     pub fn clear(&mut self, width: usize, height: usize) {
         self.buffer.clear();
         self.buffer.resize(width, height);
         self.cursor_pos = None;
+    }
+
+    pub fn enable_pings(&mut self) {
+        self.ping_state = Some(PingState {
+            send_soon: false,
+            sent: None,
+            time: None,
+        });
+    }
+
+    pub fn disable_pings(&mut self) {
+        self.ping_state = None;
     }
 }

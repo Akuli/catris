@@ -72,18 +72,34 @@ async fn handle_sending(
 
         let cursor_pos;
         let force_redraw;
+        let mut send_ping = false;
         {
             let mut render_data = render_data.lock().unwrap();
             render_data.buffer.copy_into(&mut current_render);
             cursor_pos = render_data.cursor_pos;
             force_redraw = render_data.force_redraw;
             render_data.force_redraw = false;
+            if let Some(ping_state) = &mut render_data.ping_state {
+                if ping_state.send_soon {
+                    send_ping = true;
+                    ping_state.send_soon = false;
+                    ping_state.sent = Some(Instant::now());
+                }
+            }
         }
 
         // In the beginning of a connection, the buffer isn't ready yet
         if current_render.width != 0 && current_render.height != 0 {
-            let to_send =
-                current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
+            let mut to_send = "".to_string();
+            if send_ping {
+                to_send.push_str(&ansi::PING);
+            }
+            to_send.push_str(&current_render.get_updates_as_ansi_codes(
+                &last_render,
+                cursor_pos,
+                force_redraw,
+            ));
+
             sender.send(to_send.as_bytes()).await?;
             current_render.copy_into(&mut last_render);
         }
