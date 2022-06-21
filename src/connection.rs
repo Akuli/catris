@@ -178,6 +178,19 @@ pub async fn initialize_connection(
     socket: TcpStream,
     is_websocket: bool,
 ) -> Result<(Sender, Receiver), io::Error> {
+    /*
+    Tell the kernel to prefer sending in small pieces, as soon as possible.
+
+    The kernel buffers the data, and by default, sends in large packets.
+    This makes sending big amounts of data more efficient, but this program
+    sends several small screen updates. They should be sent independently,
+    as a stream of data, not combined into large batches.
+
+    Without this option, connecting with 50ms ping is enough to make things
+    not look as smooth as they should be, especially quickly falling blocks.
+    */
+    socket.set_nodelay(true)?;
+
     let sender;
     let receiver;
 
