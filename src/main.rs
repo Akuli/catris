@@ -201,6 +201,7 @@ async fn main() {
     let client_counter = Arc::new(AtomicU64::new(0));
 
     let socket = TcpStream::connect("catris:1234").await.unwrap();
+    socket.set_nodelay(true);
     handle_connection(
         socket,
         lobbies.clone(),
