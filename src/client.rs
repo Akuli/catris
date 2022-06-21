@@ -39,7 +39,6 @@ async fn ping_task(render_data_ref: Weak<Mutex<RenderData>>) {
                 continue;
             }
         } else {
-            println!("End Ping Task");
             break;
         }
     }
@@ -136,7 +135,6 @@ impl Client {
                     let mut render_data = self.render_data.lock().unwrap();
                     if let Some(ping_state) = &mut render_data.ping_state {
                         if let Some(ping_sent) = ping_state.sent {
-                            println!("Update Ping!");
                             ping_state.time = Some(ping_sent.elapsed());
                             return Ok(KeyPress::PingResponse); // refresh screen to show new ping time
                         }

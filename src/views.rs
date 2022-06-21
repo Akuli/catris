@@ -330,7 +330,6 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
             }
 
             if let Some(duration) = render_data.ping_state.as_ref().and_then(|s| s.time) {
-                println!("Render Ping!!!");
                 render_data
                     .buffer
                     .add_centered_text(22, &format!("Ping: {:>2}ms", duration.as_millis()));
