@@ -145,7 +145,6 @@ static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 pub async fn handle_connection(
     socket: TcpStream,
-    ip: IpAddr,
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
@@ -176,7 +175,7 @@ pub async fn handle_connection(
     };
 
     // TODO: max concurrent connections from same ip?
-    log_ip_if_connects_a_lot(logger, ip, recent_ips);
+    //log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
         Ok((mut sender, receiver)) => {
@@ -212,38 +211,13 @@ async fn main() {
     let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
     let client_counter = Arc::new(AtomicU64::new(0));
 
-    let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
-    println!("Listening for raw TCP connections on port 12345...");
-
-    let ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
-    println!("Listening for websocket connections on port 54321...");
-
-    loop {
-        tokio::select! {
-            result = raw_listener.accept() => {
-                let (socket, sockaddr) = result.unwrap();
-                tokio::spawn(handle_connection(
-                    socket,
-                    sockaddr.ip(),
-                    lobbies.clone(),
-                    used_names.clone(),
-                    recent_ips.clone(),
-                    client_counter.clone(),
-                    false,
-                ));
-            }
-            result = ws_listener.accept() => {
-                let (socket, sockaddr) = result.unwrap();
-                tokio::spawn(handle_connection(
-                    socket,
-                    sockaddr.ip(),
-                    lobbies.clone(),
-                    used_names.clone(),
-                    recent_ips.clone(),
-                    client_counter.clone(),
-                    true,
-                ));
-            }
-        }
-    }
+    let socket = TcpStream::connect("catris:1234").await.unwrap();
+    handle_connection(
+        socket,
+        lobbies.clone(),
+        used_names.clone(),
+        recent_ips.clone(),
+        client_counter.clone(),
+        false,
+    ).await;
 }
