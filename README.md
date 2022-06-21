@@ -123,7 +123,8 @@ Bump the version number and add a tag (so I know what's currently in production)
 
 ```
 $ your_favorite_editor Cargo.toml
-$ git add Cargo.toml
+$ cargo build      # updates version number in Cargo.lock
+$ git add Cargo.*
 $ git commit -m "Bump version"
 $ git tag v$(grep ^version Cargo.toml | cut -d'"' -f2)
 $ git push --tags origin main
@@ -136,14 +137,15 @@ use `/home/catris/catris_motd.txt` to clearly announce the downtime beforehand.
 If you changed rust code, build the executable, copy it to the server, and restart the systemd service:
 
 ```
-$ cargo build --release
-$ scp target/release/catris catris:/home/catris/catris
-$ ssh catris
-$ sudo systemctl restart catris
+locally:    $ cargo build --release
+on server:  $ sudo systemctl stop catris
+locally:    $ scp target/release/catris catris:/home/catris/catris
+on server:  $ sudo systemctl start catris
 ```
 
 If you modified the web UI, copy the contents of the `web-ui` directory to the server:
 
 ```
-$ scp -r web-ui/* catris:/var/www/html/
+$ ls -a web-ui/
+$ scp web-ui/* catris:/var/www/html/
 ```
