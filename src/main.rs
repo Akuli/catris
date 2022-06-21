@@ -141,7 +141,6 @@ pub async fn handle_connection(
     client_counter: Arc<AtomicU64>,
     is_websocket: bool,
 ) {
-    socket.set_nodelay(true);
     // https://stackoverflow.com/a/32936288
     // not sure what ordering to use, so choosing the one with most niceness guarantees
     let client_id = CLIENT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
