@@ -38,10 +38,11 @@ async fn ping_task(
                 let mut render_data = arc.lock().unwrap();
                 // Check status while render data is locked.
                 // This way we don't get race conditions when changing the ping status.
-                if *ping_status_receiver.borrow() {
-                    render_data.ping_state.send_soon = true;
-                    render_data.changed.notify_one();
+                if !*ping_status_receiver.borrow() {
+                    continue;
                 }
+                render_data.ping_state.send_soon = true;
+                render_data.changed.notify_one();
             } else {
                 // client quit while pinging was enabled
                 return;
