@@ -88,17 +88,14 @@ async fn handle_sending(
 
         // In the beginning of a connection, the buffer isn't ready yet
         if current_render.width != 0 && current_render.height != 0 {
-            let mut to_send = "".to_string();
             if send_ping {
-                to_send.push_str(&ansi::PING);
+                sender.send(ansi::PING.as_bytes()).await?;
             }
-            to_send.push_str(&current_render.get_updates_as_ansi_codes(
-                &last_render,
-                cursor_pos,
-                force_redraw,
-            ));
 
+            let to_send =
+                current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
             sender.send(to_send.as_bytes()).await?;
+
             current_render.copy_into(&mut last_render);
         }
     }
