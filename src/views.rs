@@ -329,7 +329,7 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
                 );
             }
 
-            if let Some(duration) = render_data.ping_state.as_ref().and_then(|s| s.time) {
+            if let Some(duration) = render_data.ping_state.time {
                 render_data
                     .buffer
                     .add_centered_text(22, &format!("Ping: {:>2}ms", duration.as_millis()));
@@ -342,7 +342,6 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
 
         let key = client.receive_key_press().await?;
         if menu.handle_key_press(key) {
-            client.render_data.lock().unwrap().disable_pings();
             return match menu.selected_text() {
                 "New lobby" => Ok(true),
                 "Join an existing lobby" => Ok(false),
@@ -406,7 +405,7 @@ pub async fn choose_game_mode(
     client: &mut Client,
     selected_index: &mut usize,
 ) -> Result<Option<Mode>, io::Error> {
-    client.render_data.lock().unwrap().enable_pings();
+    client.enable_pings();
 
     let mut items = vec![];
     items.resize(Mode::ALL_MODES.len(), None);

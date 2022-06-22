@@ -244,24 +244,12 @@ pub struct RenderData {
     pub cursor_pos: Option<(usize, usize)>,
     pub changed: Arc<Notify>,
     pub force_redraw: bool,
-    pub ping_state: Option<PingState>, // set to None to disable pings
+    pub ping_state: PingState,
 }
 impl RenderData {
     pub fn clear(&mut self, width: usize, height: usize) {
         self.buffer.clear();
         self.buffer.resize(width, height);
         self.cursor_pos = None;
-    }
-
-    pub fn enable_pings(&mut self) {
-        self.ping_state = Some(PingState {
-            send_soon: false,
-            sent: None,
-            time: None,
-        });
-    }
-
-    pub fn disable_pings(&mut self) {
-        self.ping_state = None;
     }
 }

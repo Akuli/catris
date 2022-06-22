@@ -79,12 +79,10 @@ async fn handle_sending(
             cursor_pos = render_data.cursor_pos;
             force_redraw = render_data.force_redraw;
             render_data.force_redraw = false;
-            if let Some(ping_state) = &mut render_data.ping_state {
-                if ping_state.send_soon {
-                    send_ping = true;
-                    ping_state.send_soon = false;
-                    ping_state.sent = Some(Instant::now());
-                }
+            if render_data.ping_state.send_soon {
+                send_ping = true;
+                render_data.ping_state.send_soon = false;
+                render_data.ping_state.sent = Some(Instant::now());
             }
         }
 

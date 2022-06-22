@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
 use std::time::Duration;
+use tokio::sync::watch;
 use tokio::sync::Notify;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
@@ -26,20 +27,32 @@ impl ClientLogger {
     }
 }
 
-async fn ping_task(render_data_ref: Weak<Mutex<RenderData>>) {
+async fn ping_task(
+    render_data_ref: Weak<Mutex<RenderData>>,
+    mut ping_status_receiver: watch::Receiver<bool>,
+) {
     loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        if let Some(arc) = render_data_ref.upgrade() {
-            let mut render_data = arc.lock().unwrap();
-            if let Some(ping_state) = &mut render_data.ping_state {
-                ping_state.send_soon = true;
-                render_data.changed.notify_one();
+        if *ping_status_receiver.borrow() {
+            // Pinging is enabled, send ping every 5sec
+            if let Some(arc) = render_data_ref.upgrade() {
+                let mut render_data = arc.lock().unwrap();
+                // Check status while render data is locked.
+                // This way we don't get race conditions when changing the ping status.
+                if *ping_status_receiver.borrow() {
+                    render_data.ping_state.send_soon = true;
+                    render_data.changed.notify_one();
+                }
             } else {
-                continue;
+                // client quit while pinging was enabled
+                return;
             }
+            tokio::time::sleep(Duration::from_secs(5)).await;
         } else {
-            break;
+            // Wait until pinging gets enabled again
+            if ping_status_receiver.changed().await.is_err() {
+                // client quit while pinging was disabled
+                return;
+            }
         }
     }
 }
@@ -52,6 +65,7 @@ pub struct Client {
     pub lobby_id_hidden: bool,
     pub prefer_rotating_counter_clockwise: bool,
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
+    ping_status_sender: watch::Sender<bool>,
 }
 impl Client {
     pub fn new(id: u64, receiver: Receiver) -> Client {
@@ -60,9 +74,19 @@ impl Client {
             cursor_pos: None,
             changed: Arc::new(Notify::new()),
             force_redraw: false,
-            ping_state: None,
+            ping_state: PingState {
+                send_soon: false,
+                sent: None,
+                time: None,
+            },
         }));
-        tokio::spawn(ping_task(Arc::downgrade(&render_data)));
+
+        let (ping_status_sender, ping_status_receiver) = watch::channel(false);
+        tokio::spawn(ping_task(
+            Arc::downgrade(&render_data),
+            ping_status_receiver,
+        ));
+
         Client {
             id,
             render_data,
@@ -71,19 +95,21 @@ impl Client {
             lobby_id_hidden: false,
             prefer_rotating_counter_clockwise: false,
             remove_name_on_disconnect_data: None,
+            ping_status_sender,
         }
     }
 
     pub fn enable_pings(&self) {
-        self.render_data.lock().unwrap().ping_state = Some(PingState {
-            send_soon: false,
-            sent: None,
-            time: None,
-        });
+        // ignore error, because can't do much if ping task crashed
+        _ = self.ping_status_sender.send(true);
     }
 
     pub fn disable_pings(&self) {
-        self.render_data.lock().unwrap().ping_state = None;
+        let mut render_data = self.render_data.lock().unwrap();
+        render_data.ping_state.sent = None;
+        render_data.ping_state.time = None;
+        // ignore error, because can't do much if ping task crashed
+        _ = self.ping_status_sender.send(false);
     }
 
     pub fn is_connected_with_websocket(&self) -> bool {
@@ -133,11 +159,9 @@ impl Client {
                 }
                 KeyPress::PingResponse => {
                     let mut render_data = self.render_data.lock().unwrap();
-                    if let Some(ping_state) = &mut render_data.ping_state {
-                        if let Some(ping_sent) = ping_state.sent {
-                            ping_state.time = Some(ping_sent.elapsed());
-                            return Ok(KeyPress::PingResponse); // refresh screen to show new ping time
-                        }
+                    if let Some(ping_sent) = render_data.ping_state.sent {
+                        render_data.ping_state.time = Some(ping_sent.elapsed());
+                        return Ok(KeyPress::PingResponse); // refresh screen to show new ping time
                     }
                 }
                 key => {
