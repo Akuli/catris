@@ -13,7 +13,7 @@ fi
 mkdir -vp "$1"
 cd "$1"
 
-delete_older_than=$(date +'%Y-%m-%d' -d '30 days ago')
+delete_older_than=$(date +'%Y-%m-%d' -d '90 days ago')
 compress_older_than=$(date +'%Y-%m-%d' -d '3 days ago')
 
 function timestamp_of {
