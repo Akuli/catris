@@ -138,6 +138,7 @@ If you changed rust code, build the executable, copy it to the server, and resta
 
 ```
 locally:    $ cargo build --release
+locally:    $ ls -l target/release/catris
 on server:  $ sudo systemctl stop catris
 locally:    $ scp target/release/catris catris:/home/catris/catris
 on server:  $ sudo systemctl start catris
