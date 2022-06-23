@@ -62,6 +62,7 @@ pub enum Receiver {
         key_press_times: VecDeque<Instant>,
         last_recv: Instant,
     },
+    #[allow(dead_code)]
     Test(String),
 }
 impl Receiver {
