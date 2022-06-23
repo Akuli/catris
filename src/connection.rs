@@ -62,6 +62,7 @@ pub enum Receiver {
         key_press_times: VecDeque<Instant>,
         last_recv: Instant,
     },
+    Test(String),
 }
 impl Receiver {
     pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
@@ -150,6 +151,14 @@ impl Receiver {
                     }
                 }
             }
+
+            Self::Test(string) => match parse_key_press(string.as_bytes()) {
+                Some((key, bytes_used)) => {
+                    *string = string[bytes_used..].to_string();
+                    Ok(key)
+                }
+                None => Err(connection_closed_error()),
+            },
         }
     }
 }

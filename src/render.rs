@@ -48,6 +48,18 @@ impl RenderBuffer {
         self.chars[y][x]
     }
 
+    #[cfg(test)]
+    pub fn get_text(&self) -> String {
+        let mut result = "".to_string();
+        for row in &self.chars {
+            for ch in row {
+                result.push(*ch);
+            }
+            result.push('\n');
+        }
+        result
+    }
+
     pub fn set_char(&mut self, x: usize, y: usize, ch: char) {
         self.set_char_with_color(x, y, ch, ansi::Color::DEFAULT);
     }

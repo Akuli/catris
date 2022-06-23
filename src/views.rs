@@ -842,3 +842,101 @@ async fn show_high_scores(
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::connection::Receiver;
+
+    #[tokio::test]
+    async fn test_name_entering_on_windows_cmd_exe() {
+        let mut client = Client::new(123, Receiver::Test("WindowsUsesCRLF\r\n".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        assert_eq!(client.get_name(), Some("WindowsUsesCRLF"));
+    }
+
+    #[tokio::test]
+    async fn test_forgot_stty_raw() {
+        let mut client = Client::new(123, Receiver::Test("Oops\n".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_err());
+        assert_eq!(client.get_name(), None);
+
+        let text = client.render_data.lock().unwrap().buffer.get_text();
+        assert!(text.contains("Your terminal doesn't seem to be in raw mode"));
+    }
+
+    #[tokio::test]
+    async fn test_entering_name_on_raw_linux_terminal() {
+        let mut client = Client::new(123, Receiver::Test("linux_usr\r".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        assert_eq!(client.get_name(), Some("linux_usr"));
+    }
+
+    #[tokio::test]
+    async fn test_long_name() {
+        let mut client = Client::new(
+            123,
+            Receiver::Test("VeryVeryLongNameGoesHere\r".to_string()),
+        );
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        assert_eq!(client.get_name(), Some("VeryVeryLongNam"));
+
+        // Name should show up as truncated to the user entering it
+        let text = client.render_data.lock().unwrap().buffer.get_text();
+        assert!(text.contains("VeryVeryLongNam"));
+        assert!(!text.contains("VeryVeryLongName"));
+    }
+
+    #[tokio::test]
+    async fn test_empty_name() {
+        for input in ["\r", "    \r"] {
+            let mut client = Client::new(123, Receiver::Test(input.to_string()));
+            let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+            assert!(result.is_err());
+            assert_eq!(client.get_name(), None);
+
+            let text = client.render_data.lock().unwrap().buffer.get_text();
+            assert!(text.contains("Please write a name before pressing Enter"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_invalid_character_in_name() {
+        let mut client = Client::new(123, Receiver::Test(":]\r".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_err());
+        assert_eq!(client.get_name(), None);
+
+        let text = client.render_data.lock().unwrap().buffer.get_text();
+        assert!(text.contains("The name can't contain a ']' character."));
+    }
+
+    #[tokio::test]
+    async fn test_name_in_use() {
+        let names = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut alice = Client::new(123, Receiver::Test("my name\r".to_string()));
+        let result = ask_name(&mut alice, names.clone()).await;
+        assert!(result.is_ok());
+        assert_eq!(alice.get_name(), Some("my name"));
+
+        // used names are case insensitive
+        let mut bob = Client::new(123, Receiver::Test("MY NAME\r".to_string()));
+        let result = ask_name(&mut bob, names.clone()).await;
+        assert!(result.is_err());
+        assert_eq!(bob.get_name(), None);
+        let text = bob.render_data.lock().unwrap().buffer.get_text();
+        println!("{}", text);
+        assert!(text.contains("This name is in use. Try a different name."));
+
+        drop(alice);
+        bob = Client::new(123, Receiver::Test("MY NAME\r".to_string()));
+        let result = ask_name(&mut bob, names.clone()).await;
+        assert!(result.is_ok());
+        assert_eq!(bob.get_name(), Some("MY NAME"));
+    }
+}
