@@ -142,6 +142,7 @@ locally:    $ ls -l target/release/catris
 on server:  $ sudo systemctl stop catris
 locally:    $ scp target/release/catris catris:/home/catris/catris
 on server:  $ sudo systemctl start catris
+on server:  $ journalctl -fu catris
 ```
 
 If you modified the web UI, copy the contents of the `web-ui` directory to the server:
