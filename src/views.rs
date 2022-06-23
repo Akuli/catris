@@ -930,7 +930,6 @@ mod test {
         assert!(result.is_err());
         assert_eq!(bob.get_name(), None);
         let text = bob.render_data.lock().unwrap().buffer.get_text();
-        println!("{}", text);
         assert!(text.contains("This name is in use. Try a different name."));
 
         drop(alice);
