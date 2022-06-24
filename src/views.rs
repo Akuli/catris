@@ -852,8 +852,9 @@ mod test {
     #[tokio::test]
     async fn test_name_entering_on_windows_cmd_exe() {
         let mut client = Client::new(123, Receiver::Test("WindowsUsesCRLF\r\n".to_string()));
-        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
-        assert!(result.is_ok());
+        ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
+            .await
+            .unwrap();
         assert_eq!(client.get_name(), Some("WindowsUsesCRLF"));
     }
 
@@ -871,8 +872,9 @@ mod test {
     #[tokio::test]
     async fn test_entering_name_on_raw_linux_terminal() {
         let mut client = Client::new(123, Receiver::Test("linux_usr\r".to_string()));
-        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
-        assert!(result.is_ok());
+        ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
+            .await
+            .unwrap();
         assert_eq!(client.get_name(), Some("linux_usr"));
     }
 
@@ -882,8 +884,9 @@ mod test {
             123,
             Receiver::Test("VeryVeryLongNameGoesHere\r".to_string()),
         );
-        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
-        assert!(result.is_ok());
+        ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
+            .await
+            .unwrap();
         assert_eq!(client.get_name(), Some("VeryVeryLongNam"));
 
         // Name should show up as truncated to the user entering it
@@ -1090,5 +1093,54 @@ mod test {
         bobs.pop();
         let charlie = make_client_and_enter_lobby_id("Charlie", &lobby_id, lobbies.clone()).await;
         assert!(!charlie.text().contains("is full"));
+    }
+
+    #[tokio::test]
+    async fn test_game_full() {
+        let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
+        let mut clients: Vec<Client> = vec![];
+        let mut lobby_id: Option<String> = None;
+
+        // Ring game has max of 4 players, add 5 clients to the same lobby.
+        // All clients attempt to join ring game by pressing R.
+        for i in 0..5 {
+            let text = if i == 0 {
+                format!("Client 0\rR\r")
+            } else {
+                format!("Client {}\r{}\rR\r", i, lobby_id.as_ref().unwrap())
+            };
+            let mut client = Client::new(i, Receiver::Test(text));
+
+            ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
+                .await
+                .unwrap();
+
+            if i == 0 {
+                client.make_lobby(lobbies.clone());
+                lobby_id = Some(client.lobby.as_ref().unwrap().lock().unwrap().id.clone());
+            } else {
+                ask_lobby_id_and_join_lobby(&mut client, lobbies.clone())
+                    .await
+                    .unwrap();
+            }
+
+            let choose_result = choose_game_mode(&mut client, &mut 0).await;
+            println!("{}", client.text());
+            assert!(client
+                .text()
+                .contains(&format!("Ring game ({}/4 players)", i)));
+            if i == 4 {
+                // Should be full now
+                assert!(choose_result.is_err());
+                assert!(client.text().contains("This game is full."));
+                // Keep client alive to until end of test
+                clients.push(client);
+            } else {
+                tokio::spawn(async move {
+                    play_game(&mut client, choose_result.unwrap().unwrap()).await;
+                });
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
     }
 }
