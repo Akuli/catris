@@ -862,9 +862,9 @@ mod test {
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_err());
         assert_eq!(client.get_name(), None);
-
-        let text = client.render_data.lock().unwrap().buffer.get_text();
-        assert!(text.contains("Your terminal doesn't seem to be in raw mode"));
+        assert!(client
+            .text()
+            .contains("Your terminal doesn't seem to be in raw mode"));
     }
 
     #[tokio::test]
@@ -886,9 +886,8 @@ mod test {
         assert_eq!(client.get_name(), Some("VeryVeryLongNam"));
 
         // Name should show up as truncated to the user entering it
-        let text = client.render_data.lock().unwrap().buffer.get_text();
-        assert!(text.contains("VeryVeryLongNam"));
-        assert!(!text.contains("VeryVeryLongName"));
+        assert!(client.text().contains("VeryVeryLongNam"));
+        assert!(!client.text().contains("VeryVeryLongName"));
     }
 
     #[tokio::test]
@@ -898,9 +897,9 @@ mod test {
             let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
             assert!(result.is_err());
             assert_eq!(client.get_name(), None);
-
-            let text = client.render_data.lock().unwrap().buffer.get_text();
-            assert!(text.contains("Please write a name before pressing Enter"));
+            assert!(client
+                .text()
+                .contains("Please write a name before pressing Enter"));
         }
     }
 
@@ -910,9 +909,9 @@ mod test {
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_err());
         assert_eq!(client.get_name(), None);
-
-        let text = client.render_data.lock().unwrap().buffer.get_text();
-        assert!(text.contains("The name can't contain a ']' character."));
+        assert!(client
+            .text()
+            .contains("The name can't contain a ']' character."));
     }
 
     #[tokio::test]
@@ -929,9 +928,9 @@ mod test {
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_err());
         assert_eq!(bob.get_name(), None);
-        let text = bob.render_data.lock().unwrap().buffer.get_text();
-        println!("{}", text);
-        assert!(text.contains("This name is in use. Try a different name."));
+        assert!(bob
+            .text()
+            .contains("This name is in use. Try a different name."));
 
         drop(alice);
         bob = Client::new(123, Receiver::Test("MY name\r".to_string()));

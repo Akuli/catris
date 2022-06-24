@@ -44,20 +44,8 @@ impl RenderBuffer {
         self.height = height;
     }
 
-    pub fn get_char(&mut self, x: usize, y: usize) -> char {
+    pub fn get_char(&self, x: usize, y: usize) -> char {
         self.chars[y][x]
-    }
-
-    #[cfg(test)]
-    pub fn get_text(&self) -> String {
-        let mut result = "".to_string();
-        for row in &self.chars {
-            for ch in row {
-                result.push(*ch);
-            }
-            result.push('\n');
-        }
-        result
     }
 
     pub fn set_char(&mut self, x: usize, y: usize, ch: char) {

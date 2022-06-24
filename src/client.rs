@@ -50,6 +50,19 @@ impl Client {
         }
     }
 
+    #[cfg(test)]
+    pub fn text(&self) -> String {
+        let mut result = "".to_string();
+        let render_data = self.render_data.lock().unwrap();
+        for y in 0..render_data.buffer.height {
+            for x in 0..render_data.buffer.width {
+                result.push(render_data.buffer.get_char(x, y));
+            }
+            result.push('\n');
+        }
+        result
+    }
+
     pub fn is_connected_with_websocket(&self) -> bool {
         match self.receiver {
             Receiver::WebSocket { .. } => true,
