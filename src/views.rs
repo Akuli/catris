@@ -1099,7 +1099,6 @@ mod test {
     async fn test_game_full() {
         let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
         let mut lobby_id: Option<String> = None;
-        let mut join_handles = vec![];
 
         // Ring game has max of 4 players, so add 5 clients to the same lobby and see what happens.
         let mut last_client = None;
@@ -1131,10 +1130,9 @@ mod test {
             if i == 4 {
                 last_client = Some(client);
             } else {
-                let join_handle = tokio::spawn(async move {
+                tokio::spawn(async move {
                     _ = play_game(&mut client, Mode::Ring).await;
                 });
-                join_handles.push(join_handle);
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
@@ -1145,8 +1143,5 @@ mod test {
         println!("{}", client.text());
         assert!(client.text().contains("Ring game (4/4 players)"));
         assert!(client.text().contains("This game is full."));
-        for jh in join_handles {
-            jh.abort();
-        }
     }
 }
