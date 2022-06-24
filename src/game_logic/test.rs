@@ -71,9 +71,13 @@ fn dump_game_state(game: &Game) -> Vec<String> {
     result
 }
 
-fn create_game(mode: Mode, player_count: usize) -> Game {
+fn create_game(mode: Mode, player_count: usize, shape: Shape) -> Game {
     let mut game = Game::new(mode);
-    game.set_block_factory(|_| FallingBlock::new(BlockType::Normal(Shape::L)));
+    game.set_block_factory(match shape {
+        Shape::L => |_| FallingBlock::new(BlockType::Normal(Shape::L)),
+        Shape::S => |_| FallingBlock::new(BlockType::Normal(Shape::S)),
+        _ => unimplemented!(),
+    });
     for i in 0..player_count {
         game.add_player(&ClientInfo {
             name: format!("Player {}", i),
@@ -89,7 +93,7 @@ fn create_game(mode: Mode, player_count: usize) -> Game {
 
 #[test]
 fn test_spawning_and_landing_and_game_over() {
-    let mut game = create_game(Mode::Traditional, 1);
+    let mut game = create_game(Mode::Traditional, 1, Shape::L);
     game.truncate_height(3);
 
     // Blocks should spawn just on top of the game area.
@@ -165,7 +169,7 @@ fn test_spawning_and_landing_and_game_over() {
 
 #[test]
 fn test_wait_counters() {
-    let mut game = create_game(Mode::Traditional, 2);
+    let mut game = create_game(Mode::Traditional, 2, Shape::L);
     game.truncate_height(3);
 
     game.move_blocks_down(false);
@@ -220,7 +224,7 @@ fn test_wait_counters() {
 
 #[test]
 fn test_traditional_clearing() {
-    let mut game = create_game(Mode::Traditional, 2);
+    let mut game = create_game(Mode::Traditional, 2, Shape::L);
     game.truncate_height(5);
     for y in 1..5 {
         for x in 0..(game.get_width() as i16) {
@@ -269,7 +273,7 @@ fn test_traditional_clearing() {
 
 #[test]
 fn test_bottle_clearing() {
-    let mut game = create_game(Mode::Bottle, 2);
+    let mut game = create_game(Mode::Bottle, 2, Shape::L);
     for y in 0..3 {
         for x in 2..7 {
             if (x, y) != (3, 0) && (x, y) != (5, 2) {
@@ -339,7 +343,7 @@ fn test_bottle_clearing() {
 
 #[test]
 fn test_ring_mode_clearing() {
-    let mut game = create_game(Mode::Ring, 2);
+    let mut game = create_game(Mode::Ring, 2, Shape::L);
     for x in -6..=6 {
         for y in -6..=6 {
             if game.is_valid_landed_block_coords((x, y)) && (x, y) != (5, -2) {
@@ -426,7 +430,7 @@ fn test_ring_mode_clearing() {
 // This is because inner rings are smaller, and shoving squares into smaller space can get rid of gaps.
 #[test]
 fn test_ring_mode_double_clear() {
-    let mut game = create_game(Mode::Ring, 2);
+    let mut game = create_game(Mode::Ring, 2, Shape::L);
     for x in -5..=5 {
         for y in -5..=5 {
             if game.is_valid_landed_block_coords((x, y)) && (x.abs() != 5 || y.abs() != 5) {
@@ -543,7 +547,7 @@ fn test_ring_mode_double_clear() {
 
 #[test]
 fn test_rotating_and_bumping_to_walls() {
-    let mut game = create_game(Mode::Traditional, 1);
+    let mut game = create_game(Mode::Traditional, 1, Shape::L);
     game.truncate_height(5);
     game.move_blocks_down(false);
     game.move_blocks_down(false);
@@ -661,4 +665,41 @@ fn test_rotating_and_bumping_to_walls() {
             "LLLLLLLL            ",
         ]
     );
+}
+
+// Z blocks aren't tested because they are very similar (mirror image)
+#[test]
+fn test_rotating_s_blocks() {
+    let mut game = create_game(Mode::Traditional, 1, Shape::S);
+    game.truncate_height(5);
+
+    game.move_blocks_down(false);
+    game.move_blocks_down(false);
+    game.move_blocks_down(false);
+
+    let state1 = vec![
+        "                    ",
+        "          FFFF      ",
+        "        FFFF        ",
+        "                    ",
+        "                    ",
+    ];
+    let state2 = vec![
+        "                    ",
+        "        FF          ",
+        "        FFFF        ",
+        "          FF        ",
+        "                    ",
+    ];
+    assert_eq!(dump_game_state(&game), state1);
+
+    // S and Z blocks should go back to their original state after two rotations.
+    // The rotations should be the same regardless of whether user prefers clockwise or counter-clockwise.
+    for _ in 0..10 {
+        use rand::Rng;
+        game.handle_key_press(0, rand::thread_rng().gen::<bool>(), KeyPress::Up);
+        assert_eq!(dump_game_state(&game), state2);
+        game.handle_key_press(0, rand::thread_rng().gen::<bool>(), KeyPress::Up);
+        assert_eq!(dump_game_state(&game), state1);
+    }
 }
