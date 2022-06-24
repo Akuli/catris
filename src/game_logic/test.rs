@@ -1,4 +1,5 @@
 use crate::ansi::Color;
+use crate::ansi::KeyPress;
 use crate::client::ClientLogger;
 use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::FallingBlock;
@@ -538,4 +539,126 @@ fn test_ring_mode_double_clear() {
     // TODO: you should probably get more score for this than you currently do
     // currently it's 10 per clear, with *2 because two players
     assert_eq!(game.get_score(), 40);
+}
+
+#[test]
+fn test_rotating_and_bumping_to_walls() {
+    let mut game = create_game(Mode::Traditional, 1);
+    game.truncate_height(5);
+    game.move_blocks_down(false);
+    game.move_blocks_down(false);
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "            FF      ",
+            "        FFFFFF      ",
+            "                    ",
+            "                    ",
+            "                    "
+        ]
+    );
+
+    game.handle_key_press(0, false, KeyPress::Up);
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "          FF        ",
+            "          FF        ",
+            "          FFFF      ",
+            "                    ",
+            "                    "
+        ]
+    );
+
+    // Move block all the way to left, shouldn't rotate when against wall
+    for _ in 0..100 {
+        game.handle_key_press(0, false, KeyPress::Left);
+    }
+    let all_the_way_to_left = vec![
+        "FF                  ",
+        "FF                  ",
+        "FFFF                ",
+        "                    ",
+        "                    ",
+    ];
+    assert_eq!(dump_game_state(&game), all_the_way_to_left);
+    game.handle_key_press(0, false, KeyPress::Up);
+    assert_eq!(dump_game_state(&game), all_the_way_to_left);
+
+    // Move away from wall
+    game.handle_key_press(0, false, KeyPress::Right);
+    game.handle_key_press(0, false, KeyPress::Up);
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "                    ",
+            "FFFFFF              ",
+            "FF                  ",
+            "                    ",
+            "                    "
+        ]
+    );
+
+    for _ in 0..6 {
+        game.move_blocks_down(false);
+    }
+    game.handle_key_press(0, false, KeyPress::Left);
+    game.handle_key_press(0, false, KeyPress::Left);
+    game.handle_key_press(0, false, KeyPress::Left);
+    let landed_block_prevents_rotation = vec![
+        "                    ",
+        "      FF            ",
+        "  FFFFFF            ",
+        "LLLLLL              ",
+        "LL                  ",
+    ];
+    assert_eq!(dump_game_state(&game), landed_block_prevents_rotation);
+    game.handle_key_press(0, false, KeyPress::Up);
+    assert_eq!(dump_game_state(&game), landed_block_prevents_rotation);
+
+    // Move falling block to the right side of landed block, so it can't move left
+    game.handle_key_press(0, false, KeyPress::Right);
+    game.handle_key_press(0, false, KeyPress::Right);
+    game.move_blocks_down(false);
+    for _ in 0..10 {
+        game.handle_key_press(0, false, KeyPress::Left);
+    }
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "                    ",
+            "                    ",
+            "          FF        ",
+            "LLLLLLFFFFFF        ",
+            "LL                  ",
+        ]
+    );
+
+    // Should be possible to slide block under another landed block before it lands
+    game.move_blocks_down(false);
+    for _ in 0..10 {
+        game.handle_key_press(0, false, KeyPress::Left);
+    }
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "                    ",
+            "                    ",
+            "                    ",
+            "LLLLLLFF            ",
+            "LLFFFFFF            ",
+        ]
+    );
+
+    game.move_blocks_down(false);
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            "                    ",
+            "                    ",
+            "                    ",
+            "LLLLLLLL            ",
+            "LLLLLLLL            ",
+        ]
+    );
 }
