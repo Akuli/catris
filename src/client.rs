@@ -50,10 +50,24 @@ impl Client {
         }
     }
 
+    #[cfg(test)]
+    pub fn text(&self) -> String {
+        let mut result = "".to_string();
+        let render_data = self.render_data.lock().unwrap();
+        for y in 0..render_data.buffer.height {
+            for x in 0..render_data.buffer.width {
+                result.push(render_data.buffer.get_char(x, y));
+            }
+            result.push('\n');
+        }
+        result
+    }
+
     pub fn is_connected_with_websocket(&self) -> bool {
         match self.receiver {
             Receiver::WebSocket { .. } => true,
             Receiver::RawTcp { .. } => false,
+            Receiver::Test(_) => false,
         }
     }
 
@@ -61,19 +75,21 @@ impl Client {
         ClientLogger { client_id: self.id }
     }
 
-    pub fn get_name(&self) -> &str {
-        let (name, _) = self.remove_name_on_disconnect_data.as_ref().unwrap();
-        name
+    pub fn get_name(&self) -> Option<&str> {
+        self.remove_name_on_disconnect_data
+            .as_ref()
+            .map(|(name, _)| -> &str { &*name })
     }
 
     // returns false if name is in use already
     pub fn set_name(&mut self, name: &str, used_names: Arc<Mutex<HashSet<String>>>) -> bool {
         {
+            let lowercase_name = name.to_lowercase();
             let mut used_names = used_names.lock().unwrap();
-            if used_names.contains(name) {
+            if used_names.contains(&lowercase_name) {
                 return false;
             }
-            used_names.insert(name.to_string());
+            used_names.insert(lowercase_name);
         }
 
         assert!(self.remove_name_on_disconnect_data.is_none());
@@ -107,7 +123,7 @@ impl Client {
         let id = lobby::generate_unused_id(&*lobbies);
         let mut lobby = Lobby::new(&id);
         self.logger().log(&format!("Created lobby: {}", id));
-        lobby.add_client(self.logger(), self.get_name());
+        lobby.add_client(self.logger(), self.get_name().unwrap());
 
         let lobby = Arc::new(Mutex::new(lobby));
         lobbies.insert(id, lobby.clone());
@@ -122,7 +138,7 @@ impl Client {
             if lobby.lobby_is_full() {
                 return false;
             }
-            lobby.add_client(self.logger(), self.get_name());
+            lobby.add_client(self.logger(), self.get_name().unwrap());
         }
         assert!(self.lobby.is_none());
         self.lobby = Some(lobby);
@@ -136,7 +152,7 @@ impl Drop for Client {
             lobby.lock().unwrap().remove_client(self.id);
         }
         if let Some((name, name_set)) = &self.remove_name_on_disconnect_data {
-            name_set.lock().unwrap().remove(name);
+            name_set.lock().unwrap().remove(&name.to_lowercase());
         }
     }
 }

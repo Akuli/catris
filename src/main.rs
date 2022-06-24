@@ -40,7 +40,7 @@ async fn handle_receiving(
     views::ask_name(&mut client, used_names).await?;
     client
         .logger()
-        .log(&format!("Name asking done: {}", client.get_name()));
+        .log(&format!("Name asking done: {}", client.get_name().unwrap()));
 
     let want_new_lobby = views::ask_if_new_lobby(&mut client).await?;
     if want_new_lobby {

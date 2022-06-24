@@ -44,7 +44,7 @@ impl RenderBuffer {
         self.height = height;
     }
 
-    pub fn get_char(&mut self, x: usize, y: usize) -> char {
+    pub fn get_char(&self, x: usize, y: usize) -> char {
         self.chars[y][x]
     }
 
