@@ -153,13 +153,20 @@ impl Receiver {
                 }
             }
 
-            Self::Test(string) => match parse_key_press(string.as_bytes()) {
-                Some((key, bytes_used)) => {
-                    *string = string[bytes_used..].to_string();
-                    Ok(key)
+            Self::Test(string) => {
+                if string == "BLOCK" {
+                    loop {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
                 }
-                None => Err(connection_closed_error()),
-            },
+                match parse_key_press(string.as_bytes()) {
+                    Some((key, bytes_used)) => {
+                        *string = string[bytes_used..].to_string();
+                        Ok(key)
+                    }
+                    None => Err(connection_closed_error()),
+                }
+            }
         }
     }
 }
