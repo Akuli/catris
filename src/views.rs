@@ -1098,16 +1098,20 @@ mod test {
     #[tokio::test]
     async fn test_game_full() {
         let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
-        let mut clients: Vec<Client> = vec![];
         let mut lobby_id: Option<String> = None;
+        let mut join_handles = vec![];
 
-        // Ring game has max of 4 players, add 5 clients to the same lobby.
-        // All clients attempt to join ring game by pressing R.
+        // Ring game has max of 4 players, so add 5 clients to the same lobby and see what happens.
+        let mut last_client = None;
         for i in 0..5 {
             let text = if i == 0 {
-                format!("Client 0\rR\r")
+                format!("Client 0\rBLOCK")
+            } else if i < 4 {
+                format!("Client {}\r{}\rBLOCK", i, lobby_id.as_ref().unwrap())
             } else {
-                format!("Client {}\r{}\rR\r", i, lobby_id.as_ref().unwrap())
+                // Select ring game by pressing R.
+                // Other clients skip the game choosing menu in this test
+                format!("Client {}\r{}\rR", i, lobby_id.as_ref().unwrap())
             };
             let mut client = Client::new(i, Receiver::Test(text));
 
@@ -1124,23 +1128,25 @@ mod test {
                     .unwrap();
             }
 
-            let choose_result = choose_game_mode(&mut client, &mut 0).await;
-            println!("{}", client.text());
-            assert!(client
-                .text()
-                .contains(&format!("Ring game ({}/4 players)", i)));
             if i == 4 {
-                // Should be full now
-                assert!(choose_result.is_err());
-                assert!(client.text().contains("This game is full."));
-                // Keep client alive to until end of test
-                clients.push(client);
+                last_client = Some(client);
             } else {
-                tokio::spawn(async move {
-                    play_game(&mut client, choose_result.unwrap().unwrap()).await;
+                let join_handle = tokio::spawn(async move {
+                    _ = play_game(&mut client, Mode::Ring).await;
                 });
+                join_handles.push(join_handle);
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
+        }
+
+        let mut client = last_client.unwrap();
+        let choose_result = choose_game_mode(&mut client, &mut 0).await;
+        assert!(choose_result.is_err());
+        println!("{}", client.text());
+        assert!(client.text().contains("Ring game (4/4 players)"));
+        assert!(client.text().contains("This game is full."));
+        for jh in join_handles {
+            jh.abort();
         }
     }
 }
