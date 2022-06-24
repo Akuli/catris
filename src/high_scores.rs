@@ -226,3 +226,72 @@ pub async fn add_result_and_get_high_scores(
 
     Ok((high_scores, hs_index))
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::path::Path;
+
+    async fn read_file(filename: &str) -> String {
+        String::from_utf8(tokio::fs::read(Path::new(&filename)).await.unwrap()).unwrap()
+    }
+
+    // TODO: split this test to upgrading and reading
+    #[tokio::test]
+    async fn test_upgrading_from_v1() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // TODO: don't convert between paths and strings so much
+        tokio::fs::write(
+            Path::new(&filename),
+            concat!(
+                "catris high scores file v1\n",
+                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "traditional\tABC123\t55\t66\t#HashTag#\n",
+                "bottle\t-\t77\t88\tBottleFoo\n",
+            ),
+        )
+        .await
+        .unwrap();
+
+        upgrade_if_needed(&filename).await.unwrap();
+
+        // Comments don't conflict with hashtags in player names.
+        // Only a hashtag in the beginning of a line is treated as a comment.
+        assert_eq!(
+            read_file(&filename).await,
+            concat!(
+                "catris high scores file v4\n",
+                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "traditional\tABC123\t55\t66\t#HashTag#\n",
+                "bottle\t-\t77\t88\tBottleFoo\n",
+                "# --- upgraded from v1 to v4 ---\n",
+            )
+        );
+
+        let result = read_matching_high_scores(&filename, Mode::Traditional, false)
+            .await
+            .unwrap();
+
+        assert!(result.len() == 2);
+
+        // Better result comes first
+        assert_eq!(result[0].mode, Mode::Traditional);
+        assert_eq!(result[0].score, 55);
+        assert_eq!(result[0].duration, Duration::from_secs(66));
+        assert_eq!(result[0].players, vec!["#HashTag#".to_string()]);
+
+        assert_eq!(result[1].mode, Mode::Traditional);
+        assert_eq!(result[1].score, 11);
+        assert_eq!(result[1].duration, Duration::from_secs(22));
+        assert_eq!(result[1].players, vec!["SinglePlayer".to_string()]);
+    }
+}
