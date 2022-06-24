@@ -10,6 +10,8 @@ use crate::game_logic::game::Mode;
 use crate::game_logic::player::BlockOrTimer;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
+use crate::RenderBuffer;
+use rand::Rng;
 use std::collections::HashSet;
 
 fn dump_game_state(game: &Game) -> Vec<String> {
@@ -58,8 +60,27 @@ fn dump_game_state(game: &Game) -> Vec<String> {
             let point = game.players[0].borrow().player_to_world((x, y));
             if !game.is_valid_landed_block_coords(point) {
                 row.push_str("..");
-            } else if game.get_falling_square((x as i16, y as i16)).is_some() {
-                row.push_str("FF");
+            } else if let Some((content, relative_coords, player_idx)) =
+                game.get_falling_square((x as i16, y as i16))
+            {
+                let (down_x, down_y) = game.players[player_idx].borrow().down_direction;
+                let mut buffer = RenderBuffer::new();
+                buffer.resize(80, 24); // smallest size allowed
+                content.render(
+                    &mut buffer,
+                    0,
+                    0,
+                    Some((relative_coords, (down_x as i8, down_y as i8))),
+                    (0, 1),
+                );
+                let text = [buffer.get_char(0, 0), buffer.get_char(1, 0)]
+                    .iter()
+                    .collect::<String>();
+                if text == "  " {
+                    row.push_str("FF");
+                } else {
+                    row.push_str(&text);
+                }
             } else if game.get_landed_square((x as i16, y as i16)).is_some() {
                 row.push_str("LL");
             } else {
@@ -696,10 +717,64 @@ fn test_rotating_s_blocks() {
     // S and Z blocks should go back to their original state after two rotations.
     // The rotations should be the same regardless of whether user prefers clockwise or counter-clockwise.
     for _ in 0..10 {
-        use rand::Rng;
         game.handle_key_press(0, rand::thread_rng().gen::<bool>(), KeyPress::Up);
         assert_eq!(dump_game_state(&game), state2);
         game.handle_key_press(0, rand::thread_rng().gen::<bool>(), KeyPress::Up);
         assert_eq!(dump_game_state(&game), state1);
     }
+}
+
+#[test]
+fn test_displaying_drills() {
+    let mut game = Game::new(Mode::Ring);
+    game.set_block_factory(|_| FallingBlock::new(BlockType::Drill));
+    for i in 0..3 {
+        game.add_player(&ClientInfo {
+            name: format!("Player {}", i),
+            client_id: i as u64,
+            color: Color::RED_FOREGROUND.fg,
+            logger: ClientLogger {
+                client_id: i as u64,
+            },
+        });
+    }
+
+    // Players 0 and 1 are in opposite directions. Player 2 is perpendicular to both.
+    let (x0, y0) = game.players[0].borrow().down_direction;
+    let (x1, y1) = game.players[1].borrow().down_direction;
+    let (x2, y2) = game.players[2].borrow().down_direction;
+    assert_eq!((x0, y0), (-x1, -y1));
+    assert_eq!(x0 * x2 + y0 * y2, 0); // dot product
+
+    game.move_blocks_down(false);
+    game.move_blocks_down(false);
+    game.move_blocks_down(false);
+    assert_eq!(
+        dump_game_state(&game),
+        vec![
+            r"......~            | .|              ~......",
+            r"......~            |. |              ~......",
+            r"......~             \/               ~......",
+            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~ .----",
+            r"      ~        ..............        ~'._\__",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"      ~                              ~      ",
+            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            r"......~               /\             ~......",
+            r"......~              |. |            ~......",
+            r"......~              | /|            ~......",
+        ]
+    );
 }
