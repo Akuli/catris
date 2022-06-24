@@ -749,32 +749,64 @@ fn test_displaying_drills() {
     game.move_blocks_down(false);
     game.move_blocks_down(false);
     game.move_blocks_down(false);
-    assert_eq!(
-        dump_game_state(&game),
-        vec![
-            r"......~            | .|              ~......",
-            r"......~            |. |              ~......",
-            r"......~             \/               ~......",
-            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"      ~        ..............        ~      ",
-            r"      ~        ..............        ~      ",
-            r"      ~        ..............        ~ .----",
-            r"      ~        ..............        ~'._\__",
-            r"      ~        ..............        ~      ",
-            r"      ~        ..............        ~      ",
-            r"      ~        ..............        ~      ",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"      ~                              ~      ",
-            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-            r"......~               /\             ~......",
-            r"......~              |. |            ~......",
-            r"......~              | /|            ~......",
-        ]
-    );
+
+    let expected_dump = vec![
+        r"......~            | .|              ~......",
+        r"......~            |. |              ~......",
+        r"......~             \/               ~......",
+        r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"      ~        ..............        ~      ",
+        r"      ~        ..............        ~      ",
+        r"      ~        ..............        ~      ",
+        r"----. ~        ..............        ~      ",
+        r"/__/.'~        ..............        ~      ",
+        r"      ~        ..............        ~      ",
+        r"      ~        ..............        ~      ",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"      ~                              ~      ",
+        r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        r"......~               /\             ~......",
+        r"......~              |. |            ~......",
+        r"......~              | /|            ~......",
+    ];
+    assert_eq!(dump_game_state(&game), expected_dump);
+
+    // Top and bottom drills should rotate with 4 pictures to choose from.
+    // Side drills have 3 pictures instead.
+    let mut top_matches = "".to_string();
+    let mut middle_matches = "".to_string();
+    let mut bottom_matches = "".to_string();
+    for _ in 0..20 {
+        let actual_dump = dump_game_state(&game);
+
+        if actual_dump[..5] == expected_dump[..5] {
+            top_matches.push('m');
+        } else {
+            top_matches.push('-');
+        }
+
+        if actual_dump[5..15] == expected_dump[5..15] {
+            middle_matches.push('m');
+        } else {
+            middle_matches.push('-');
+        }
+
+        if actual_dump[15..] == expected_dump[15..] {
+            bottom_matches.push('m');
+        } else {
+            bottom_matches.push('-');
+        }
+
+        game.animate_drills();
+    }
+
+    assert_eq!(top_matches, "m---m---m---m---m---");
+    assert_eq!(middle_matches, "m--m--m--m--m--m--m-");
+    assert_eq!(bottom_matches, "m---m---m---m---m---");
 }
