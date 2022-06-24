@@ -886,8 +886,8 @@ mod test {
         assert_eq!(client.get_name(), Some("VeryVeryLongNam"));
 
         // Name should show up as truncated to the user entering it
-        assert!(client.text().contains("VeryVeryLongNam"));
-        assert!(!client.text().contains("VeryVeryLongName"));
+        assert!(client.text().contains("Name: VeryVeryLongNam"));
+        assert!(!client.text().contains("Name: VeryVeryLongName"));
     }
 
     #[tokio::test]
