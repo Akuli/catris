@@ -139,7 +139,7 @@ impl Drop for Client {
             lobby.lock().unwrap().remove_client(self.id);
         }
         if let Some((name, name_set)) = &self.remove_name_on_disconnect_data {
-            name_set.lock().unwrap().remove(name);
+            name_set.lock().unwrap().remove(&name.to_lowercase());
         }
     }
 }

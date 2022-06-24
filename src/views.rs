@@ -919,13 +919,13 @@ mod test {
     async fn test_name_in_use() {
         let names = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut alice = Client::new(123, Receiver::Test("my name\r".to_string()));
+        let mut alice = Client::new(123, Receiver::Test("my NAME\r".to_string()));
         let result = ask_name(&mut alice, names.clone()).await;
         assert!(result.is_ok());
-        assert_eq!(alice.get_name(), Some("my name"));
+        assert_eq!(alice.get_name(), Some("my NAME"));
 
         // used names are case insensitive
-        let mut bob = Client::new(123, Receiver::Test("MY NAME\r".to_string()));
+        let mut bob = Client::new(123, Receiver::Test("MY name\r".to_string()));
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_err());
         assert_eq!(bob.get_name(), None);
@@ -934,9 +934,9 @@ mod test {
         assert!(text.contains("This name is in use. Try a different name."));
 
         drop(alice);
-        bob = Client::new(123, Receiver::Test("MY NAME\r".to_string()));
+        bob = Client::new(123, Receiver::Test("MY name\r".to_string()));
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_ok());
-        assert_eq!(bob.get_name(), Some("MY NAME"));
+        assert_eq!(bob.get_name(), Some("MY name"));
     }
 }
