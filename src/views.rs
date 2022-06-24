@@ -1140,7 +1140,6 @@ mod test {
         let mut client = last_client.unwrap();
         let choose_result = choose_game_mode(&mut client, &mut 0).await;
         assert!(choose_result.is_err());
-        println!("{}", client.text());
         assert!(client.text().contains("Ring game (4/4 players)"));
         assert!(client.text().contains("This game is full."));
     }
