@@ -236,7 +236,6 @@ mod test {
         String::from_utf8(tokio::fs::read(Path::new(&filename)).await.unwrap()).unwrap()
     }
 
-    // TODO: split this test to upgrading and reading
     #[tokio::test]
     async fn test_upgrading_from_v1() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -254,8 +253,6 @@ mod test {
                 "catris high scores file v1\n",
                 "traditional\t-\t11\t22\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
-                "traditional\tABC123\t55\t66\t#HashTag#\n",
-                "bottle\t-\t77\t88\tBottleFoo\n",
             ),
         )
         .await
@@ -271,27 +268,81 @@ mod test {
                 "catris high scores file v4\n",
                 "traditional\t-\t11\t22\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
-                "traditional\tABC123\t55\t66\t#HashTag#\n",
-                "bottle\t-\t77\t88\tBottleFoo\n",
                 "# --- upgraded from v1 to v4 ---\n",
             )
         );
 
+        // Make sure it's readable
+        read_matching_high_scores(&filename, Mode::Traditional, false)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_reading() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        tokio::fs::write(
+            Path::new(&filename),
+            concat!(
+                "catris high scores file v4\n",
+                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
+                "traditional\tABC123\t55\t66\t#HashTag#\n",
+                "traditional\tABC123\t4000\t123\tGood player\n",
+                "   # comment line \n",
+                "  ",
+                "",
+                "#traditional\t-\t55\t66\tThis is skipped\n",
+                "# --- upgraded from v3 to v4 ---\n",
+                "bottle\t-\t77\t88\tBottleFoo\n",
+            ),
+        )
+        .await
+        .unwrap();
+
         let result = read_matching_high_scores(&filename, Mode::Traditional, false)
             .await
             .unwrap();
-
-        assert!(result.len() == 2);
+        assert!(result.len() == 3);
 
         // Better result comes first
         assert_eq!(result[0].mode, Mode::Traditional);
-        assert_eq!(result[0].score, 55);
-        assert_eq!(result[0].duration, Duration::from_secs(66));
-        assert_eq!(result[0].players, vec!["#HashTag#".to_string()]);
+        assert_eq!(result[0].score, 4000);
+        assert_eq!(result[0].duration, Duration::from_secs(123));
+        assert_eq!(result[0].players, vec!["Good player".to_string()]);
 
         assert_eq!(result[1].mode, Mode::Traditional);
-        assert_eq!(result[1].score, 11);
-        assert_eq!(result[1].duration, Duration::from_secs(22));
-        assert_eq!(result[1].players, vec!["SinglePlayer".to_string()]);
+        assert_eq!(result[1].score, 55);
+        assert_eq!(result[1].duration, Duration::from_secs(66));
+        assert_eq!(result[1].players, vec!["#HashTag#".to_string()]);
+
+        assert_eq!(result[2].mode, Mode::Traditional);
+        assert_eq!(result[2].score, 11);
+        assert_eq!(result[2].duration, Duration::from_secs(22));
+        assert_eq!(result[2].players, vec!["SinglePlayer".to_string()]);
+
+        // Multiplayer
+        let result = read_matching_high_scores(&filename, Mode::Traditional, true)
+            .await
+            .unwrap();
+        assert!(result.len() == 1);
+        assert_eq!(result[0].mode, Mode::Traditional);
+        assert_eq!(result[0].score, 33);
+        assert_eq!(result[0].duration, Duration::from_secs(44));
+        assert_eq!(
+            result[0].players,
+            vec![
+                "Alice".to_string(),
+                "Bob".to_string(),
+                "Charlie".to_string()
+            ]
+        );
     }
 }
