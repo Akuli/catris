@@ -847,6 +847,7 @@ async fn show_high_scores(
 mod test {
     use super::*;
     use crate::connection::Receiver;
+    use weak_table::WeakValueHashMap;
 
     #[tokio::test]
     async fn test_name_entering_on_windows_cmd_exe() {
@@ -918,7 +919,7 @@ mod test {
     async fn test_name_in_use() {
         let names = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut alice = Client::new(123, Receiver::Test("my NAME\r".to_string()));
+        let mut alice = Client::new(1, Receiver::Test("my NAME\r".to_string()));
         let result = ask_name(&mut alice, names.clone()).await;
         assert!(result.is_ok());
         assert_eq!(alice.get_name(), Some("my NAME"));
@@ -937,5 +938,157 @@ mod test {
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_ok());
         assert_eq!(bob.get_name(), Some("MY name"));
+    }
+
+    #[tokio::test]
+    async fn test_new_lobby_and_select_various_games() {
+        let mut client = Client::new(
+            123,
+            Receiver::Test(
+                concat!(
+                    "John\r",         // name
+                    "\r",             // new lobby
+                    "\r",             // select traditional game (first item in list)
+                    "g\r",            // select gameplay tips
+                    "\x1b[A\x1b[A\r", // arrow up twice to select bottle game
+                    "\x1b[B\r",       // arrow down to select ring game
+                )
+                .to_string(),
+            ),
+        );
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        let result = ask_if_new_lobby(&mut client).await;
+        assert!(result.unwrap());
+        client.make_lobby(Arc::new(Mutex::new(WeakValueHashMap::new())));
+
+        let mut selected_index = 0;
+        let result = choose_game_mode(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), Some(Mode::Traditional));
+        let result = choose_game_mode(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), None); // gameplay tips
+        let result = choose_game_mode(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), Some(Mode::Bottle));
+        let result = choose_game_mode(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), Some(Mode::Ring));
+    }
+
+    #[tokio::test]
+    async fn test_quit_items() {
+        // Press q to select quit just after entering name
+        let mut client = Client::new(1, Receiver::Test("Alice\rq\r".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        let result = ask_if_new_lobby(&mut client).await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "user selected \"Quit\" in menu"
+        );
+
+        // Make a new lobby before pressing quit, with two consecutive enter presses.
+        // The lobby view has another quit button.
+        let mut client = Client::new(2, Receiver::Test("Bob\r\rq\r".to_string()));
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        let result = ask_if_new_lobby(&mut client).await;
+        assert!(result.unwrap());
+        client.make_lobby(Arc::new(Mutex::new(WeakValueHashMap::new())));
+        let result = choose_game_mode(&mut client, &mut 0).await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "user selected \"Quit\" in menu"
+        );
+    }
+
+    async fn make_client_and_enter_lobby_id(
+        name: &str,
+        id_to_enter: &str,
+        lobbies: Lobbies,
+    ) -> Client {
+        let client_id = name.chars().map(|c| u32::from(c) as u64).sum();
+        let mut client = Client::new(
+            client_id,
+            Receiver::Test(format!("{}\r{}\r", name, id_to_enter)),
+        );
+        let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        _ = ask_lobby_id_and_join_lobby(&mut client, lobbies).await;
+        client
+    }
+
+    #[tokio::test]
+    async fn test_joining_existing_lobby() {
+        let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
+
+        // Alice makes a new lobby
+        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()));
+        let result = ask_name(&mut alice, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        alice.make_lobby(lobbies.clone());
+
+        let lobby_id = alice.lobby.as_ref().unwrap().lock().unwrap().id.clone();
+        assert_eq!(lobby_id.len(), 6);
+        assert!(lobby_id.is_ascii());
+        assert_eq!(lobby_id, lobby_id.to_ascii_uppercase());
+
+        // Bob attempts to join the lobby, with various IDs
+        let bob = make_client_and_enter_lobby_id("Bob", "hello", lobbies.clone()).await;
+        assert!(bob
+            .text()
+            .contains("The text you entered doesn't look like a lobby ID."));
+        assert!(!bob.text().contains("Alice"));
+
+        let bob = make_client_and_enter_lobby_id("Bob", "", lobbies.clone()).await;
+        assert!(bob
+            .text()
+            .contains("The text you entered doesn't look like a lobby ID."));
+        assert!(!bob.text().contains("Alice"));
+
+        // Bob finally enters the correct ID. Lobby IDs are case insensitive.
+        let mut bob =
+            make_client_and_enter_lobby_id("Bob", &lobby_id.to_lowercase(), lobbies.clone()).await;
+
+        assert!(choose_game_mode(&mut bob, &mut 0).await.is_err());
+        assert!(bob.text().contains(&lobby_id));
+        assert!(bob.text().contains("1. Alice"));
+        assert!(bob.text().contains("2. Bob (you)"));
+        drop(alice);
+        assert!(choose_game_mode(&mut bob, &mut 0).await.is_err());
+        assert!(bob.text().contains(&lobby_id));
+        assert!(!bob.text().contains("Alice"));
+        assert!(bob.text().contains("1. Bob (you)"));
+        drop(bob);
+
+        // Lobby stops existing once everyone quits
+        let charlie = make_client_and_enter_lobby_id("Charlie", &lobby_id, lobbies).await;
+        assert!(charlie.text().contains("There is no lobby with ID '"));
+    }
+
+    #[tokio::test]
+    async fn test_lobby_full() {
+        let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
+
+        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()));
+        let result = ask_name(&mut alice, Arc::new(Mutex::new(HashSet::new()))).await;
+        assert!(result.is_ok());
+        alice.make_lobby(lobbies.clone());
+        let lobby_id = alice.lobby.as_ref().unwrap().lock().unwrap().id.clone();
+
+        let mut bobs = vec![];
+        for i in 1..MAX_CLIENTS_PER_LOBBY {
+            bobs.push(
+                make_client_and_enter_lobby_id(&format!("Bob {}", i), &lobby_id, lobbies.clone())
+                    .await,
+            );
+        }
+
+        let charlie = make_client_and_enter_lobby_id("Charlie", &lobby_id, lobbies.clone()).await;
+        assert!(charlie
+            .text()
+            .contains("' is full. It already has 6 players."));
+
+        bobs.pop();
+        let charlie = make_client_and_enter_lobby_id("Charlie", &lobby_id, lobbies.clone()).await;
+        assert!(!charlie.text().contains("is full"));
     }
 }
