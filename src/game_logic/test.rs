@@ -7,12 +7,25 @@ use crate::game_logic::blocks::Shape;
 use crate::game_logic::blocks::SquareContent;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
+use crate::game_logic::game::RING_OUTER_RADIUS;
 use crate::game_logic::player::BlockOrTimer;
+use crate::game_logic::BlockRelativeCoords;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use crate::RenderBuffer;
 use rand::Rng;
 use std::collections::HashSet;
+
+fn square_content_to_string(
+    content: SquareContent,
+    falling_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
+) -> String {
+    let mut buffer = RenderBuffer::new();
+    buffer.resize(80, 24); // smallest size allowed
+    content.render(&mut buffer, 0, 0, falling_block_data, (0, 1));
+    let chars = [buffer.get_char(0, 0), buffer.get_char(1, 0)];
+    chars.iter().collect::<String>()
+}
 
 fn dump_game_state(game: &Game) -> Vec<String> {
     let mut result: Vec<String> = vec![];
@@ -64,25 +77,22 @@ fn dump_game_state(game: &Game) -> Vec<String> {
                 game.get_falling_square((x as i16, y as i16))
             {
                 let (down_x, down_y) = game.players[player_idx].borrow().down_direction;
-                let mut buffer = RenderBuffer::new();
-                buffer.resize(80, 24); // smallest size allowed
-                content.render(
-                    &mut buffer,
-                    0,
-                    0,
+                let text = square_content_to_string(
+                    content,
                     Some((relative_coords, (down_x as i8, down_y as i8))),
-                    (0, 1),
                 );
-                let text = [buffer.get_char(0, 0), buffer.get_char(1, 0)]
-                    .iter()
-                    .collect::<String>();
                 if text == "  " {
                     row.push_str("FF");
                 } else {
                     row.push_str(&text);
                 }
-            } else if game.get_landed_square((x as i16, y as i16)).is_some() {
-                row.push_str("LL");
+            } else if let Some(content) = game.get_landed_square((x as i16, y as i16)) {
+                let text = square_content_to_string(content, None);
+                if text == "  " {
+                    row.push_str("LL");
+                } else {
+                    row.push_str(&text);
+                }
             } else {
                 row.push_str("  ");
             }
@@ -333,7 +343,7 @@ fn test_bottle_clearing() {
         "....LLLLLL  LL..........    LL    ....",
         "....          ..........          ....",
         "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-        "                  LL                  ",
+        "                  ||                  ",
         "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
         "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
         "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
@@ -344,8 +354,8 @@ fn test_bottle_clearing() {
         "....LL  LLLLLL..........  LL    LL....",
         "....LLLLLL  LL..........    LL    ....",
         "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
-        "                  LL                  ",
-        "                  LL                  ",
+        "                  ||                  ",
+        "                  ||                  ",
         "LLLLLL  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
         "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  LLLLLL",
     ];
@@ -724,8 +734,7 @@ fn test_rotating_s_blocks() {
     }
 }
 
-#[test]
-fn test_displaying_drills() {
+fn create_ring_game_with_drills() -> Game {
     let mut game = Game::new(Mode::Ring);
     game.set_block_factory(|_| FallingBlock::new(BlockType::Drill));
     for i in 0..3 {
@@ -738,14 +747,22 @@ fn test_displaying_drills() {
             },
         });
     }
+    game
+}
+
+#[test]
+fn test_ring_game_directions() {
+    let game = create_ring_game_with_drills();
 
     // Players 0 and 1 are in opposite directions. Player 2 is perpendicular to both.
-    let (x0, y0) = game.players[0].borrow().down_direction;
-    let (x1, y1) = game.players[1].borrow().down_direction;
-    let (x2, y2) = game.players[2].borrow().down_direction;
-    assert_eq!((x0, y0), (-x1, -y1));
-    assert_eq!(x0 * x2 + y0 * y2, 0); // dot product
+    assert!(game.players[0].borrow().down_direction == (0, 1));
+    assert!(game.players[1].borrow().down_direction == (0, -1));
+    assert!(game.players[2].borrow().down_direction == (1, 0));
+}
 
+#[test]
+fn test_displaying_and_animating_falling_drills() {
+    let mut game = create_ring_game_with_drills();
     game.move_blocks_down(false);
     game.move_blocks_down(false);
     game.move_blocks_down(false);
@@ -803,10 +820,74 @@ fn test_displaying_drills() {
             bottom_matches.push('-');
         }
 
-        game.animate_drills();
+        assert!(game.animate_drills());
     }
 
     assert_eq!(top_matches, "m---m---m---m---m---");
     assert_eq!(middle_matches, "m--m--m--m--m--m--m-");
     assert_eq!(bottom_matches, "m---m---m---m---m---");
+}
+
+#[test]
+fn test_displaying_landed_drills() {
+    let mut game = Game::new(Mode::Ring);
+    game.set_block_factory(|_| FallingBlock::new(BlockType::Drill));
+    for i in 0..3 {
+        game.add_player(&ClientInfo {
+            name: format!("Player {}", i),
+            client_id: i as u64,
+            color: Color::RED_FOREGROUND.fg,
+            logger: ClientLogger {
+                client_id: i as u64,
+            },
+        });
+    }
+
+    // Make sure that drills show up correctly once landed
+    let has_landed_squares = |game: &Game| {
+        let r = RING_OUTER_RADIUS as i16;
+        (-r..=r).any(|x| (-r..=r).any(|y| game.get_landed_square((x, y)).is_some()))
+    };
+
+    let mut dump_before_land = vec![];
+    while !has_landed_squares(&game) {
+        dump_before_land = dump_game_state(&game);
+        game.move_blocks_down(false);
+    }
+
+    // Landing shouldn't change how the blocks look.
+    // Achieving this in the code is more complicated than you would expect...
+    assert_eq!(dump_game_state(&game), dump_before_land);
+    assert_eq!(
+        dump_before_land,
+        vec![
+            r"......~                              ~......",
+            r"......~                              ~......",
+            r"......~                              ~......",
+            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            r"      ~            |/ |              ~      ",
+            r"      ~            | .|              ~      ",
+            r"      ~            |. |              ~      ",
+            r"      ~             \/               ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~------. ..............        ~      ",
+            r"      ~__/__/.'..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~        ..............        ~      ",
+            r"      ~               /\             ~      ",
+            r"      ~              |. |            ~      ",
+            r"      ~              | /|            ~      ",
+            r"      ~              |/ |            ~      ",
+            r"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            r"......~                              ~......",
+            r"......~                              ~......",
+            r"......~                              ~......"
+        ]
+    );
+
+    // Animating shouldn't do anything to landed drills
+    game.animate_drills();
+    assert_eq!(dump_game_state(&game), dump_before_land);
 }
