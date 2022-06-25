@@ -46,6 +46,7 @@ async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
             log(&format!("Creating {}", filename));
             file.write_all(format!("{}{}\n", HEADER_PREFIX, VERSION).as_bytes())
                 .await?;
+            file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
@@ -63,6 +64,7 @@ async fn append_update_comment(filename: &str, old_version: &str) -> Result<(), 
         format!("# --- upgraded from v{} to v{} ---\n", old_version, VERSION).as_bytes(),
     )
     .await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
@@ -71,6 +73,7 @@ async fn update_version_number(filename: &str) -> Result<(), io::Error> {
     file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))
         .await?;
     file.write_all(VERSION.as_bytes()).await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
@@ -123,6 +126,7 @@ async fn append_result_to_file(filename: &str, result: &GameResult) -> Result<()
         .as_bytes(),
     )
     .await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
