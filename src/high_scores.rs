@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::io::SeekFrom;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GameResult {
     pub mode: Mode,
     pub score: usize,
@@ -46,6 +46,7 @@ async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
             log(&format!("Creating {}", filename));
             file.write_all(format!("{}{}\n", HEADER_PREFIX, VERSION).as_bytes())
                 .await?;
+            file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
@@ -63,6 +64,7 @@ async fn append_update_comment(filename: &str, old_version: &str) -> Result<(), 
         format!("# --- upgraded from v{} to v{} ---\n", old_version, VERSION).as_bytes(),
     )
     .await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
@@ -71,6 +73,7 @@ async fn update_version_number(filename: &str) -> Result<(), io::Error> {
     file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))
         .await?;
     file.write_all(VERSION.as_bytes()).await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
@@ -123,6 +126,7 @@ async fn append_result_to_file(filename: &str, result: &GameResult) -> Result<()
         .as_bytes(),
     )
     .await?;
+    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
     Ok(())
 }
 
@@ -225,4 +229,170 @@ pub async fn add_result_and_get_high_scores(
     let hs_index = add_game_result_if_high_score(&mut high_scores, result);
 
     Ok((high_scores, hs_index))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::path::Path;
+
+    async fn read_file(filename: &str) -> String {
+        String::from_utf8(tokio::fs::read(Path::new(&filename)).await.unwrap()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_upgrading_from_v1() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // TODO: don't convert between paths and strings so much
+        tokio::fs::write(
+            Path::new(&filename),
+            concat!(
+                "catris high scores file v1\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+            ),
+        )
+        .await
+        .unwrap();
+
+        upgrade_if_needed(&filename).await.unwrap();
+
+        // Comments don't conflict with hashtags in player names.
+        // Only a hashtag in the beginning of a line is treated as a comment.
+        assert_eq!(
+            read_file(&filename).await,
+            concat!(
+                "catris high scores file v4\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "# --- upgraded from v1 to v4 ---\n",
+            )
+        );
+
+        // Make sure it's readable
+        read_matching_high_scores(&filename, Mode::Traditional, false)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_reading() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        tokio::fs::write(
+            Path::new(&filename),
+            concat!(
+                "catris high scores file v4\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
+                "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
+                "traditional\tABC123\t55\t66\t#HashTag#\n",
+                "traditional\tABC123\t4000\t123\tGood player\n",
+                "   # comment line \n",
+                "  ",
+                "",
+                "#traditional\t-\t55\t66\tThis is skipped\n",
+                "# --- upgraded from v3 to v4 ---\n",
+                "bottle\t-\t77\t88\tBottleFoo\n",
+            ),
+        )
+        .await
+        .unwrap();
+
+        let mut result = read_matching_high_scores(&filename, Mode::Traditional, false)
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            vec![
+                // Better results come first
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 4000,
+                    duration: Duration::from_secs(123),
+                    players: vec!["Good player".to_string()]
+                },
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 55,
+                    duration: Duration::from_secs(66),
+                    players: vec!["#HashTag#".to_string()]
+                },
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 11,
+                    duration: Duration::from_secs_f32(22.75),
+                    players: vec!["SinglePlayer".to_string()]
+                }
+            ]
+        );
+
+        let second_place_result = GameResult {
+            mode: Mode::Traditional,
+            score: 3000,
+            duration: Duration::from_secs_f32(123.45),
+            players: vec!["Second Place".to_string()],
+        };
+        let index = add_game_result_if_high_score(&mut result, second_place_result.clone());
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[1], second_place_result);
+        assert_eq!(index, Some(1));
+
+        // Multiplayer
+        let result = read_matching_high_scores(&filename, Mode::Traditional, true)
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            vec![GameResult {
+                mode: Mode::Traditional,
+                score: 33,
+                duration: Duration::from_secs(44),
+                players: vec![
+                    "Alice".to_string(),
+                    "Bob".to_string(),
+                    "Charlie".to_string()
+                ]
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_writing() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+        ensure_file_exists(&filename).await.unwrap();
+
+        let sample_result = GameResult {
+            mode: Mode::Ring,
+            score: 7000,
+            duration: Duration::from_secs(123),
+            players: vec!["Foo".to_string(), "Bar".to_string()],
+        };
+
+        append_result_to_file(&filename, &sample_result)
+            .await
+            .unwrap();
+        let from_file = read_matching_high_scores(&filename, Mode::Ring, true)
+            .await
+            .unwrap();
+        assert_eq!(from_file, [sample_result]);
+    }
 }

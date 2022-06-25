@@ -16,3 +16,6 @@ lazy_static = "*"
 tokio-tungstenite = "*"
 # futures-util copied from tokio-tungstenite's Cargo.toml
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+[dev-dependencies]
+tempfile = "3"
