@@ -847,6 +847,7 @@ async fn show_high_scores(
 mod test {
     use super::*;
     use crate::connection::Receiver;
+    use std::path::PathBuf;
     use weak_table::WeakValueHashMap;
 
     #[tokio::test]
@@ -941,6 +942,43 @@ mod test {
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_ok());
         assert_eq!(bob.get_name(), Some("MY name"));
+    }
+
+    struct CdToTemporaryDir {
+        old_dir: PathBuf,
+        _tempdir: tempfile::TempDir,
+    }
+    impl CdToTemporaryDir {
+        fn new() -> Self {
+            let old_dir = std::env::current_dir().unwrap();
+            let tempdir = tempfile::tempdir().unwrap();
+            std::env::set_current_dir(tempdir.path()).unwrap();
+            Self {
+                old_dir,
+                _tempdir: tempdir,
+            }
+        }
+    }
+    impl Drop for CdToTemporaryDir {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.old_dir).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_motd() {
+        let _temp_cd_handle = CdToTemporaryDir::new();
+        let mut client = Client::new(123, Receiver::Test("John7\r".to_string()));
+        tokio::fs::write("catris_motd.txt", "Hello World\nSecond line of text\n")
+            .await
+            .unwrap();
+        ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
+            .await
+            .unwrap();
+
+        assert!(ask_if_new_lobby(&mut client).await.is_err());
+        assert!(client.text().contains("   Hello World   "));
+        assert!(client.text().contains("   Second line of text   "));
     }
 
     #[tokio::test]
