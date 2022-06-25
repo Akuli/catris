@@ -304,7 +304,7 @@ impl Game {
                     .map(|p| p.borrow().down_direction)
                     .collect();
                 let opposites: Vec<WorldPoint> = used.iter().map(|(x, y)| (-x, -y)).collect();
-                let all: &[WorldPoint] = &[(0, -1), (0, 1), (-1, 0), (1, 0)];
+                let all: &[WorldPoint] = &[(0, 1), (0, -1), (1, 0), (-1, 0)];
 
                 *opposites
                     .iter()
