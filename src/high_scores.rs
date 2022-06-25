@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::io::SeekFrom;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GameResult {
     pub mode: Mode,
     pub score: usize,
@@ -310,39 +310,47 @@ mod test {
         let result = read_matching_high_scores(&filename, Mode::Traditional, false)
             .await
             .unwrap();
-        assert!(result.len() == 3);
-
-        // Better result comes first
-        assert_eq!(result[0].mode, Mode::Traditional);
-        assert_eq!(result[0].score, 4000);
-        assert_eq!(result[0].duration, Duration::from_secs(123));
-        assert_eq!(result[0].players, vec!["Good player".to_string()]);
-
-        assert_eq!(result[1].mode, Mode::Traditional);
-        assert_eq!(result[1].score, 55);
-        assert_eq!(result[1].duration, Duration::from_secs(66));
-        assert_eq!(result[1].players, vec!["#HashTag#".to_string()]);
-
-        assert_eq!(result[2].mode, Mode::Traditional);
-        assert_eq!(result[2].score, 11);
-        assert_eq!(result[2].duration, Duration::from_secs_f32(22.75));
-        assert_eq!(result[2].players, vec!["SinglePlayer".to_string()]);
+        assert_eq!(
+            result,
+            vec![
+                // Better results come first
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 4000,
+                    duration: Duration::from_secs(123),
+                    players: vec!["Good player".to_string()]
+                },
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 55,
+                    duration: Duration::from_secs(66),
+                    players: vec!["#HashTag#".to_string()]
+                },
+                GameResult {
+                    mode: Mode::Traditional,
+                    score: 11,
+                    duration: Duration::from_secs_f32(22.75),
+                    players: vec!["SinglePlayer".to_string()]
+                }
+            ]
+        );
 
         // Multiplayer
         let result = read_matching_high_scores(&filename, Mode::Traditional, true)
             .await
             .unwrap();
-        assert!(result.len() == 1);
-        assert_eq!(result[0].mode, Mode::Traditional);
-        assert_eq!(result[0].score, 33);
-        assert_eq!(result[0].duration, Duration::from_secs(44));
         assert_eq!(
-            result[0].players,
-            vec![
-                "Alice".to_string(),
-                "Bob".to_string(),
-                "Charlie".to_string()
-            ]
+            result,
+            vec![GameResult {
+                mode: Mode::Traditional,
+                score: 33,
+                duration: Duration::from_secs(44),
+                players: vec![
+                    "Alice".to_string(),
+                    "Bob".to_string(),
+                    "Charlie".to_string()
+                ]
+            }]
         );
     }
 
@@ -370,10 +378,6 @@ mod test {
         let from_file = read_matching_high_scores(&filename, Mode::Ring, true)
             .await
             .unwrap();
-        assert!(from_file.len() == 1);
-        assert!(from_file[0].mode == sample_result.mode);
-        assert!(from_file[0].score == sample_result.score);
-        assert!(from_file[0].duration == sample_result.duration);
-        assert!(from_file[0].players == sample_result.players);
+        assert_eq!(from_file, [sample_result]);
     }
 }
