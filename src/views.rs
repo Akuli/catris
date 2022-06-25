@@ -967,7 +967,7 @@ mod test {
 
     #[tokio::test]
     async fn test_motd() {
-        let _temp_cd_handle = CdToTemporaryDir::new();
+        let _temp_cd_handle = CdToTemporaryDir::new(); // don't touch user's catris_motd.txt
         let mut client = Client::new(123, Receiver::Test("John7\r".to_string()));
         tokio::fs::write("catris_motd.txt", "Hello World\nSecond line of text\n")
             .await
