@@ -251,7 +251,7 @@ mod test {
             Path::new(&filename),
             concat!(
                 "catris high scores file v1\n",
-                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
             ),
         )
@@ -266,7 +266,7 @@ mod test {
             read_file(&filename).await,
             concat!(
                 "catris high scores file v4\n",
-                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
                 "# --- upgraded from v1 to v4 ---\n",
             )
@@ -292,7 +292,7 @@ mod test {
             Path::new(&filename),
             concat!(
                 "catris high scores file v4\n",
-                "traditional\t-\t11\t22\tSinglePlayer\n",
+                "traditional\t-\t11\t22.75\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
                 "traditional\tABC123\t55\t66\t#HashTag#\n",
                 "traditional\tABC123\t4000\t123\tGood player\n",
@@ -325,7 +325,7 @@ mod test {
 
         assert_eq!(result[2].mode, Mode::Traditional);
         assert_eq!(result[2].score, 11);
-        assert_eq!(result[2].duration, Duration::from_secs(22));
+        assert_eq!(result[2].duration, Duration::from_secs_f32(22.75));
         assert_eq!(result[2].players, vec!["SinglePlayer".to_string()]);
 
         // Multiplayer
@@ -344,5 +344,36 @@ mod test {
                 "Charlie".to_string()
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn test_writing() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let filename = tempdir
+            .path()
+            .join("high_scores.txt")
+            .to_str()
+            .unwrap()
+            .to_string();
+        ensure_file_exists(&filename).await.unwrap();
+
+        let sample_result = GameResult {
+            mode: Mode::Ring,
+            score: 7000,
+            duration: Duration::from_secs(123),
+            players: vec!["Foo".to_string(), "Bar".to_string()],
+        };
+
+        append_result_to_file(&filename, &sample_result)
+            .await
+            .unwrap();
+        let from_file = read_matching_high_scores(&filename, Mode::Ring, true)
+            .await
+            .unwrap();
+        assert!(from_file.len() == 1);
+        assert!(from_file[0].mode == sample_result.mode);
+        assert!(from_file[0].score == sample_result.score);
+        assert!(from_file[0].duration == sample_result.duration);
+        assert!(from_file[0].players == sample_result.players);
     }
 }
