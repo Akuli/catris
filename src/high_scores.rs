@@ -307,7 +307,7 @@ mod test {
         .await
         .unwrap();
 
-        let result = read_matching_high_scores(&filename, Mode::Traditional, false)
+        let mut result = read_matching_high_scores(&filename, Mode::Traditional, false)
             .await
             .unwrap();
         assert_eq!(
@@ -334,6 +334,17 @@ mod test {
                 }
             ]
         );
+
+        let second_place_result = GameResult {
+            mode: Mode::Traditional,
+            score: 3000,
+            duration: Duration::from_secs_f32(123.45),
+            players: vec!["Second Place".to_string()],
+        };
+        let index = add_game_result_if_high_score(&mut result, second_place_result.clone());
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[1], second_place_result);
+        assert_eq!(index, Some(1));
 
         // Multiplayer
         let result = read_matching_high_scores(&filename, Mode::Traditional, true)
