@@ -212,8 +212,7 @@ pub async fn add_result_and_get_high_scores(
         let hs_index = add_game_result_if_high_score(&mut high_scores, result);
         Ok((high_scores, hs_index))
     })
-    .await
-    .unwrap() // FIXME: unwrap
+    .await?
 }
 
 #[cfg(test)]
