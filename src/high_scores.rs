@@ -221,7 +221,7 @@ mod test {
     use std::path::Path;
 
     fn read_file(filename: &str) -> String {
-        String::from_utf8(std::fs::read(Path::new(&filename)).unwrap()).unwrap()
+        String::from_utf8(fs::read(Path::new(&filename)).unwrap()).unwrap()
     }
 
     #[test]
