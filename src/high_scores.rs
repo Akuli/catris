@@ -1,7 +1,11 @@
 use crate::game_logic::game::Mode;
+use serde::Deserialize;
+use serde::Serialize;
 use std::fs;
+use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::BufWriter;
 use std::io::ErrorKind;
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -11,6 +15,14 @@ use std::time::Duration;
 // https://users.rust-lang.org/t/convert-box-dyn-error-to-box-dyn-error-send/48856/8
 type AnyErrorThreadSafe = Box<dyn std::error::Error + Send + Sync>;
 
+fn mode_to_string(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Traditional => "traditional",
+        Mode::Bottle => "bottle",
+        Mode::Ring => "ring",
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameResult {
     pub mode: Mode,
@@ -19,12 +31,13 @@ pub struct GameResult {
     pub players: Vec<String>,
 }
 
-fn mode_to_string(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Traditional => "traditional",
-        Mode::Bottle => "bottle",
-        Mode::Ring => "ring",
-    }
+// high scores file format v4 and older didn't use json
+#[derive(Serialize, Deserialize)]
+struct GameResultInFileV5 {
+    mode: String,
+    score: usize,
+    duration_sec: f64,
+    players: Vec<String>,
 }
 
 // if format changes, please add auto-upgrading code and update version in Cargo.toml
@@ -64,10 +77,65 @@ fn append_update_comment(filename: &str, old_version: &str) -> Result<(), AnyErr
     Ok(())
 }
 
-fn update_version_number(filename: &str) -> Result<(), AnyErrorThreadSafe> {
-    let mut file = fs::OpenOptions::new().write(true).open(filename)?;
-    file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))?;
-    file.write_all(VERSION.as_bytes())?;
+fn update_from_v4_or_older(filename: &str) -> Result<(), AnyErrorThreadSafe> {
+    let temp_file = tempfile::tempfile()?;
+    let mut writer = BufWriter::new(temp_file);
+
+    writer.write_all(HEADER_PREFIX.as_bytes())?;
+    writer.write_all(VERSION.as_bytes())?;
+    writer.write_all(b"\n")?;
+
+    let mut old_file = fs::OpenOptions::new().read(true).open(filename)?;
+    let mut lines = BufReader::new(&mut old_file).lines();
+    lines.next().ok_or("high scores file is empty")??;
+
+    let mut lineno = 1;
+    for line in lines {
+        lineno += 1;
+
+        let line = line?;
+        if line.trim().starts_with('#') {
+            writer.write_all(line.trim().as_bytes())?;
+        } else if !line.trim().is_empty() {
+            let split_error = || {
+                format!(
+                    "not enough tab-separated parts on line {} of high scores file",
+                    lineno
+                )
+            };
+
+            let mut parts = line.split('\t');
+            let mode_name = parts.next().ok_or_else(split_error)?;
+            let _ = parts.next().ok_or_else(split_error)?; // lobby id
+            let score_string = parts.next().ok_or_else(split_error)?;
+            let duration_sec_string = parts.next().ok_or_else(split_error)?;
+            let players: Vec<String> = parts.map(|s| s.to_string()).collect();
+            if players.is_empty() {
+                Err(split_error())?;
+            }
+
+            assert!(VERSION == "5");
+            let raw_game_result = GameResultInFileV5 {
+                mode: mode_name.to_string(),
+                score: score_string.parse()?,
+                duration_sec: duration_sec_string.parse()?,
+                players,
+            };
+            writer.write_all(serde_json::to_string(&raw_game_result)?.as_bytes())?;
+        }
+        writer.write_all(b"\n")?;
+    }
+
+    writer.flush()?;
+    let temp_file = writer.get_mut();
+
+    temp_file.seek(SeekFrom::Start(0))?;
+
+    let mut new_file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(filename)?;
+    io::copy(temp_file, &mut new_file)?;
     Ok(())
 }
 
@@ -82,10 +150,9 @@ fn upgrade_if_needed(filename: &str) -> Result<(), AnyErrorThreadSafe> {
 
     if let Some(old_version) = first_line.strip_prefix(HEADER_PREFIX) {
         match old_version {
-            "1" | "2" | "3" if VERSION == "4" => {
-                // Previous formats are compatible with v4
+            "1" | "2" | "3" | "4" => {
                 append_update_comment(filename, old_version)?;
-                update_version_number(filename)?;
+                update_from_v4_or_older(filename)?;
                 Ok(())
             }
             VERSION => Ok(()),
@@ -102,16 +169,14 @@ fn upgrade_if_needed(filename: &str) -> Result<(), AnyErrorThreadSafe> {
 fn append_result_to_file(filename: &str, result: &GameResult) -> Result<(), AnyErrorThreadSafe> {
     log(&format!("Appending to {}: {:?}", filename, result));
     let mut file = fs::OpenOptions::new().append(true).open(filename)?;
-    file.write_all(
-        format!(
-            "{}\t-\t{}\t{}\t{}\n",
-            mode_to_string(result.mode),
-            result.score,
-            result.duration.as_secs_f64(),
-            &result.players.join("\t")
-        )
-        .as_bytes(),
-    )?;
+    let raw_game_result = GameResultInFileV5 {
+        mode: mode_to_string(result.mode).to_string(),
+        score: result.score,
+        duration_sec: result.duration.as_secs_f64(),
+        players: result.players.clone(),
+    };
+    file.write_all(serde_json::to_string(&raw_game_result)?.as_bytes())?;
+    file.write_all(b"\n")?;
     Ok(())
 }
 
@@ -147,39 +212,22 @@ fn read_matching_high_scores(
 
     let mut result = vec![];
 
-    let mut lineno = 1;
     for line in lines {
-        lineno += 1;
-
         let line = line?;
         if line.trim().is_empty() || line.trim().starts_with('#') {
             continue;
         }
 
-        let split_error = || {
-            format!(
-                "not enough tab-separated parts on line {} of high scores file",
-                lineno
-            )
-        };
-
-        let mut parts = line.split('\t');
-        let mode_name = parts.next().ok_or_else(split_error)?;
-        let _ = parts.next().ok_or_else(split_error)?; // lobby id
-        let score_string = parts.next().ok_or_else(split_error)?;
-        let duration_secs_string = parts.next().ok_or_else(split_error)?;
-
-        let players: Vec<String> = parts.map(|s| s.to_string()).collect();
-        assert!(!players.is_empty());
-
-        if mode_name == mode_to_string(mode) && (players.len() >= 2) == multiplayer {
+        let raw_result: GameResultInFileV5 = serde_json::from_str(&line)?;
+        if raw_result.mode == mode_to_string(mode) && (raw_result.players.len() >= 2) == multiplayer
+        {
             add_game_result_if_high_score(
                 &mut result,
                 GameResult {
                     mode,
-                    players,
-                    score: score_string.parse()?,
-                    duration: Duration::from_secs_f64(duration_secs_string.parse()?),
+                    players: raw_result.players,
+                    score: raw_result.score,
+                    duration: Duration::from_secs_f64(raw_result.duration_sec),
                 },
             );
         }
@@ -225,7 +273,7 @@ mod test {
     }
 
     #[test]
-    fn test_upgrading_from_v1() {
+    fn test_upgrading_from_v4_or_older() {
         let tempdir = tempfile::tempdir().unwrap();
         let filename = tempdir
             .path()
@@ -237,24 +285,38 @@ mod test {
         fs::write(
             &filename,
             concat!(
-                "catris high scores file v1\n",
+                "catris high scores file v3\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
-                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
+                // Comments don't conflict with hashtags in player names.
+                // Only a hashtag in the beginning of a line is treated as a comment.
+                "traditional\tABC123\t55\t66\t#HashTag#\n",
+                "traditional\tABC123\t4000\t123\tGood Player\n",
+                "   # comment line \n",
+                "  ",
+                "",
+                "#traditional\t-\t55\t66\tThis is skipped\n",
+                "# --- upgraded from v2 to v3 ---\n",
+                "bottle\t-\t77\t88\tBottleFoo\n",
             ),
         )
         .unwrap();
 
         upgrade_if_needed(&filename).unwrap();
 
-        // Comments don't conflict with hashtags in player names.
-        // Only a hashtag in the beginning of a line is treated as a comment.
         assert_eq!(
             read_file(&filename),
             concat!(
-                "catris high scores file v4\n",
-                "traditional\t-\t11\t22.75\tSinglePlayer\n",
-                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
-                "# --- upgraded from v1 to v4 ---\n",
+                "catris high scores file v5\n",
+                "{\"mode\":\"traditional\",\"score\":11,\"duration_sec\":22.75,\"players\":[\"SinglePlayer\"]}\n",
+                "{\"mode\":\"traditional\",\"score\":33,\"duration_sec\":44.0,\"players\":[\"Alice\",\"Bob\",\"Charlie\"]}\n",
+                "{\"mode\":\"traditional\",\"score\":55,\"duration_sec\":66.0,\"players\":[\"#HashTag#\"]}\n",
+                "{\"mode\":\"traditional\",\"score\":4000,\"duration_sec\":123.0,\"players\":[\"Good Player\"]}\n",
+                "# comment line\n",
+                "#traditional\t-\t55\t66\tThis is skipped\n",
+                "# --- upgraded from v2 to v3 ---\n",
+                "{\"mode\":\"bottle\",\"score\":77,\"duration_sec\":88.0,\"players\":[\"BottleFoo\"]}\n",
+                "# --- upgraded from v3 to v5 ---\n",
             )
         );
 
@@ -263,7 +325,7 @@ mod test {
     }
 
     #[test]
-    fn test_reading() {
+    fn test_reading_and_writing() {
         let tempdir = tempfile::tempdir().unwrap();
         let filename = tempdir
             .path()
@@ -272,23 +334,22 @@ mod test {
             .unwrap()
             .to_string();
 
-        fs::write(
-            &filename,
-            concat!(
-                "catris high scores file v4\n",
-                "traditional\t-\t11\t22.75\tSinglePlayer\n",
-                "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
-                "traditional\tABC123\t55\t66\t#HashTag#\n",
-                "traditional\tABC123\t4000\t123\tGood player\n",
-                "   # comment line \n",
-                "  ",
-                "",
-                "#traditional\t-\t55\t66\tThis is skipped\n",
-                "# --- upgraded from v3 to v4 ---\n",
-                "bottle\t-\t77\t88\tBottleFoo\n",
-            ),
-        )
-        .unwrap();
+        ensure_file_exists(&filename).unwrap();
+        #[rustfmt::skip] append_result_to_file(&filename, &GameResult { mode: Mode::Traditional, score: 10,   duration: Duration::from_secs_f32(22.75), players: vec!["SinglePlayer".to_string()] }).unwrap();
+        #[rustfmt::skip] append_result_to_file(&filename, &GameResult { mode: Mode::Traditional, score: 30,   duration: Duration::from_secs_f32(44.0),  players: vec!["Alice".to_string(), "Bob".to_string(), "Charlie".to_string()] }).unwrap();
+        #[rustfmt::skip] append_result_to_file(&filename, &GameResult { mode: Mode::Traditional, score: 50,   duration: Duration::from_secs_f32(66.0),  players: vec!["#HashTag#".to_string()] }).unwrap();
+        #[rustfmt::skip] append_result_to_file(&filename, &GameResult { mode: Mode::Traditional, score: 4000, duration: Duration::from_secs_f32(123.0), players: vec!["Good Player".to_string()] }).unwrap();
+
+        // These should be ignored, but not overwritten
+        {
+            let mut file = fs::OpenOptions::new().append(true).open(&filename).unwrap();
+            file.write_all(b"    # comment line \n").unwrap();
+            file.write_all(b"  \n").unwrap();
+            file.write_all(b"\n").unwrap();
+        }
+
+        #[rustfmt::skip] append_result_to_file(&filename, &GameResult { mode: Mode::Bottle, score: 70, duration: Duration::from_secs_f32(88.0), players: vec!["BottleFoo".to_string()] }).unwrap();
+        assert!(read_file(&filename).contains("# comment line"));
 
         let mut result = read_matching_high_scores(&filename, Mode::Traditional, false).unwrap();
         assert_eq!(
@@ -299,17 +360,17 @@ mod test {
                     mode: Mode::Traditional,
                     score: 4000,
                     duration: Duration::from_secs(123),
-                    players: vec!["Good player".to_string()]
+                    players: vec!["Good Player".to_string()]
                 },
                 GameResult {
                     mode: Mode::Traditional,
-                    score: 55,
+                    score: 50,
                     duration: Duration::from_secs(66),
                     players: vec!["#HashTag#".to_string()]
                 },
                 GameResult {
                     mode: Mode::Traditional,
-                    score: 11,
+                    score: 10,
                     duration: Duration::from_secs_f32(22.75),
                     players: vec!["SinglePlayer".to_string()]
                 }
@@ -328,12 +389,11 @@ mod test {
         assert_eq!(index, Some(1));
 
         // Multiplayer
-        let result = read_matching_high_scores(&filename, Mode::Traditional, true).unwrap();
         assert_eq!(
-            result,
+            read_matching_high_scores(&filename, Mode::Traditional, true).unwrap(),
             vec![GameResult {
                 mode: Mode::Traditional,
-                score: 33,
+                score: 30,
                 duration: Duration::from_secs(44),
                 players: vec![
                     "Alice".to_string(),
@@ -342,28 +402,16 @@ mod test {
                 ]
             }]
         );
-    }
 
-    #[test]
-    fn test_writing() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let filename = tempdir
-            .path()
-            .join("high_scores.txt")
-            .to_str()
-            .unwrap()
-            .to_string();
-        ensure_file_exists(&filename).unwrap();
-
-        let sample_result = GameResult {
-            mode: Mode::Ring,
-            score: 7000,
-            duration: Duration::from_secs(123),
-            players: vec!["Foo".to_string(), "Bar".to_string()],
-        };
-
-        append_result_to_file(&filename, &sample_result).unwrap();
-        let from_file = read_matching_high_scores(&filename, Mode::Ring, true).unwrap();
-        assert_eq!(from_file, [sample_result]);
+        // Different game mode
+        assert_eq!(
+            read_matching_high_scores(&filename, Mode::Bottle, false).unwrap(),
+            vec![GameResult {
+                mode: Mode::Bottle,
+                score: 70,
+                duration: Duration::from_secs(88),
+                players: vec!["BottleFoo".to_string()]
+            }]
+        );
     }
 }

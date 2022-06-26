@@ -10,12 +10,14 @@ use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
+use serde::Deserialize;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub enum Mode {
     Traditional,
     Bottle,
