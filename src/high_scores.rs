@@ -218,10 +218,9 @@ pub async fn add_result_and_get_high_scores(
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::path::Path;
 
     fn read_file(filename: &str) -> String {
-        String::from_utf8(fs::read(Path::new(&filename)).unwrap()).unwrap()
+        String::from_utf8(fs::read(&filename).unwrap()).unwrap()
     }
 
     #[test]
@@ -234,9 +233,8 @@ mod test {
             .unwrap()
             .to_string();
 
-        // TODO: don't convert between paths and strings so much
         fs::write(
-            Path::new(&filename),
+            &filename,
             concat!(
                 "catris high scores file v1\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
@@ -274,7 +272,7 @@ mod test {
             .to_string();
 
         fs::write(
-            Path::new(&filename),
+            &filename,
             concat!(
                 "catris high scores file v4\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
