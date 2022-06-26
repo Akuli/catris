@@ -1,14 +1,15 @@
 use crate::game_logic::game::Mode;
-use std::error::Error;
-use std::io;
+use std::fs;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::ErrorKind;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::Write;
 use std::time::Duration;
-use tokio::fs::OpenOptions;
-use tokio::io::AsyncBufReadExt;
-use tokio::io::AsyncSeekExt;
-use tokio::io::AsyncWriteExt;
-use tokio::io::BufReader;
-use tokio::io::SeekFrom;
+
+// https://users.rust-lang.org/t/convert-box-dyn-error-to-box-dyn-error-send/48856/8
+type AnyErrorThreadSafe = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameResult {
@@ -35,86 +36,72 @@ fn log(message: &str) {
 
 const HEADER_PREFIX: &str = "catris high scores file v";
 
-async fn ensure_file_exists(filename: &str) -> Result<(), io::Error> {
-    match OpenOptions::new()
+fn ensure_file_exists(filename: &str) -> Result<(), AnyErrorThreadSafe> {
+    match fs::OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(filename)
-        .await
     {
         Ok(mut file) => {
             log(&format!("Creating {}", filename));
-            file.write_all(format!("{}{}\n", HEADER_PREFIX, VERSION).as_bytes())
-                .await?;
-            file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
+            file.write_all(format!("{}{}\n", HEADER_PREFIX, VERSION).as_bytes())?;
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(e),
+        Err(e) => Err(e)?,
     }
 }
 
-async fn append_update_comment(filename: &str, old_version: &str) -> Result<(), io::Error> {
+fn append_update_comment(filename: &str, old_version: &str) -> Result<(), AnyErrorThreadSafe> {
     log(&format!(
         "upgrading {} from v{} to v{}",
         filename, old_version, VERSION
     ));
-    let mut file = OpenOptions::new().append(true).open(filename).await?;
+    let mut file = fs::OpenOptions::new().append(true).open(filename)?;
     file.write_all(
         format!("# --- upgraded from v{} to v{} ---\n", old_version, VERSION).as_bytes(),
-    )
-    .await?;
-    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
+    )?;
     Ok(())
 }
 
-async fn update_version_number(filename: &str) -> Result<(), io::Error> {
-    let mut file = OpenOptions::new().write(true).open(filename).await?;
-    file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))
-        .await?;
-    file.write_all(VERSION.as_bytes()).await?;
-    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
+fn update_version_number(filename: &str) -> Result<(), AnyErrorThreadSafe> {
+    let mut file = fs::OpenOptions::new().write(true).open(filename)?;
+    file.seek(SeekFrom::Start(HEADER_PREFIX.len() as u64))?;
+    file.write_all(VERSION.as_bytes())?;
     Ok(())
 }
 
-async fn upgrade_if_needed(filename: &str) -> Result<(), Box<dyn Error>> {
+fn upgrade_if_needed(filename: &str) -> Result<(), AnyErrorThreadSafe> {
     let first_line = {
-        let mut file = OpenOptions::new().read(true).open(filename).await?;
+        let mut file = fs::OpenOptions::new().read(true).open(filename)?;
         BufReader::new(&mut file)
             .lines()
-            .next_line()
-            .await?
-            .ok_or("high scores file is empty")?
+            .next()
+            .ok_or("high scores file is empty")??
     };
 
     if let Some(old_version) = first_line.strip_prefix(HEADER_PREFIX) {
         match old_version {
             "1" | "2" | "3" if VERSION == "4" => {
                 // Previous formats are compatible with v4
-                append_update_comment(filename, old_version).await?;
-                update_version_number(filename).await?;
+                append_update_comment(filename, old_version)?;
+                update_version_number(filename)?;
                 Ok(())
             }
             VERSION => Ok(()),
-            _ => Err(format!("unknown version: {}", old_version).into()),
+            _ => Err(format!("unknown version: {}", old_version))?,
         }
     } else {
-        let message = format!(
+        Err(format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        );
-        Err(message.into())
+        ))?
     }
 }
 
-async fn append_result_to_file(filename: &str, result: &GameResult) -> Result<(), io::Error> {
+fn append_result_to_file(filename: &str, result: &GameResult) -> Result<(), AnyErrorThreadSafe> {
     log(&format!("Appending to {}: {:?}", filename, result));
-    let mut file = OpenOptions::new().append(true).open(filename).await?;
-    /*
-    TODO: change format, current format is kinda shit.
-        - Get rid of lobby id (here always "-")
-        - Add timestamps
-    */
+    let mut file = fs::OpenOptions::new().append(true).open(filename)?;
     file.write_all(
         format!(
             "{}\t-\t{}\t{}\t{}\n",
@@ -124,9 +111,7 @@ async fn append_result_to_file(filename: &str, result: &GameResult) -> Result<()
             &result.players.join("\t")
         )
         .as_bytes(),
-    )
-    .await?;
-    file.flush().await?; // https://github.com/tokio-rs/tokio/issues/4296
+    )?;
     Ok(())
 }
 
@@ -151,35 +136,30 @@ fn add_game_result_if_high_score(
     }
 }
 
-async fn read_matching_high_scores(
+fn read_matching_high_scores(
     filename: &str,
     mode: Mode,
     multiplayer: bool,
-) -> Result<Vec<GameResult>, Box<dyn Error>> {
-    let mut file = OpenOptions::new().read(true).open(filename).await?;
+) -> Result<Vec<GameResult>, AnyErrorThreadSafe> {
+    let mut file = fs::OpenOptions::new().read(true).open(filename)?;
     let mut lines = BufReader::new(&mut file).lines();
-    lines
-        .next_line()
-        .await?
-        .ok_or("high scores file is empty")?;
+    lines.next().ok_or("high scores file is empty")??;
 
     let mut result = vec![];
 
     let mut lineno = 1;
-    while let Some(line) = lines.next_line().await? {
+    for line in lines {
         lineno += 1;
 
+        let line = line?;
         if line.trim().is_empty() || line.trim().starts_with('#') {
             continue;
         }
 
         let split_error = || {
-            io::Error::new(
-                ErrorKind::Other,
-                format!(
-                    "not enough tab-separated parts on line {} of high scores file",
-                    lineno
-                ),
+            format!(
+                "not enough tab-separated parts on line {} of high scores file",
+                lineno
             )
         };
 
@@ -217,31 +197,35 @@ lazy_static! {
 
 pub async fn add_result_and_get_high_scores(
     result: GameResult,
-) -> Result<(Vec<GameResult>, Option<usize>), Box<dyn Error>> {
+) -> Result<(Vec<GameResult>, Option<usize>), AnyErrorThreadSafe> {
     let filename_handle = FILE_LOCK.lock().await;
-    ensure_file_exists(*filename_handle).await?;
-    upgrade_if_needed(*filename_handle).await?;
 
-    let mut high_scores =
-        read_matching_high_scores(*filename_handle, result.mode, result.players.len() >= 2).await?;
+    // Not using tokio's file io because it's easy to forget to flush after writing
+    // https://github.com/tokio-rs/tokio/issues/4296
+    tokio::task::spawn_blocking(move || {
+        ensure_file_exists(*filename_handle)?;
+        upgrade_if_needed(*filename_handle)?;
 
-    append_result_to_file(*filename_handle, &result).await?;
-    let hs_index = add_game_result_if_high_score(&mut high_scores, result);
+        let mut high_scores =
+            read_matching_high_scores(*filename_handle, result.mode, result.players.len() >= 2)?;
 
-    Ok((high_scores, hs_index))
+        append_result_to_file(*filename_handle, &result)?;
+        let hs_index = add_game_result_if_high_score(&mut high_scores, result);
+        Ok((high_scores, hs_index))
+    })
+    .await?
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::path::Path;
 
-    async fn read_file(filename: &str) -> String {
-        String::from_utf8(tokio::fs::read(Path::new(&filename)).await.unwrap()).unwrap()
+    fn read_file(filename: &str) -> String {
+        String::from_utf8(fs::read(&filename).unwrap()).unwrap()
     }
 
-    #[tokio::test]
-    async fn test_upgrading_from_v1() {
+    #[test]
+    fn test_upgrading_from_v1() {
         let tempdir = tempfile::tempdir().unwrap();
         let filename = tempdir
             .path()
@@ -250,24 +234,22 @@ mod test {
             .unwrap()
             .to_string();
 
-        // TODO: don't convert between paths and strings so much
-        tokio::fs::write(
-            Path::new(&filename),
+        fs::write(
+            &filename,
             concat!(
                 "catris high scores file v1\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
             ),
         )
-        .await
         .unwrap();
 
-        upgrade_if_needed(&filename).await.unwrap();
+        upgrade_if_needed(&filename).unwrap();
 
         // Comments don't conflict with hashtags in player names.
         // Only a hashtag in the beginning of a line is treated as a comment.
         assert_eq!(
-            read_file(&filename).await,
+            read_file(&filename),
             concat!(
                 "catris high scores file v4\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
@@ -277,13 +259,11 @@ mod test {
         );
 
         // Make sure it's readable
-        read_matching_high_scores(&filename, Mode::Traditional, false)
-            .await
-            .unwrap();
+        read_matching_high_scores(&filename, Mode::Traditional, false).unwrap();
     }
 
-    #[tokio::test]
-    async fn test_reading() {
+    #[test]
+    fn test_reading() {
         let tempdir = tempfile::tempdir().unwrap();
         let filename = tempdir
             .path()
@@ -292,8 +272,8 @@ mod test {
             .unwrap()
             .to_string();
 
-        tokio::fs::write(
-            Path::new(&filename),
+        fs::write(
+            &filename,
             concat!(
                 "catris high scores file v4\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
@@ -308,12 +288,9 @@ mod test {
                 "bottle\t-\t77\t88\tBottleFoo\n",
             ),
         )
-        .await
         .unwrap();
 
-        let mut result = read_matching_high_scores(&filename, Mode::Traditional, false)
-            .await
-            .unwrap();
+        let mut result = read_matching_high_scores(&filename, Mode::Traditional, false).unwrap();
         assert_eq!(
             result,
             vec![
@@ -351,9 +328,7 @@ mod test {
         assert_eq!(index, Some(1));
 
         // Multiplayer
-        let result = read_matching_high_scores(&filename, Mode::Traditional, true)
-            .await
-            .unwrap();
+        let result = read_matching_high_scores(&filename, Mode::Traditional, true).unwrap();
         assert_eq!(
             result,
             vec![GameResult {
@@ -369,8 +344,8 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    async fn test_writing() {
+    #[test]
+    fn test_writing() {
         let tempdir = tempfile::tempdir().unwrap();
         let filename = tempdir
             .path()
@@ -378,7 +353,7 @@ mod test {
             .to_str()
             .unwrap()
             .to_string();
-        ensure_file_exists(&filename).await.unwrap();
+        ensure_file_exists(&filename).unwrap();
 
         let sample_result = GameResult {
             mode: Mode::Ring,
@@ -387,12 +362,8 @@ mod test {
             players: vec!["Foo".to_string(), "Bar".to_string()],
         };
 
-        append_result_to_file(&filename, &sample_result)
-            .await
-            .unwrap();
-        let from_file = read_matching_high_scores(&filename, Mode::Ring, true)
-            .await
-            .unwrap();
+        append_result_to_file(&filename, &sample_result).unwrap();
+        let from_file = read_matching_high_scores(&filename, Mode::Ring, true).unwrap();
         assert_eq!(from_file, [sample_result]);
     }
 }
