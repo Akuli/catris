@@ -1211,7 +1211,7 @@ mod test {
         let mut last_client = None;
         for i in 0..5 {
             let text = if i == 0 {
-                format!("Client 0\rBLOCK")
+                "Client 0\rBLOCK".to_string()
             } else if i < 4 {
                 format!("Client {}\r{}\rBLOCK", i, lobby_id.as_ref().unwrap())
             } else {

@@ -51,7 +51,7 @@ fn ensure_file_exists(filename: &str) -> Result<(), AnyErrorThreadSafe> {
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(e)?,
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -92,13 +92,14 @@ fn upgrade_if_needed(filename: &str) -> Result<(), AnyErrorThreadSafe> {
                 Ok(())
             }
             VERSION => Ok(()),
-            _ => Err(format!("unknown version: {}", old_version))?,
+            _ => Err(format!("unknown version: {}", old_version).into()),
         }
     } else {
         Err(format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        ))?
+        )
+        .into())
     }
 }
 
@@ -141,16 +142,17 @@ fn add_game_result_if_high_score(
     }
 }
 
+fn looks_like_lobby_id(value: &str) -> bool {
+    value.chars().count() == 6 && value.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9'))
+}
+
 fn parse_timestamp_field(value: &str) -> Result<Option<DateTime<Utc>>, AnyErrorThreadSafe> {
-    if value == "-" {
-        Ok(None)
-    } else if value.chars().count() == 6
-        && value.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9'))
-    {
-        // lobby id, saving these to files was a bad idea so just ignore them
+    // saving lobby IDs to files was a bad idea, just ignore them
+    if value == "-" || looks_like_lobby_id(value) {
         Ok(None)
     } else {
-        Ok(Some(DateTime::parse_from_rfc3339(value)?.into()))
+        let result = DateTime::parse_from_rfc3339(value)?;
+        Ok(Some(result.into()))
     }
 }
 

@@ -615,7 +615,7 @@ mod tests {
                 block
                     .get_relative_coords()
                     .iter()
-                    .map(|p| *p)
+                    .copied()
                     .collect::<HashSet<BlockRelativeCoords>>(),
                 HashSet::from([(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0)])
             );
