@@ -91,6 +91,18 @@ impl RenderBuffer {
         x
     }
 
+    pub fn fill_row_with_char(&mut self, y: usize, ch: char) {
+        for x in 0..self.width {
+            self.chars[y][x] = ch;
+        }
+    }
+
+    pub fn set_row_color(&mut self, y: usize, color: ansi::Color) {
+        for x in 0..self.width {
+            self.colors[y][x] = color;
+        }
+    }
+
     // returns start and end of range of x coordinates where text ended up
     pub fn add_centered_text(&mut self, y: usize, text: &str) -> (usize, usize) {
         self.add_centered_text_with_color(y, text, ansi::Color::DEFAULT)

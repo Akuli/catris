@@ -12,6 +12,7 @@ use crate::lobby::Lobby;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
 use crate::render;
 use crate::render::RenderBuffer;
+use chrono::Utc;
 use std::collections::HashSet;
 use std::io;
 use std::io::ErrorKind;
@@ -676,12 +677,41 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
     }
 }
 
-fn format_duration(duration: Duration) -> String {
+fn format_game_duration(duration: Duration) -> String {
     let seconds = duration.as_secs();
     if seconds < 60 {
         format!("{}sec", seconds)
     } else {
         format!("{}min", seconds / 60)
+    }
+}
+
+// longest possible return value looks like "42 seconds ago" (14 characters)
+fn format_how_long_ago(timestamp: chrono::DateTime<Utc>) -> String {
+    let diff = Utc::now() - timestamp;
+    let (amount, unit) = if diff.num_seconds() == 0 {
+        return "now".to_string();
+    } else if diff.num_minutes() == 0 {
+        (diff.num_seconds(), "second")
+    } else if diff.num_hours() == 0 {
+        (diff.num_minutes(), "minute")
+    } else if diff.num_days() == 0 {
+        (diff.num_hours(), "hour")
+    } else if diff.num_weeks() == 0 {
+        (diff.num_days(), "day")
+        // there's no num_months()
+    } else if diff.num_days() <= 30 {
+        (diff.num_weeks(), "week")
+    } else if diff.num_days() <= 365 {
+        (((diff.num_days() as f32) / 365.25 * 12.0) as i64, "month")
+    } else {
+        (((diff.num_days() as f32) / 365.25) as i64, "year")
+    };
+
+    if amount == 0 {
+        format!("1 {} ago", unit)
+    } else {
+        format!("{} {}s ago", amount, unit)
     }
 }
 
@@ -692,7 +722,7 @@ fn render_game_over_message(buffer: &mut RenderBuffer, game_result: &GameResult,
         buffer.add_centered_text(2, "Game over :(");
     }
 
-    let duration_text = format_duration(game_result.duration);
+    let duration_text = format_game_duration(game_result.duration);
     let score_text = format!("{}", game_result.score);
 
     let (_, right) = buffer.add_centered_text(
@@ -721,7 +751,9 @@ fn render_header(buffer: &mut RenderBuffer, this_game_result: &GameResult) {
             "single player"
         }
     );
-    buffer.add_text(0, 6, &format!("{:=^80}", header));
+
+    buffer.fill_row_with_char(6, '=');
+    buffer.add_centered_text(6, &header);
 }
 
 fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
@@ -742,10 +774,16 @@ fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
             }
         }
 
-        if result.chars().count() < maxlen {
+        if result.chars().count() <= maxlen {
             return result;
         }
         limit -= 1;
+    }
+}
+
+fn render_table_row(buffer: &mut RenderBuffer, y: usize, text_places: &[usize], texts: &[&str]) {
+    for (x, text) in text_places.iter().zip(texts) {
+        buffer.add_text(*x, y, text);
     }
 }
 
@@ -755,31 +793,62 @@ fn render_high_scores_table(
     this_game_index: Option<usize>,
     multiplayer: bool,
 ) {
-    buffer.add_text(
-        0,
-        8,
-        if multiplayer {
-            "| Score | Duration | Players"
-        } else {
-            "| Score | Duration | Player"
-        },
-    );
+    let last_title = if multiplayer { "Players" } else { "Player" };
+    let titles = ["Score", "Duration", "When", last_title];
 
-    let header_prefix = "|-------|----------|-";
-    buffer.add_text(0, 9, &format!("{:-<80}", header_prefix));
+    let mut rows: Vec<Vec<String>> = top_results
+        .iter()
+        .map(|result| {
+            vec![
+                format!("{}", result.score),
+                format_game_duration(result.duration),
+                result
+                    .timestamp
+                    .map(format_how_long_ago)
+                    .unwrap_or_else(|| "-".to_string()),
+                // player names are added later once we know how much width is available
+            ]
+        })
+        .collect();
 
-    for (i, result) in top_results.iter().enumerate() {
-        let row = format!(
-            "| {:<6}| {:<9}| {}",
-            result.score,
-            &format_duration(result.duration),
-            &format_player_names(&result.players, 80 - header_prefix.len() - 1)
-        );
-        if this_game_index == Some(i) {
-            buffer.add_text_with_color(0, 10 + i, &format!("{:<80}", row), Color::GREEN_BACKGROUND);
-        } else {
-            buffer.add_text(0, 10 + i, &row);
+    let mut separator_places = vec![0];
+    for column in 0..3 {
+        let width = rows
+            .iter()
+            .map(|row| row[column].len())
+            .chain([titles[column].len()])
+            .max()
+            .unwrap();
+        let last_separator = separator_places.last().unwrap();
+        let next_separator = last_separator + 2 + width + 1;
+        separator_places.push(next_separator);
+    }
+
+    let last_column_text_starts_at = separator_places.last().unwrap() + 2;
+    let last_column_max_width = buffer.width - last_column_text_starts_at;
+    for (row, result) in rows.iter_mut().zip(top_results) {
+        row.push(format_player_names(&result.players, last_column_max_width));
+    }
+
+    buffer.fill_row_with_char(9, '-');
+    for x in &separator_places {
+        for y in 8..(10 + top_results.len()) {
+            buffer.set_char(*x, y, '|');
         }
+    }
+
+    let text_places: Vec<usize> = separator_places.iter().map(|x| x + 2).collect();
+    render_table_row(buffer, 8, &text_places, &titles);
+    for (i, row) in rows.iter().enumerate() {
+        render_table_row(
+            buffer,
+            10 + i,
+            &text_places,
+            &row.iter().map(|s| -> &str { &*s }).collect::<Vec<_>>(),
+        );
+    }
+    if let Some(i) = this_game_index {
+        buffer.set_row_color(10 + i, Color::GREEN_BACKGROUND);
     }
 }
 
@@ -1180,5 +1249,70 @@ mod test {
         assert!(choose_result.is_err());
         assert!(client.text().contains("Ring game (4/4 players)"));
         assert!(client.text().contains("This game is full."));
+    }
+
+    #[tokio::test]
+    async fn test_show_high_scores() {
+        let this_game_result = GameResult {
+            duration: Duration::from_secs(123),
+            mode: Mode::Traditional,
+            score: 500,
+            players: vec!["Foo".to_string(), "Bar".to_string()],
+            timestamp: Some(Utc::now()),
+        };
+
+        let top_results = vec![
+            GameResult {
+                duration: Duration::from_secs(666),
+                mode: Mode::Traditional,
+                score: 1000,
+                players: vec!["Alice".to_string(), "Bob".to_string()],
+                timestamp: None,
+            },
+            this_game_result.clone(),
+            GameResult {
+                duration: Duration::from_secs(5),
+                mode: Mode::Traditional,
+                score: 10,
+                players: vec![
+                    "very long name i have".to_string(),
+                    "IHaveVeryLongName".to_string(),
+                    "Long long name".to_string(),
+                    "short name".to_string(),
+                ],
+                timestamp: Some(Utc::now() - chrono::Duration::days(3)),
+            },
+        ];
+
+        let mut client = Client::new(1, Receiver::Test("\r".to_string()));
+        let result = show_high_scores(
+            &mut client,
+            watch::channel(GameStatus::HighScoresLoaded {
+                this_game_result,
+                top_results,
+                this_game_index: Some(1),
+            })
+            .1,
+        )
+        .await;
+        assert!(result.is_ok());
+
+        println!("{}", client.text());
+        assert!(client.text().starts_with(concat!(
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                  Game over :)                                  \n",
+            "                The game lasted 2min and it ended with score 500.               \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "================ HIGH SCORES: Traditional game with multiplayer ================\n",
+            "                                                                                \n",
+            "| Score | Duration | When       | Players                                       \n",
+            "|-------|----------|------------|-----------------------------------------------\n",
+            "| 1000  | 11min    | -          | Alice, Bob                                    \n",
+            "| 500   | 2min     | now        | Foo, Bar                                      \n",
+            "| 10    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
+            "                                                                                \n",
+        )));
     }
 }

@@ -144,13 +144,13 @@ fn add_game_result_if_high_score(
 fn parse_timestamp_field(value: &str) -> Result<Option<DateTime<Utc>>, AnyErrorThreadSafe> {
     if value == "-" {
         Ok(None)
-    } else if value.chars().count() == 6 && value.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9')) {
+    } else if value.chars().count() == 6
+        && value.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9'))
+    {
         // lobby id, saving these to files was a bad idea so just ignore them
         Ok(None)
     } else {
-        Ok(Some(
-            DateTime::parse_from_rfc3339(value)?.into(),
-        ))
+        Ok(Some(DateTime::parse_from_rfc3339(value)?.into()))
     }
 }
 
@@ -333,7 +333,11 @@ mod test {
                     score: 11,
                     duration: Duration::from_secs_f32(22.75),
                     players: vec!["SinglePlayer".to_string()],
-                    timestamp: Some(DateTime::parse_from_rfc3339("2022-07-02T23:57:22+00:00").unwrap().into()),
+                    timestamp: Some(
+                        DateTime::parse_from_rfc3339("2022-07-02T23:57:22+00:00")
+                            .unwrap()
+                            .into()
+                    ),
                 }
             ]
         );
