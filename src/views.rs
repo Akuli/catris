@@ -805,7 +805,7 @@ fn render_high_scores_table(
                 result
                     .timestamp
                     .map(format_how_long_ago)
-                    .unwrap_or_else(|| "-".to_string()),
+                    .unwrap_or_else(|| "?".to_string()),
                 // player names are added later once we know how much width is available
             ]
         })
@@ -1306,7 +1306,7 @@ mod test {
             "                                                                                \n",
             "| Score | Duration | When       | Players                                       \n",
             "|-------|----------|------------|-----------------------------------------------\n",
-            "| 1000  | 11min    | -          | Alice, Bob                                    \n",
+            "| 1000  | 11min    | ?          | Alice, Bob                                    \n",
             "| 500   | 2min     | now        | Foo, Bar                                      \n",
             "| 10    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
             "                                                                                \n",
