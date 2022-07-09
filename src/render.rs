@@ -65,10 +65,10 @@ impl RenderBuffer {
     pub fn add_text(&mut self, x: usize, y: usize, text: &str) -> usize {
         self.add_text_with_color(x, y, text, Color::DEFAULT)
     }
-    pub fn add_text_with_color(&mut self, x: usize, y: usize, text: &str, colors: Color) -> usize {
+    pub fn add_text_with_color(&mut self, x: usize, y: usize, text: &str, color: Color) -> usize {
         let mut x = x;
         for ch in text.chars() {
-            self.set_char_with_color(x, y, ch, colors);
+            self.set_char_with_color(x, y, ch, color);
             x += 1;
         }
         x
