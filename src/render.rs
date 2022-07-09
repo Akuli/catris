@@ -48,6 +48,8 @@ impl RenderBuffer {
     pub fn get_char(&self, x: usize, y: usize) -> char {
         self.chars[y][x]
     }
+
+    #[cfg(test)]
     pub fn get_color(&self, x: usize, y: usize) -> Color {
         self.colors[y][x]
     }

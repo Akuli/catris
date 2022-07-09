@@ -1,4 +1,3 @@
-use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::connection::Receiver;
 use crate::lobby;
@@ -12,6 +11,9 @@ use std::io::ErrorKind;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::sync::Notify;
+
+#[cfg(test)]
+use crate::ansi::Color;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 #[derive(Copy, Clone)]
