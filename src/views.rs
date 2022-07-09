@@ -830,25 +830,29 @@ fn render_high_scores_table(
         row.push(format_player_names(&result.players, last_column_max_width));
     }
 
-    buffer.fill_row_with_char(9, '-');
+    let title_y: usize = 8;
+    let horizontal_line_y: usize = 9;
+    let first_result_row_y: usize = 10;
+
+    buffer.fill_row_with_char(horizontal_line_y, '-');
     for x in &separator_places {
-        for y in 8..(10 + top_results.len()) {
+        for y in title_y..(first_result_row_y + top_results.len()) {
             buffer.set_char(*x, y, '|');
         }
     }
 
     let text_places: Vec<usize> = separator_places.iter().map(|x| x + 2).collect();
-    render_table_row(buffer, 8, &text_places, &titles);
+    render_table_row(buffer, title_y, &text_places, &titles);
     for (i, row) in rows.iter().enumerate() {
         render_table_row(
             buffer,
-            10 + i,
+            first_result_row_y + i,
             &text_places,
             &row.iter().map(|s| -> &str { &*s }).collect::<Vec<_>>(),
         );
     }
     if let Some(i) = this_game_index {
-        buffer.set_row_color(10 + i, Color::GREEN_BACKGROUND);
+        buffer.set_row_color(first_result_row_y + i, Color::GREEN_BACKGROUND);
     }
 }
 
