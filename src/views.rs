@@ -699,7 +699,7 @@ fn format_how_long_ago(timestamp: chrono::DateTime<Utc>) -> String {
         (diff.num_hours(), "hour")
     } else if diff.num_weeks() == 0 {
         (diff.num_days(), "day")
-        // there's no num_months()
+        // there's no num_months() or num_years()
     } else if diff.num_days() <= 30 {
         (diff.num_weeks(), "week")
     } else if diff.num_days() <= 365 {
