@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 pub const CLEAR_SCREEN: &str = "\x1b[2J";
 pub const CLEAR_TO_END_OF_LINE: &str = "\x1b[0K";
 pub const CLEAR_FROM_CURSOR_TO_END_OF_SCREEN: &str = "\x1b[0J";
@@ -49,10 +51,10 @@ impl Color {
     pub fn escape_sequence(self) -> String {
         let mut result = RESET_COLORS.to_string();
         if self.fg != 0 {
-            result.push_str(&format!("\x1b[1;{}m", self.fg));
+            let _ = write!(result, "\x1b[1;{}m", self.fg);
         }
         if self.bg != 0 {
-            result.push_str(&format!("\x1b[1;{}m", self.bg));
+            let _ = write!(result, "\x1b[1;{}m", self.bg);
         }
         result
     }
