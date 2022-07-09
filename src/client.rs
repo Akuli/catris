@@ -1,3 +1,4 @@
+use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::connection::Receiver;
 use crate::lobby;
@@ -59,6 +60,20 @@ impl Client {
                 result.push(render_data.buffer.get_char(x, y));
             }
             result.push('\n');
+        }
+        result
+    }
+
+    #[cfg(test)]
+    pub fn text_with_color(&self, color: Color) -> String {
+        let mut result = "".to_string();
+        let render_data = self.render_data.lock().unwrap();
+        for y in 0..render_data.buffer.height {
+            for x in 0..render_data.buffer.width {
+                if render_data.buffer.get_color(x, y) == color {
+                    result.push(render_data.buffer.get_char(x, y));
+                }
+            }
         }
         result
     }

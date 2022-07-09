@@ -1285,19 +1285,16 @@ mod test {
         ];
 
         let mut client = Client::new(1, Receiver::Test("\r".to_string()));
-        let result = show_high_scores(
-            &mut client,
-            watch::channel(GameStatus::HighScoresLoaded {
-                this_game_result,
-                top_results,
-                this_game_index: Some(1),
-            })
-            .1,
-        )
-        .await;
+
+        let status = GameStatus::HighScoresLoaded {
+            this_game_result,
+            top_results,
+            this_game_index: Some(1),
+        };
+        let (_status_sender, status_receiver) = watch::channel(status);
+        let result = show_high_scores(&mut client, status_receiver).await;
         assert!(result.is_ok());
 
-        println!("{}", client.text());
         assert!(client.text().starts_with(concat!(
             "                                                                                \n",
             "                                                                                \n",
@@ -1314,5 +1311,11 @@ mod test {
             "| 10    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
             "                                                                                \n",
         )));
+
+        // second row should be highlighted, because it represents the current game
+        assert_eq!(
+            client.text_with_color(Color::GREEN_BACKGROUND),
+            "| 500   | 2min     | now        | Foo, Bar                                      "
+        );
     }
 }
