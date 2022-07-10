@@ -3,6 +3,7 @@ use crate::game_logic::game::Game;
 use crate::game_logic::WorldPoint;
 use crate::high_scores::add_result_and_get_high_scores;
 use crate::high_scores::GameResult;
+use chrono::Utc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
@@ -101,6 +102,7 @@ impl GameWrapper {
             score,
             players,
             duration: self.get_duration(),
+            timestamp: Some(Utc::now()),
         }
     }
 }

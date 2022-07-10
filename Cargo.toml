@@ -13,6 +13,7 @@ tokio = { version = "1", features = ["full"] }
 weak-table = "*"
 rand = "*"
 lazy_static = "*"
+chrono = "0.4"
 tokio-tungstenite = "*"
 # futures-util copied from tokio-tungstenite's Cargo.toml
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }

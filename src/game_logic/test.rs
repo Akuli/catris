@@ -65,7 +65,7 @@ fn dump_game_state(game: &Game) -> Vec<String> {
         let mut row = "".to_string();
         for x in &x_coords {
             if x.is_none() {
-                row.push_str("~");
+                row.push('~');
                 continue;
             }
             let x = x.unwrap();
@@ -295,7 +295,7 @@ fn test_traditional_clearing() {
             expected_full.insert((x, y));
         }
     }
-    assert_eq!(HashSet::from_iter(full.iter().map(|p| *p)), expected_full);
+    assert_eq!(HashSet::from_iter(full.iter().copied()), expected_full);
 
     assert_eq!(dump_game_state(&game), before_clear);
     game.remove_full_rows(&full);

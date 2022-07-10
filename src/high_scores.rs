@@ -1,4 +1,6 @@
 use crate::game_logic::game::Mode;
+use chrono::DateTime;
+use chrono::Utc;
 use std::fs;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -17,6 +19,7 @@ pub struct GameResult {
     pub score: usize,
     pub duration: Duration,
     pub players: Vec<String>,
+    pub timestamp: Option<DateTime<Utc>>,
 }
 
 fn mode_to_string(mode: Mode) -> &'static str {
@@ -48,7 +51,7 @@ fn ensure_file_exists(filename: &str) -> Result<(), AnyErrorThreadSafe> {
             Ok(())
         }
         Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(e)?,
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -89,13 +92,14 @@ fn upgrade_if_needed(filename: &str) -> Result<(), AnyErrorThreadSafe> {
                 Ok(())
             }
             VERSION => Ok(()),
-            _ => Err(format!("unknown version: {}", old_version))?,
+            _ => Err(format!("unknown version: {}", old_version).into()),
         }
     } else {
         Err(format!(
             "unexpected first line in high scores file: {:?}",
             first_line
-        ))?
+        )
+        .into())
     }
 }
 
@@ -104,8 +108,10 @@ fn append_result_to_file(filename: &str, result: &GameResult) -> Result<(), AnyE
     let mut file = fs::OpenOptions::new().append(true).open(filename)?;
     file.write_all(
         format!(
-            "{}\t-\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\n",
             mode_to_string(result.mode),
+            // timestamp can't be None in new high scores, that's a legacy thing
+            result.timestamp.unwrap().to_rfc3339(),
             result.score,
             result.duration.as_secs_f64(),
             &result.players.join("\t")
@@ -133,6 +139,20 @@ fn add_game_result_if_high_score(
         Some(i)
     } else {
         None
+    }
+}
+
+fn looks_like_lobby_id(value: &str) -> bool {
+    value.chars().count() == 6 && value.chars().all(|c| matches!(c, 'A'..='Z' | '0'..='9'))
+}
+
+fn parse_timestamp_field(value: &str) -> Result<Option<DateTime<Utc>>, AnyErrorThreadSafe> {
+    // saving lobby IDs to files was a bad idea, just ignore them
+    if value == "-" || looks_like_lobby_id(value) {
+        Ok(None)
+    } else {
+        let result = DateTime::parse_from_rfc3339(value)?;
+        Ok(Some(result.into()))
     }
 }
 
@@ -165,7 +185,7 @@ fn read_matching_high_scores(
 
         let mut parts = line.split('\t');
         let mode_name = parts.next().ok_or_else(split_error)?;
-        let _ = parts.next().ok_or_else(split_error)?; // lobby id
+        let timestamp_string = parts.next().ok_or_else(split_error)?;
         let score_string = parts.next().ok_or_else(split_error)?;
         let duration_secs_string = parts.next().ok_or_else(split_error)?;
 
@@ -180,6 +200,7 @@ fn read_matching_high_scores(
                     players,
                     score: score_string.parse()?,
                     duration: Duration::from_secs_f64(duration_secs_string.parse()?),
+                    timestamp: parse_timestamp_field(timestamp_string)?,
                 },
             );
         }
@@ -239,7 +260,7 @@ mod test {
             concat!(
                 "catris high scores file v1\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
-                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "traditional\tABZ019\t33\t44\tPlayer 1\tPlayer 2\n",
             ),
         )
         .unwrap();
@@ -253,7 +274,7 @@ mod test {
             concat!(
                 "catris high scores file v4\n",
                 "traditional\t-\t11\t22.75\tSinglePlayer\n",
-                "traditional\t-\t33\t44\tPlayer 1\tPlayer 2\n",
+                "traditional\tABZ019\t33\t44\tPlayer 1\tPlayer 2\n",
                 "# --- upgraded from v1 to v4 ---\n",
             )
         );
@@ -276,16 +297,16 @@ mod test {
             &filename,
             concat!(
                 "catris high scores file v4\n",
-                "traditional\t-\t11\t22.75\tSinglePlayer\n",
                 "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
-                "traditional\tABC123\t55\t66\t#HashTag#\n",
-                "traditional\tABC123\t4000\t123\tGood player\n",
+                "traditional\tABZ019\t55\t66\t#HashTag#\n",
+                "traditional\tABZ019\t4000\t123\tGood player\n",
                 "   # comment line \n",
                 "  ",
                 "",
                 "#traditional\t-\t55\t66\tThis is skipped\n",
                 "# --- upgraded from v3 to v4 ---\n",
                 "bottle\t-\t77\t88\tBottleFoo\n",
+                "traditional\t2022-07-02T23:57:22+00:00\t11\t22.75\tSinglePlayer\n",
             ),
         )
         .unwrap();
@@ -299,19 +320,26 @@ mod test {
                     mode: Mode::Traditional,
                     score: 4000,
                     duration: Duration::from_secs(123),
-                    players: vec!["Good player".to_string()]
+                    players: vec!["Good player".to_string()],
+                    timestamp: None,
                 },
                 GameResult {
                     mode: Mode::Traditional,
                     score: 55,
                     duration: Duration::from_secs(66),
-                    players: vec!["#HashTag#".to_string()]
+                    players: vec!["#HashTag#".to_string()],
+                    timestamp: None,
                 },
                 GameResult {
                     mode: Mode::Traditional,
                     score: 11,
                     duration: Duration::from_secs_f32(22.75),
-                    players: vec!["SinglePlayer".to_string()]
+                    players: vec!["SinglePlayer".to_string()],
+                    timestamp: Some(
+                        DateTime::parse_from_rfc3339("2022-07-02T23:57:22+00:00")
+                            .unwrap()
+                            .into()
+                    ),
                 }
             ]
         );
@@ -321,6 +349,7 @@ mod test {
             score: 3000,
             duration: Duration::from_secs_f32(123.45),
             players: vec!["Second Place".to_string()],
+            timestamp: None,
         };
         let index = add_game_result_if_high_score(&mut result, second_place_result.clone());
         assert_eq!(result.len(), 4);
@@ -339,7 +368,8 @@ mod test {
                     "Alice".to_string(),
                     "Bob".to_string(),
                     "Charlie".to_string()
-                ]
+                ],
+                timestamp: None,
             }]
         );
     }
@@ -360,6 +390,7 @@ mod test {
             score: 7000,
             duration: Duration::from_secs(123),
             players: vec!["Foo".to_string(), "Bar".to_string()],
+            timestamp: Some(Utc::now()),
         };
 
         append_result_to_file(&filename, &sample_result).unwrap();
