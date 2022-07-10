@@ -1299,7 +1299,7 @@ mod test {
         let result = show_high_scores(&mut client, status_receiver).await;
         assert!(result.is_ok());
 
-        assert!(client.text().starts_with(concat!(
+        assert_eq!(client.text(), concat!(
             "                                                                                \n",
             "                                                                                \n",
             "                                  Game over :)                                  \n",
@@ -1314,12 +1314,25 @@ mod test {
             "| 500   | 2min     | now        | Foo, Bar                                      \n",
             "| 10    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
             "                                                                                \n",
-        )));
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "                           Press Enter to continue...                           \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                                                                \n",
+            "                                                                                \n",
+        ));
 
-        // second row should be highlighted, because it represents the current game
-        assert_eq!(
-            client.text_with_color(Color::GREEN_BACKGROUND),
-            "| 500   | 2min     | now        | Foo, Bar                                      "
+        // row representing current game should be highlighted
+        assert!(
+            client.text_with_color(Color::GREEN_BACKGROUND).starts_with(
+            "| 500   | 2min     | now        | Foo, Bar")
         );
+
+        // score of current game (in "The game lasted ...") should be highlighted
+        assert_eq!(client.text_with_color(Color::CYAN_FOREGROUND), "500");
     }
 }
