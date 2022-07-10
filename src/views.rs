@@ -1290,10 +1290,7 @@ mod test {
                 duration: Duration::from_secs(4),
                 mode: Mode::Traditional,
                 score: 10,
-                players: vec![
-                    "Asdf".to_string(),
-                    "Lol Wat".to_string(),
-                ],
+                players: vec!["Asdf".to_string(), "Lol Wat".to_string()],
                 timestamp: Some(Utc::now() - chrono::Duration::days(10)),
             },
         ];
