@@ -708,7 +708,7 @@ fn format_how_long_ago(timestamp: chrono::DateTime<Utc>) -> String {
         (((diff.num_days() as f32) / 365.25) as i64, "year")
     };
 
-    if amount == 0 {
+    if amount == 1 {
         format!("1 {} ago", unit)
     } else {
         format!("{} {}s ago", amount, unit)
@@ -1277,7 +1277,7 @@ mod test {
             GameResult {
                 duration: Duration::from_secs(5),
                 mode: Mode::Traditional,
-                score: 10,
+                score: 20,
                 players: vec![
                     "very long name i have".to_string(),
                     "IHaveVeryLongName".to_string(),
@@ -1285,6 +1285,16 @@ mod test {
                     "short name".to_string(),
                 ],
                 timestamp: Some(Utc::now() - chrono::Duration::days(3)),
+            },
+            GameResult {
+                duration: Duration::from_secs(4),
+                mode: Mode::Traditional,
+                score: 10,
+                players: vec![
+                    "Asdf".to_string(),
+                    "Lol Wat".to_string(),
+                ],
+                timestamp: Some(Utc::now() - chrono::Duration::days(10)),
             },
         ];
 
@@ -1314,8 +1324,8 @@ mod test {
                 "|-------|----------|------------|-----------------------------------------------\n",
                 "| 1000  | 11min    | ?          | Alice, Bob                                    \n",
                 "| 500   | 2min     | now        | Foo, Bar                                      \n",
-                "| 10    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
-                "                                                                                \n",
+                "| 20    | 5sec     | 3 days ago | very lo..., IHaveVe..., Long lo..., short name\n",
+                "| 10    | 4sec     | 1 week ago | Asdf, Lol Wat                                 \n",
                 "                                                                                \n",
                 "                                                                                \n",
                 "                                                                                \n",
