@@ -934,11 +934,11 @@ async fn show_high_scores_after_game(
 fn switch_mode(mode: Mode, delta: i8) -> Option<Mode> {
     assert!(delta == -1 || delta == 1);
     let i = Mode::ALL_MODES.iter().position(|m| *m == mode).unwrap() as i8 + delta;
-    return if i < 0 || i >= (Mode::ALL_MODES.len() as i8) {
+    if i < 0 || i >= (Mode::ALL_MODES.len() as i8) {
         None
     } else {
         Some(Mode::ALL_MODES[i as usize])
-    };
+    }
 }
 
 pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> {
@@ -1022,6 +1022,7 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
 mod test {
     use super::*;
     use crate::connection::Receiver;
+    use crate::high_scores::HighScoresForGame;
     use std::path::PathBuf;
     use weak_table::WeakValueHashMap;
 
