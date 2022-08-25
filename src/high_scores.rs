@@ -12,7 +12,7 @@ use std::io::Write;
 use std::time::Duration;
 
 // https://users.rust-lang.org/t/convert-box-dyn-error-to-box-dyn-error-send/48856/8
-pub type AnyErrorThreadSafe = Box<dyn std::error::Error + Send + Sync>;
+type AnyErrorThreadSafe = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameResult {
