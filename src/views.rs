@@ -864,6 +864,22 @@ fn render_high_scores_table(
     }
 }
 
+fn render_exceptional_high_scores_status<T>(
+    buffer: &mut RenderBuffer,
+    status: &HighScoresStatus<T>,
+) {
+    match status {
+        HighScoresStatus::Loading => {
+            buffer.add_centered_text(9, "Loading...");
+        }
+        HighScoresStatus::Error => {
+            // hopefully nobody ever sees this...
+            buffer.add_centered_text_with_color(9, "High Scores Error", Color::RED_FOREGROUND);
+        }
+        HighScoresStatus::Loaded(_) => panic!(),
+    }
+}
+
 async fn show_high_scores_after_game(
     client: &mut Client,
     mut receiver: watch::Receiver<GameStatus>,
@@ -873,17 +889,6 @@ async fn show_high_scores_after_game(
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
             match &*receiver.borrow() {
-                GameStatus::GameOver(HighScoresStatus::Loading) => {
-                    render_data.buffer.add_centered_text(9, "Loading...");
-                }
-                GameStatus::GameOver(HighScoresStatus::Error) => {
-                    // hopefully nobody ever sees this...
-                    render_data.buffer.add_centered_text_with_color(
-                        9,
-                        "High Scores Error",
-                        Color::RED_FOREGROUND,
-                    );
-                }
                 GameStatus::GameOver(HighScoresStatus::Loaded(info)) => {
                     render_game_over_message(
                         &mut render_data.buffer,
@@ -898,6 +903,9 @@ async fn show_high_scores_after_game(
                         &info.top_results,
                         info.this_game_index,
                     );
+                }
+                GameStatus::GameOver(status) => {
+                    render_exceptional_high_scores_status(&mut render_data.buffer, status)
                 }
                 GameStatus::Playing | GameStatus::Paused(_) => panic!(),
             }
@@ -947,18 +955,6 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
             render_data.clear(80, 24);
 
             match &*receiver.borrow() {
-                // TODO: copy pasta spaghetti bolognese
-                HighScoresStatus::Loading => {
-                    render_data.buffer.add_centered_text(9, "Loading...");
-                }
-                HighScoresStatus::Error => {
-                    // hopefully nobody ever sees this...
-                    render_data.buffer.add_centered_text_with_color(
-                        9,
-                        "High Scores Error",
-                        Color::RED_FOREGROUND,
-                    );
-                }
                 HighScoresStatus::Loaded(results) => {
                     render_high_scores_table(
                         &mut render_data.buffer,
@@ -994,11 +990,12 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
                         );
                     }
                 }
+                status => render_exceptional_high_scores_status(&mut render_data.buffer, status),
             }
 
             render_data
                 .buffer
-                .add_centered_text(21, " Press Enter to continue... ");
+                .add_centered_text(bottom_text_y, "Press Enter to continue...");
 
             render_data.changed.notify_one();
         }
