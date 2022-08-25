@@ -35,7 +35,7 @@ impl Color {
     pub const RED_FOREGROUND: Color = Color { fg: 31, bg: 0 };
     pub const GREEN_FOREGROUND: Color = Color { fg: 32, bg: 0 };
     pub const YELLOW_FOREGROUND: Color = Color { fg: 33, bg: 0 };
-    //pub const BLUE_FOREGROUND: Color = Color { fg: 34, bg: 0 };
+    pub const BLUE_FOREGROUND: Color = Color { fg: 34, bg: 0 };
     pub const MAGENTA_FOREGROUND: Color = Color { fg: 35, bg: 0 };
     pub const CYAN_FOREGROUND: Color = Color { fg: 36, bg: 0 };
     //pub const WHITE_FOREGROUND: Color = Color { fg: 37, bg: 0 };
