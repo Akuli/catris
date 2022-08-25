@@ -800,6 +800,7 @@ fn render_high_scores_table(
     );
     buffer.fill_row_with_char(header_y, '=');
     buffer.add_centered_text(header_y, &header);
+    buffer.set_row_color(header_y, Color::BLUE_FOREGROUND);
 
     let last_title = if multiplayer { "Players" } else { "Player" };
     let titles = ["Score", "Duration", "When", last_title];
