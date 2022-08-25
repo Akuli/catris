@@ -923,12 +923,22 @@ async fn show_high_scores_after_game(
     }
 }
 
+fn switch_mode(mode: Mode, delta: i8) -> Option<Mode> {
+    assert!(delta == -1 || delta == 1);
+    let i = Mode::ALL_MODES.iter().position(|m| *m == mode).unwrap() as i8 + delta;
+    return if i < 0 || i >= (Mode::ALL_MODES.len() as i8) {
+        None
+    } else {
+        Some(Mode::ALL_MODES[i as usize])
+    };
+}
+
 pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> {
     let (sender, mut receiver) = watch::channel(HighScoresStatus::Loading);
     tokio::spawn(game_wrapper::handle_loading_all_high_scores(sender));
 
     let bottom_text_y = 21;
-    let mut page_num: usize = 0;
+    let mut mode = Mode::ALL_MODES[0];
     let mut loading_task_done = false;
 
     loop {
@@ -950,40 +960,36 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
                     );
                 }
                 HighScoresStatus::Loaded(results) => {
-                    assert!(results.len() == Mode::ALL_MODES.len());
-                    let (mode, single_player_results, multiplayer_results) = &results[page_num];
-
                     render_high_scores_table(
                         &mut render_data.buffer,
                         0,
-                        *mode,
+                        mode,
                         false,
-                        single_player_results,
+                        &results[&mode].single_player_results,
                         None,
                     );
                     render_high_scores_table(
                         &mut render_data.buffer,
                         11,
-                        *mode,
+                        mode,
                         true,
-                        multiplayer_results,
+                        &results[&mode].multiplayer_results,
                         None,
                     );
 
-                    if page_num != 0 {
+                    if let Some(prev) = switch_mode(mode, -1) {
                         render_data.buffer.add_text_with_color(
                             0,
                             bottom_text_y,
-                            &format!(" << {} ", Mode::ALL_MODES[page_num - 1].name()),
+                            &format!(" << {} ", prev.name()),
                             Color::YELLOW_FOREGROUND,
                         );
                     }
-                    if page_num != results.len() - 1 {
-                        let next_text = format!(" {} >> ", Mode::ALL_MODES[page_num + 1].name());
+                    if let Some(next) = switch_mode(mode, 1) {
                         render_data.buffer.add_text_with_color(
-                            80 - next_text.len(),
+                            80 - format!(" {} >> ", next.name()).len(),
                             bottom_text_y,
-                            &next_text,
+                            &format!(" {} >> ", next.name()),
                             Color::YELLOW_FOREGROUND,
                         );
                     }
@@ -1006,8 +1012,8 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
             key = client.receive_key_press() => {
                 match key? {
                     KeyPress::Enter => return Ok(()),
-                    KeyPress::Left => if page_num > 0 { page_num -= 1 },
-                    KeyPress::Right => if page_num <= Mode::ALL_MODES.len()-2 {page_num+=1;}
+                    KeyPress::Left => mode = switch_mode(mode, -1).unwrap_or(mode),
+                    KeyPress::Right => mode = switch_mode(mode, 1).unwrap_or(mode),
                     _ => {}
                 }
             }

@@ -1,6 +1,7 @@
 use crate::game_logic::game::Mode;
 use chrono::DateTime;
 use chrono::Utc;
+use std::collections::HashMap;
 use std::fs;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -253,8 +254,12 @@ pub async fn add_result_and_get_high_scores(
     .await?
 }
 
-// (mode, single_player, multiplayer)
-pub type AllHighScores = Vec<(Mode, Vec<GameResult>, Vec<GameResult>)>;
+#[derive(Debug)]
+pub struct AllHighScoresForMode {
+    pub single_player_results: Vec<GameResult>,
+    pub multiplayer_results: Vec<GameResult>,
+}
+pub type AllHighScores = HashMap<Mode, AllHighScoresForMode>;
 
 pub async fn read_all_high_scores() -> Result<AllHighScores, AnyErrorThreadSafe> {
     let filename_handle = FILE_LOCK.lock().await;
@@ -263,13 +268,17 @@ pub async fn read_all_high_scores() -> Result<AllHighScores, AnyErrorThreadSafe>
         ensure_file_exists(*filename_handle)?;
         upgrade_if_needed(*filename_handle)?;
 
-        let mut result = vec![];
+        let mut result = HashMap::new();
         for mode in Mode::ALL_MODES {
-            result.push((
+            let single_player_results = read_matching_high_scores(*filename_handle, *mode, false)?;
+            let multiplayer_results = read_matching_high_scores(*filename_handle, *mode, true)?;
+            result.insert(
                 *mode,
-                read_matching_high_scores(*filename_handle, *mode, false)?,
-                read_matching_high_scores(*filename_handle, *mode, true)?,
-            ));
+                AllHighScoresForMode {
+                    single_player_results,
+                    multiplayer_results,
+                },
+            );
         }
         Ok(result)
     })
