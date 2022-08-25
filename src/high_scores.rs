@@ -221,7 +221,7 @@ lazy_static! {
 pub struct HighScoresForGame {
     pub this_game_result: GameResult,
     pub top_results: Vec<GameResult>,
-    pub this_game_index: Option<usize>, // where is this_game_result in top_results?
+    pub this_game_index: Option<usize>, // index of this_game_result in top_results
 }
 
 pub async fn add_result_and_get_high_scores(
