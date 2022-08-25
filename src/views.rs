@@ -977,15 +977,16 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
                         render_data.buffer.add_text_with_color(
                             0,
                             bottom_text_y,
-                            &format!(" << {} ", prev.name()),
+                            &format!(" <-- {} ", prev.name()),
                             Color::YELLOW_FOREGROUND,
                         );
                     }
                     if let Some(next) = switch_mode(mode, 1) {
+                        let text = format!(" {} --> ", next.name());
                         render_data.buffer.add_text_with_color(
-                            80 - format!(" {} >> ", next.name()).len(),
+                            80 - text.len(),
                             bottom_text_y,
-                            &format!(" {} >> ", next.name()),
+                            &text,
                             Color::YELLOW_FOREGROUND,
                         );
                     }
