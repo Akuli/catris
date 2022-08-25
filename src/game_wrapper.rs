@@ -2,7 +2,10 @@ use crate::ansi::Color;
 use crate::game_logic::game::Game;
 use crate::game_logic::WorldPoint;
 use crate::high_scores::add_result_and_get_high_scores;
+use crate::high_scores::read_all_high_scores;
+use crate::high_scores::AllHighScores;
 use crate::high_scores::GameResult;
+use crate::high_scores::HighScoresForGame;
 use chrono::Utc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -13,16 +16,17 @@ use tokio::sync::watch;
 use tokio::time::timeout;
 
 #[derive(Debug)]
+pub enum HighScoresStatus<T> {
+    Loading,
+    Loaded(T),
+    Error,
+}
+
+#[derive(Debug)]
 pub enum GameStatus {
     Playing,
     Paused(Instant),
-    HighScoresLoading,
-    HighScoresLoaded {
-        this_game_result: GameResult,
-        top_results: Vec<GameResult>,
-        this_game_index: Option<usize>, // where is this_game_result in top_results?
-    },
-    HighScoresError,
+    GameOver(HighScoresStatus<HighScoresForGame>),
 }
 
 #[derive(Copy, Clone)]
@@ -289,20 +293,31 @@ async fn tick_please_wait_counter(weak_wrapper: Weak<GameWrapper>, client_id: u6
 async fn handle_game_over(status_sender: &watch::Sender<GameStatus>, this_game_result: GameResult) {
     // .send() fails when there are no receivers
     // we don't really care if everyone disconnects while high scores are loading
-    _ = status_sender.send(GameStatus::HighScoresLoading);
+    _ = status_sender.send(GameStatus::GameOver(HighScoresStatus::Loading));
+
     match add_result_and_get_high_scores(this_game_result.clone()).await {
-        Ok((top_results, this_game_index)) => {
-            _ = status_sender.send(GameStatus::HighScoresLoaded {
-                this_game_result,
-                top_results,
-                this_game_index,
-            });
+        Ok(info) => {
+            _ = status_sender.send(GameStatus::GameOver(HighScoresStatus::Loaded(info)));
         }
         Err(e) => {
             eprintln!("ERROR: saving game result to high scores file failed");
             eprintln!("  game result = {:?}", this_game_result);
             eprintln!("  error = {:?}", e);
-            _ = status_sender.send(GameStatus::HighScoresError);
+            _ = status_sender.send(GameStatus::GameOver(HighScoresStatus::Error));
+        }
+    }
+}
+
+pub async fn handle_loading_all_high_scores(
+    status_sender: watch::Sender<HighScoresStatus<AllHighScores>>,
+) {
+    _ = status_sender.send(HighScoresStatus::Loading);
+    match read_all_high_scores().await {
+        Ok(result) => _ = status_sender.send(HighScoresStatus::Loaded(result)),
+        Err(e) => {
+            eprintln!("ERROR: reading high scores file failed");
+            eprintln!("  error = {:?}", e);
+            _ = status_sender.send(HighScoresStatus::Error);
         }
     }
 }

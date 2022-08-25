@@ -2,7 +2,9 @@ use crate::ansi::Color;
 use crate::ansi::KeyPress;
 use crate::client::Client;
 use crate::game_logic::game::Mode;
+use crate::game_wrapper;
 use crate::game_wrapper::GameStatus;
+use crate::game_wrapper::HighScoresStatus;
 use crate::high_scores::GameResult;
 use crate::ingame_ui;
 use crate::lobby::join_game_in_a_lobby;
@@ -386,15 +388,22 @@ fn render_lobby_status(client: &Client, render_data: &mut render::RenderData, lo
     _ = x; // silence compiler warning
 }
 
-// None return value means show gameplay tips
-pub async fn choose_game_mode(
+#[derive(PartialEq, Debug)]
+pub enum ModeMenuChoice {
+    PlayGame(Mode),
+    GameplayTips,
+    ShowAllHighScores,
+}
+
+pub async fn show_mode_menu(
     client: &mut Client,
     selected_index: &mut usize,
-) -> Result<Option<Mode>, io::Error> {
+) -> Result<ModeMenuChoice, io::Error> {
     let mut items = vec![];
     items.resize(Mode::ALL_MODES.len(), None);
     items.push(None);
     items.push(Some("Gameplay tips".to_string()));
+    items.push(Some("High scores".to_string()));
     items.push(Some("Quit".to_string()));
     let mut menu = Menu {
         items,
@@ -452,12 +461,13 @@ pub async fn choose_game_mode(
                         if menu.handle_key_press(key) {
                             *selected_index = menu.selected_index;
                             return match menu.selected_text() {
-                                "Gameplay tips" => Ok(None),
+                                "Gameplay tips" => Ok(ModeMenuChoice::GameplayTips),
+                                "High scores" => Ok(ModeMenuChoice::ShowAllHighScores),
                                 "Quit" => Err(io::Error::new(
                                     ErrorKind::ConnectionAborted,
                                     "user selected \"Quit\" in menu",
                                 )),
-                                _ => Ok(Some(Mode::ALL_MODES[menu.selected_index])),
+                                _ => Ok(ModeMenuChoice::PlayGame(Mode::ALL_MODES[menu.selected_index])),
                             };
                         }
                     }
@@ -637,7 +647,7 @@ pub async fn play_game(client: &mut Client, mode: Mode) -> Result<(), io::Error>
                     drop(auto_leave_token);
                     // Locking the lobby here is fine, because we're not locking the game.
                     client.lobby.as_ref().unwrap().lock().unwrap().mark_changed();
-                    return show_high_scores(client, receiver).await;
+                    return show_high_scores_after_game(client, receiver).await;
                 }
             }
             key = client.receive_key_press() => {
@@ -740,22 +750,6 @@ fn render_game_over_message(buffer: &mut RenderBuffer, game_result: &GameResult,
     );
 }
 
-fn render_header(buffer: &mut RenderBuffer, this_game_result: &GameResult) {
-    let multiplayer = this_game_result.players.len() >= 2;
-    let header = format!(
-        " HIGH SCORES: {} with {} ",
-        this_game_result.mode.name(),
-        if multiplayer {
-            "multiplayer"
-        } else {
-            "single player"
-        }
-    );
-
-    buffer.fill_row_with_char(6, '=');
-    buffer.add_centered_text(6, &header);
-}
-
 fn format_player_names(full_names: &Vec<String>, maxlen: usize) -> String {
     let mut limit = full_names.iter().map(|n| n.chars().count()).max().unwrap();
     loop {
@@ -789,10 +783,24 @@ fn render_table_row(buffer: &mut RenderBuffer, y: usize, text_places: &[usize], 
 
 fn render_high_scores_table(
     buffer: &mut RenderBuffer,
+    header_y: usize,
+    mode: Mode,
+    multiplayer: bool,
     top_results: &[GameResult],
     this_game_index: Option<usize>,
-    multiplayer: bool,
 ) {
+    let header = format!(
+        " HIGH SCORES: {} with {} ",
+        mode.name(),
+        if multiplayer {
+            "multiplayer"
+        } else {
+            "single player"
+        }
+    );
+    buffer.fill_row_with_char(header_y, '=');
+    buffer.add_centered_text(header_y, &header);
+
     let last_title = if multiplayer { "Players" } else { "Player" };
     let titles = ["Score", "Duration", "When", last_title];
 
@@ -830,9 +838,9 @@ fn render_high_scores_table(
         row.push(format_player_names(&result.players, last_column_max_width));
     }
 
-    let title_y: usize = 8;
-    let horizontal_line_y: usize = 9;
-    let first_result_row_y: usize = 10;
+    let title_y: usize = header_y + 2;
+    let horizontal_line_y: usize = header_y + 3;
+    let first_result_row_y: usize = header_y + 4;
 
     buffer.fill_row_with_char(horizontal_line_y, '-');
     for x in &separator_places {
@@ -856,7 +864,7 @@ fn render_high_scores_table(
     }
 }
 
-async fn show_high_scores(
+async fn show_high_scores_after_game(
     client: &mut Client,
     mut receiver: watch::Receiver<GameStatus>,
 ) -> Result<(), io::Error> {
@@ -865,10 +873,10 @@ async fn show_high_scores(
             let mut render_data = client.render_data.lock().unwrap();
             render_data.clear(80, 24);
             match &*receiver.borrow() {
-                GameStatus::HighScoresLoading => {
+                GameStatus::GameOver(HighScoresStatus::Loading) => {
                     render_data.buffer.add_centered_text(9, "Loading...");
                 }
-                GameStatus::HighScoresError => {
+                GameStatus::GameOver(HighScoresStatus::Error) => {
                     // hopefully nobody ever sees this...
                     render_data.buffer.add_centered_text_with_color(
                         9,
@@ -876,22 +884,19 @@ async fn show_high_scores(
                         Color::RED_FOREGROUND,
                     );
                 }
-                GameStatus::HighScoresLoaded {
-                    this_game_result,
-                    top_results,
-                    this_game_index,
-                } => {
+                GameStatus::GameOver(HighScoresStatus::Loaded(info)) => {
                     render_game_over_message(
                         &mut render_data.buffer,
-                        this_game_result,
-                        this_game_index.is_some(),
+                        &info.this_game_result,
+                        info.this_game_index.is_some(),
                     );
-                    render_header(&mut render_data.buffer, this_game_result);
                     render_high_scores_table(
                         &mut render_data.buffer,
-                        top_results,
-                        *this_game_index,
-                        this_game_result.players.len() >= 2,
+                        6,
+                        info.this_game_result.mode,
+                        info.this_game_result.players.len() >= 2,
+                        &info.top_results,
+                        info.this_game_index,
                     );
                 }
                 GameStatus::Playing | GameStatus::Paused(_) => panic!(),
@@ -905,11 +910,105 @@ async fn show_high_scores(
 
         tokio::select! {
             result = receiver.changed() => {
-                result.unwrap(); // apparently never fails, not sure why
+                // TODO: why does this never fail?
+                // According to docs it means that the sender isn't dropped.
+                result.unwrap();
             }
             key = client.receive_key_press() => {
                 if key? == KeyPress::Enter {
                     return Ok(());
+                }
+            }
+        }
+    }
+}
+
+pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> {
+    let (sender, mut receiver) = watch::channel(HighScoresStatus::Loading);
+    tokio::spawn(game_wrapper::handle_loading_all_high_scores(sender));
+
+    let bottom_text_y = 21;
+    let mut page_num: usize = 0;
+    let mut loading_task_done = false;
+
+    loop {
+        {
+            let mut render_data = client.render_data.lock().unwrap();
+            render_data.clear(80, 24);
+
+            match &*receiver.borrow() {
+                // TODO: copy pasta spaghetti bolognese
+                HighScoresStatus::Loading => {
+                    render_data.buffer.add_centered_text(9, "Loading...");
+                }
+                HighScoresStatus::Error => {
+                    // hopefully nobody ever sees this...
+                    render_data.buffer.add_centered_text_with_color(
+                        9,
+                        "High Scores Error",
+                        Color::RED_FOREGROUND,
+                    );
+                }
+                HighScoresStatus::Loaded(results) => {
+                    assert!(results.len() == Mode::ALL_MODES.len());
+                    let (mode, single_player_results, multiplayer_results) = &results[page_num];
+
+                    render_high_scores_table(
+                        &mut render_data.buffer,
+                        0,
+                        *mode,
+                        false,
+                        single_player_results,
+                        None,
+                    );
+                    render_high_scores_table(
+                        &mut render_data.buffer,
+                        11,
+                        *mode,
+                        true,
+                        multiplayer_results,
+                        None,
+                    );
+
+                    if page_num != 0 {
+                        render_data.buffer.add_text_with_color(
+                            0,
+                            bottom_text_y,
+                            &format!(" << {} ", Mode::ALL_MODES[page_num - 1].name()),
+                            Color::YELLOW_FOREGROUND,
+                        );
+                    }
+                    if page_num != results.len() - 1 {
+                        let next_text = format!(" {} >> ", Mode::ALL_MODES[page_num + 1].name());
+                        render_data.buffer.add_text_with_color(
+                            80 - next_text.len(),
+                            bottom_text_y,
+                            &next_text,
+                            Color::YELLOW_FOREGROUND,
+                        );
+                    }
+                }
+            }
+
+            render_data
+                .buffer
+                .add_centered_text(21, " Press Enter to continue... ");
+
+            render_data.changed.notify_one();
+        }
+
+        tokio::select! {
+            result = receiver.changed(), if !loading_task_done => {
+                // Error means that sender (in the spawned task) was dropped.
+                // Without handling it we would get a loop with 100% cpu usage.
+                loading_task_done = result.is_err();
+            }
+            key = client.receive_key_press() => {
+                match key? {
+                    KeyPress::Enter => return Ok(()),
+                    KeyPress::Left => if page_num > 0 { page_num -= 1 },
+                    KeyPress::Right => if page_num <= Mode::ALL_MODES.len()-2 {page_num+=1;}
+                    _ => {}
                 }
             }
         }
@@ -1077,14 +1176,14 @@ mod test {
         client.make_lobby(Arc::new(Mutex::new(WeakValueHashMap::new())));
 
         let mut selected_index = 0;
-        let result = choose_game_mode(&mut client, &mut selected_index).await;
-        assert_eq!(result.unwrap(), Some(Mode::Traditional));
-        let result = choose_game_mode(&mut client, &mut selected_index).await;
-        assert_eq!(result.unwrap(), None); // gameplay tips
-        let result = choose_game_mode(&mut client, &mut selected_index).await;
-        assert_eq!(result.unwrap(), Some(Mode::Bottle));
-        let result = choose_game_mode(&mut client, &mut selected_index).await;
-        assert_eq!(result.unwrap(), Some(Mode::Ring));
+        let result = show_mode_menu(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), ModeMenuChoice::PlayGame(Mode::Traditional));
+        let result = show_mode_menu(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), ModeMenuChoice::GameplayTips);
+        let result = show_mode_menu(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), ModeMenuChoice::PlayGame(Mode::Bottle));
+        let result = show_mode_menu(&mut client, &mut selected_index).await;
+        assert_eq!(result.unwrap(), ModeMenuChoice::PlayGame(Mode::Ring));
     }
 
     #[tokio::test]
@@ -1107,7 +1206,7 @@ mod test {
         let result = ask_if_new_lobby(&mut client).await;
         assert!(result.unwrap());
         client.make_lobby(Arc::new(Mutex::new(WeakValueHashMap::new())));
-        let result = choose_game_mode(&mut client, &mut 0).await;
+        let result = show_mode_menu(&mut client, &mut 0).await;
         assert_eq!(
             result.unwrap_err().to_string(),
             "user selected \"Quit\" in menu"
@@ -1162,12 +1261,12 @@ mod test {
         let mut bob =
             make_client_and_enter_lobby_id("Bob", &lobby_id.to_lowercase(), lobbies.clone()).await;
 
-        assert!(choose_game_mode(&mut bob, &mut 0).await.is_err());
+        assert!(show_mode_menu(&mut bob, &mut 0).await.is_err());
         assert!(bob.text().contains(&lobby_id));
         assert!(bob.text().contains("1. Alice"));
         assert!(bob.text().contains("2. Bob (you)"));
         drop(alice);
-        assert!(choose_game_mode(&mut bob, &mut 0).await.is_err());
+        assert!(show_mode_menu(&mut bob, &mut 0).await.is_err());
         assert!(bob.text().contains(&lobby_id));
         assert!(!bob.text().contains("Alice"));
         assert!(bob.text().contains("1. Bob (you)"));
@@ -1249,14 +1348,14 @@ mod test {
         }
 
         let mut client = last_client.unwrap();
-        let choose_result = choose_game_mode(&mut client, &mut 0).await;
+        let choose_result = show_mode_menu(&mut client, &mut 0).await;
         assert!(choose_result.is_err());
         assert!(client.text().contains("Ring game (4/4 players)"));
         assert!(client.text().contains("This game is full."));
     }
 
     #[tokio::test]
-    async fn test_show_high_scores() {
+    async fn test_show_high_scores_after_game() {
         let this_game_result = GameResult {
             duration: Duration::from_secs(123),
             mode: Mode::Traditional,
@@ -1297,13 +1396,13 @@ mod test {
 
         let mut client = Client::new(1, Receiver::Test("\r".to_string()));
 
-        let status = GameStatus::HighScoresLoaded {
+        let status = GameStatus::GameOver(HighScoresStatus::Loaded(HighScoresForGame {
             this_game_result,
             top_results,
             this_game_index: Some(1),
-        };
+        }));
         let (_status_sender, status_receiver) = watch::channel(status);
-        let result = show_high_scores(&mut client, status_receiver).await;
+        let result = show_high_scores_after_game(&mut client, status_receiver).await;
         assert!(result.is_ok());
 
         assert_eq!(
