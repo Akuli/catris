@@ -1,6 +1,7 @@
 use crate::game_logic::game::Mode;
 use chrono::DateTime;
 use chrono::Utc;
+use std::collections::HashMap;
 use std::fs;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -216,9 +217,16 @@ lazy_static! {
         tokio::sync::Mutex::new("catris_high_scores.txt");
 }
 
+#[derive(Debug)]
+pub struct HighScoresForGame {
+    pub this_game_result: GameResult,
+    pub top_results: Vec<GameResult>,
+    pub this_game_index: Option<usize>, // index of this_game_result in top_results
+}
+
 pub async fn add_result_and_get_high_scores(
-    result: GameResult,
-) -> Result<(Vec<GameResult>, Option<usize>), AnyErrorThreadSafe> {
+    this_game_result: GameResult,
+) -> Result<HighScoresForGame, AnyErrorThreadSafe> {
     let filename_handle = FILE_LOCK.lock().await;
 
     // Not using tokio's file io because it's easy to forget to flush after writing
@@ -227,12 +235,52 @@ pub async fn add_result_and_get_high_scores(
         ensure_file_exists(*filename_handle)?;
         upgrade_if_needed(*filename_handle)?;
 
-        let mut high_scores =
-            read_matching_high_scores(*filename_handle, result.mode, result.players.len() >= 2)?;
+        let mut top_results = read_matching_high_scores(
+            *filename_handle,
+            this_game_result.mode,
+            this_game_result.players.len() >= 2,
+        )?;
 
-        append_result_to_file(*filename_handle, &result)?;
-        let hs_index = add_game_result_if_high_score(&mut high_scores, result);
-        Ok((high_scores, hs_index))
+        append_result_to_file(*filename_handle, &this_game_result)?;
+        let this_game_index =
+            add_game_result_if_high_score(&mut top_results, this_game_result.clone());
+
+        Ok(HighScoresForGame {
+            this_game_result,
+            top_results,
+            this_game_index,
+        })
+    })
+    .await?
+}
+
+#[derive(Debug)]
+pub struct AllHighScoresForMode {
+    pub single_player_results: Vec<GameResult>,
+    pub multiplayer_results: Vec<GameResult>,
+}
+pub type AllHighScores = HashMap<Mode, AllHighScoresForMode>;
+
+pub async fn read_all_high_scores() -> Result<AllHighScores, AnyErrorThreadSafe> {
+    let filename_handle = FILE_LOCK.lock().await;
+
+    tokio::task::spawn_blocking(move || {
+        ensure_file_exists(*filename_handle)?;
+        upgrade_if_needed(*filename_handle)?;
+
+        let mut result = HashMap::new();
+        for mode in Mode::ALL_MODES {
+            let single_player_results = read_matching_high_scores(*filename_handle, *mode, false)?;
+            let multiplayer_results = read_matching_high_scores(*filename_handle, *mode, true)?;
+            result.insert(
+                *mode,
+                AllHighScoresForMode {
+                    single_player_results,
+                    multiplayer_results,
+                },
+            );
+        }
+        Ok(result)
     })
     .await?
 }

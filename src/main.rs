@@ -51,10 +51,13 @@ async fn handle_receiving(
 
     let mut selected_index = 0;
     loop {
-        let game_mode = views::choose_game_mode(&mut client, &mut selected_index).await?;
+        let game_mode = views::show_mode_menu(&mut client, &mut selected_index).await?;
         match game_mode {
-            Some(mode) => views::play_game(&mut client, mode).await?,
-            None => views::show_gameplay_tips(&mut client).await?,
+            views::ModeMenuChoice::PlayGame(mode) => views::play_game(&mut client, mode).await?,
+            views::ModeMenuChoice::GameplayTips => views::show_gameplay_tips(&mut client).await?,
+            views::ModeMenuChoice::ShowAllHighScores => {
+                views::show_all_high_scores(&mut client).await?
+            }
         }
     }
 }
