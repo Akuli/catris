@@ -185,7 +185,6 @@ pub async fn handle_connection(
         decrementer
     };
 
-    // TODO: max concurrent connections from same ip?
     log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
