@@ -167,6 +167,8 @@ pub async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
+    log_ip_if_connects_a_lot(logger, ip, recent_ips);
+
     let _decrementer = {
         let mut counts = client_counts_by_ip.lock().unwrap();
         let old_count = *counts.get(&ip).unwrap_or(&0);
@@ -184,8 +186,6 @@ pub async fn handle_connection(
         log_total(logger, &counts);
         decrementer
     };
-
-    log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
         Ok((mut sender, receiver)) => {
