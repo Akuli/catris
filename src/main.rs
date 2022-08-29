@@ -6,6 +6,7 @@ use crate::client::ClientLogger;
 use crate::connection::initialize_connection;
 use crate::connection::Sender;
 use crate::render::RenderBuffer;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io;
@@ -119,17 +120,28 @@ fn log_ip_if_connects_a_lot(
     }
 }
 
+fn log_total(logger: ClientLogger, counts: &HashMap<IpAddr, usize>) {
+    let total: usize = counts.values().sum();
+    logger.log(&format!("There are now {} connected clients", total));
+}
+
 struct DecrementClientCoundOnDrop {
-    client_counter: Arc<AtomicU64>,
     logger: ClientLogger,
+    client_counts_by_ip: Arc<Mutex<HashMap<IpAddr, usize>>>,
+    ip: IpAddr,
 }
 impl Drop for DecrementClientCoundOnDrop {
     fn drop(&mut self) {
-        let old_value = self.client_counter.fetch_sub(1, Ordering::SeqCst);
-        self.logger.log(&format!(
-            "There are now {} connected clients",
-            old_value - 1
-        ));
+        let mut counts = self.client_counts_by_ip.lock().unwrap();
+        let n = *counts.get(&self.ip).unwrap();
+        assert!(n > 0);
+        if n == 1 {
+            // last client
+            _ = counts.remove(&self.ip).unwrap();
+        } else {
+            counts.insert(self.ip, n - 1);
+        }
+        log_total(self.logger, &counts);
     }
 }
 
@@ -141,7 +153,7 @@ pub async fn handle_connection(
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
     recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
-    client_counter: Arc<AtomicU64>,
+    client_counts_by_ip: Arc<Mutex<HashMap<IpAddr, usize>>>,
     is_websocket: bool,
 ) {
     // https://stackoverflow.com/a/32936288
@@ -155,19 +167,24 @@ pub async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
-    let old_value = client_counter.fetch_add(1, Ordering::SeqCst);
-    logger.log(&format!(
-        "There are now {} connected clients",
-        old_value + 1
-    ));
+    let _decrementer = {
+        let mut counts = client_counts_by_ip.lock().unwrap();
+        let old_count = *counts.get(&ip).unwrap_or(&0);
+        if old_count >= 5 {
+            logger.log(&format!("Closing connection because there are already {} other connections from the same IP", old_count));
+            return;
+        }
 
-    // client counter decrements when client quits, id counter does not
-    let _decrementer = DecrementClientCoundOnDrop {
-        client_counter,
-        logger,
+        counts.insert(ip, old_count + 1);
+        let decrementer = DecrementClientCoundOnDrop {
+            logger,
+            client_counts_by_ip: client_counts_by_ip.clone(),
+            ip,
+        };
+        log_total(logger, &counts);
+        decrementer
     };
 
-    // TODO: max concurrent connections from same ip?
     log_ip_if_connects_a_lot(logger, ip, recent_ips);
 
     let error: io::Error = match initialize_connection(socket, is_websocket).await {
@@ -202,7 +219,7 @@ async fn main() {
     let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
     let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
-    let client_counter = Arc::new(AtomicU64::new(0));
+    let client_counts_by_ip = Arc::new(Mutex::new(HashMap::new()));
 
     let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
     println!("Listening for raw TCP connections on port 12345...");
@@ -220,7 +237,7 @@ async fn main() {
                     lobbies.clone(),
                     used_names.clone(),
                     recent_ips.clone(),
-                    client_counter.clone(),
+                    client_counts_by_ip.clone(),
                     false,
                 ));
             }
@@ -232,7 +249,7 @@ async fn main() {
                     lobbies.clone(),
                     used_names.clone(),
                     recent_ips.clone(),
-                    client_counter.clone(),
+                    client_counts_by_ip.clone(),
                     true,
                 ));
             }
