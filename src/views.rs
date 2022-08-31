@@ -29,13 +29,12 @@ use tokio::sync::watch;
 
 const ASCII_ART: &[&str] = &[
     "",
-    r"  __     ___    _____   _____   _____   ___ ",
-    r" / _)   / _ \  |_   _| |  __ \ |_   _| / __)",
-    r"| (_   / /_\ \   | |   |  _  /  _| |_  \__ \",
-    r" \__) /_/   \_\  |_|   |_| \_\ |_____| (___/",
     "",
-    "Play online: https://akuli.github.io/catris",
-    "Code: https://github.com/Akuli/catris",
+    r"  __     ___    _____   _____   _____   ___       __   _   ___   _____ ",
+    r" / _)   / _ \  |_   _| |  __ \ |_   _| / __)     |  \ | | | __| |_   _|",
+    r"| (_   / /_\ \   | |   |  _  /  _| |_  \__ \  _  | |\\| | | _|    | |  ",
+    r" \__) /_/   \_\  |_|   |_| \_\ |_____| (___/ (_) |_| \__| |___|   |_|  ",
+    "",
     "",
 ];
 
@@ -133,11 +132,13 @@ const VALID_NAME_CHARS: &str = concat!(
 );
 
 fn add_name_asking_notes(buffer: &mut RenderBuffer) {
-    buffer.add_centered_text(17, "If you play well, your name will be");
-    buffer.add_centered_text(18, "visible to everyone in the high scores.");
+    buffer.add_centered_text(15, "If you play well, your name will be");
+    buffer.add_centered_text(16, "visible to everyone in the high scores.");
 
-    buffer.add_centered_text(20, "Your IP will be logged on the server only if you");
-    buffer.add_centered_text(21, "connect 5 or more times within the same minute.");
+    buffer.add_centered_text(18, "Your IP will be logged on the server only if you");
+    buffer.add_centered_text(19, "connect 5 or more times within the same minute.");
+
+    buffer.add_centered_text(21, "Source code: https://github.com/Akuli/catris");
 }
 
 pub async fn ask_name(
