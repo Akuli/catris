@@ -49,5 +49,8 @@ server {
 server {
 	listen 80;
 	listen [::]:80;
-	return 302 https://$host$request_uri;
+	# Hard-coded domain name in case someone connects with server IP.
+	# This was the only way to connect before I bought the domain.
+	# No longer good, because https only works if you use the domain name when connecting.
+	return 302 https://catris.net$request_uri;
 }
