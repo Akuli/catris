@@ -253,7 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Can be localhost, or a different computer (see local-playing.md)
     wsUrl = `ws://${window.location.hostname}:54321/websocket`;
   }
-  ws = new WebSocket(wsUrl);
+  const ws = new WebSocket(wsUrl);
 
   function sendKeyPress(text) {
     const utf8 = new TextEncoder().encode(text);
