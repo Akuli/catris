@@ -144,7 +144,7 @@ If you changed rust code, build the executable, copy it to the server, and resta
 locally:    $ cargo build --release
 locally:    $ ls -l target/release/catris
 on server:  $ sudo systemctl stop catris
-locally:    $ scp target/release/catris catris:/home/catris/catris
+locally:    $ scp target/release/catris catris.net:/home/catris/catris
 on server:  $ sudo systemctl start catris
 on server:  $ journalctl -fu catris
 ```
@@ -153,5 +153,5 @@ If you modified the web UI, copy the contents of the `web-ui` directory to the s
 
 ```
 $ ls -a web-ui/
-$ scp web-ui/* catris:/var/www/html/
+$ scp web-ui/* catris.net:/var/www/html/
 ```
