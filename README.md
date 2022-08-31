@@ -13,8 +13,11 @@ Please create an issue if this is a problem for you.
 
 When the rust program starts, `main()` starts listening on two TCP ports,
 54321 for websocket connections and 12345 for plain TCP connections (e.g. netcat).
-The `web-ui/` folder contains static files served by nginx,
-and the javascript code in `web-ui/` connects a websocket to port 54321.
+The `web-ui/` folder contains static files served by nginx.
+When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
+On `catris.net`, it instead connects to the same port where the static files were loaded (so 443)
+and lets nginx proxy the connection to port 12345 on the server;
+this is done to work around firewalls that block outgoing connections on port 54321.
 
 After a client connects, it mostly doesn't matter whether they use
 a websocket connection or a plain TCP connection,

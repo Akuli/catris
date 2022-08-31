@@ -242,7 +242,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const ws = new WebSocket(`ws://${window.location.hostname}:54321`);
+  let wsUrl;
+  if (window.location.hostname === 'catris.net') {
+    // Production websocket uses same port as static files.
+    // nginx redirects websocket connections to backend
+    const protocol = window.location.protocol==='https:' ? 'wss' : 'ws';
+    wsUrl = `${protocol}://${window.location.host}/websocket`;
+  } else {
+    // Backend listens to websocket on port 54321.
+    // Can be localhost, or a different computer (see local-playing.md)
+    wsUrl = `ws://${window.location.hostname}:54321/websocket`;
+  }
+  ws = new WebSocket(wsUrl);
 
   function sendKeyPress(text) {
     const utf8 = new TextEncoder().encode(text);

@@ -221,10 +221,11 @@ async fn main() {
     let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
     let client_counts_by_ip = Arc::new(Mutex::new(HashMap::new()));
 
-    let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
+    // TODO: Add an option to listen on 0.0.0.0, for local-playing.md
+    let raw_listener = TcpListener::bind("127.0.0.1:12345").await.unwrap();
     println!("Listening for raw TCP connections on port 12345...");
 
-    let ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
+    let ws_listener = TcpListener::bind("127.0.0.1:54321").await.unwrap();
     println!("Listening for websocket connections on port 54321...");
 
     loop {
