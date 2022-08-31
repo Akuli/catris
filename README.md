@@ -13,8 +13,12 @@ Please create an issue if this is a problem for you.
 
 When the rust program starts, `main()` starts listening on two TCP ports,
 54321 for websocket connections and 12345 for plain TCP connections (e.g. netcat).
-The `web-ui/` folder contains static files served by nginx,
-and the javascript code in `web-ui/` connects a websocket to port 54321.
+The `web-ui/` folder contains static files served by nginx.
+When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
+On `catris.net`, it instead connects to port 443 (the default https port)
+and lets nginx proxy the connection to port 12345 on the server;
+this is done to work around firewalls that block outgoing connections on port 54321
+without giving unnecessary privileges to the rust program.
 
 After a client connects, it mostly doesn't matter whether they use
 a websocket connection or a plain TCP connection,
@@ -140,7 +144,7 @@ If you changed rust code, build the executable, copy it to the server, and resta
 locally:    $ cargo build --release
 locally:    $ ls -l target/release/catris
 on server:  $ sudo systemctl stop catris
-locally:    $ scp target/release/catris catris:/home/catris/catris
+locally:    $ scp target/release/catris catris.net:/home/catris/catris
 on server:  $ sudo systemctl start catris
 on server:  $ journalctl -fu catris
 ```
@@ -149,5 +153,5 @@ If you modified the web UI, copy the contents of the `web-ui` directory to the s
 
 ```
 $ ls -a web-ui/
-$ scp web-ui/* catris:/var/www/html/
+$ scp web-ui/* catris.net:/var/www/html/
 ```

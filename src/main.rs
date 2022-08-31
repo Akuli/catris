@@ -224,7 +224,9 @@ async fn main() {
     let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
     println!("Listening for raw TCP connections on port 12345...");
 
-    let ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
+    // FIXME: Add an option to listen on 0.0.0.0, for local-playing.md
+    // Can't be always 0.0.0.0, because in production we avoid unnecessary non-localhost listening
+    let ws_listener = TcpListener::bind("127.0.0.1:54321").await.unwrap();
     println!("Listening for websocket connections on port 54321...");
 
     loop {
