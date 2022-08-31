@@ -35,6 +35,7 @@ server {
 		proxy_set_header Connection "Upgrade";
 		proxy_set_header Host $host;
 	}
+
 	location / {
 		# Serve static files.
 		try_files $uri $uri/ =404;
