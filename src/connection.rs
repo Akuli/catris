@@ -58,7 +58,13 @@ pub struct ReceiveState {
     last_recv: Instant,
 }
 impl ReceiveState {
-    fn on_bytes_received(&mut self) {
+    fn add_received_bytes(&mut self, bytes: &[u8]) {
+        // Receiving empty bytes has a special meaning in raw TCP and should never happen in websocket
+        assert!(!bytes.is_empty());
+
+        for byte in bytes {
+            self.buffer.push(byte);
+        }
         self.last_recv = Instant::now();
     }
 
@@ -158,10 +164,7 @@ impl Receiver {
                                             "received empty bytes from websocket message",
                                         ));
                                     }
-                                    for byte in bytes {
-                                        recv_state.buffer.push_back(byte);
-                                    }
-                                    recv_state.on_bytes_received();
+                                    recv_state.add_received_bytes(&bytes);
                                 }
                                 Message::Close(_) => {
                                     return Err(connection_closed_error());
@@ -200,11 +203,7 @@ impl Receiver {
                                 // a clean disconnect
                                 return Err(connection_closed_error());
                             }
-                            recv_state.on_bytes_received();
-
-                            for byte in &buf[0..n] {
-                                recv_state.buffer.push_back(*byte);
-                            }
+                            recv_state.add_received_bytes(&buf[0..n]);
                         }
                         _ => panic!(),
                     }
