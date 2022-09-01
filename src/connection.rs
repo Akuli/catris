@@ -154,7 +154,7 @@ impl Receiver {
                                 Message::Binary(bytes) => {
                                     if bytes.is_empty() {
                                         return Err(io::Error::new(
-                                            ErrorKind::ConnectionAborted,
+                                            ErrorKind::Other,
                                             "received empty bytes from websocket message",
                                         ));
                                     }
