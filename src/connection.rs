@@ -215,7 +215,8 @@ tokio-tungstenite offers a callback trait that gets called when connecting.
 Two WTF's here: 1) why is async library using callbacks? 2) why is it a trait and not FnMut?
 It is the only way to access the headers from nginx...
 
-To test that this gets a correct ip, create a file req.txt with this in it and TWO BLANK LINES after:
+To test that this gets the ip, create a file req.txt with this in it and TWO BLANK LINES after.
+This file represents what nginx would sends when proxying.
 
 GET /ws HTTP/1.1
 Host: localhost
