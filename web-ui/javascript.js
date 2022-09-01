@@ -263,7 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   document.addEventListener("paste", event => {
-    sendText(event.clipboardData.getData("text/plain"));
+    sendText(event.clipboardData.getData("text/plain").replace(/\n|\r|\x1b/g, ""));
   });
 
   document.onkeydown = (event) => {
