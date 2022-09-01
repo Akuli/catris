@@ -143,12 +143,10 @@ impl Receiver {
                         recv_state.check_key_press_frequency()?;
                         Ok(())
                     }
-                    other => {
-                        Err(io::Error::new(
-                            ErrorKind::Other,
-                            format!("unexpected websocket frame: {:?}", other),
-                        ))
-                    }
+                    other => Err(io::Error::new(
+                        ErrorKind::Other,
+                        format!("unexpected websocket frame: {:?}", other),
+                    )),
                 }
             }
             Self::RawTcp {
