@@ -16,9 +16,14 @@ When the rust program starts, `main()` starts listening on two TCP ports,
 The `web-ui/` folder contains static files served by nginx.
 When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
 On `catris.net`, it instead connects to port 443 (the default https port)
-and lets nginx proxy the connection to port 12345 on the server;
-this is done to work around firewalls that block outgoing connections on port 54321
-without giving unnecessary privileges to the rust program.
+and lets nginx proxy the connection to port 12345 on the server.
+This has several advantages:
+- You can play catris if you have a firewall that only allows port 443 out.
+- The rust program doesn't need special privileges to listen on port 443.
+- I don't have to configure the rust code to look at the certificate files, because nginx does that.
+- If there is a security bug in the websocket libraries I use (unlikely in rust),
+    it may be impossible to exploit through nginx
+    because nginx parses and validates the structure of each request.
 
 After a client connects, it mostly doesn't matter whether they use
 a websocket connection or a plain TCP connection,
