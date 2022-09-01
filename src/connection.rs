@@ -333,10 +333,9 @@ pub async fn initialize_connection(
                 ip_tracker: ip_tracker,
                 logger: logger,
             };
-            ws =
-                tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
-                    .await
-                    .map_err(convert_error)?;
+            ws = tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
+                .await
+                .map_err(convert_error)?;
             assert!(cb.decrementers.len() == 1);
             decrementer = cb.decrementers.pop();
         } else {
