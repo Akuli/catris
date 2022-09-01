@@ -270,7 +270,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.onkeydown = (event) => {
-    if (event.ctrlKey || event.altKey) {
+    // metaKey is the command key on MacOS
+    if (event.ctrlKey || event.altKey || event.metaKey) {
       return;
     }
 
