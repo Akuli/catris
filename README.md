@@ -30,7 +30,7 @@ it needs to use ANSI codes for raw TCP connections anyway.
 
 The purpose of `ip_tracker.rs` is to limit the number of simultaneous connections for each IP address
 and to log IPs that spam the server with many connections.
-This way IP addresses of most users are only stored in RAM (as they would be anyways),
+This way most IP addresses are stored only in RAM (which is needed anyway),
 and not written to disk, as many users don't want me to know their IP address.
 The IP address passed to `ip_tracker.rs` is determined in `connection.rs`:
 it uses a header named `X-Real-IP` (set in the nginx configuration) when proxied through nginx,
