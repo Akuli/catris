@@ -34,7 +34,7 @@ This has several advantages:
 - If there is a security bug in the websocket libraries I use (unlikely in rust),
     it may be impossible to exploit through nginx
     because nginx parses and validates the structure of each request.
-- This is a common design that many people are familiar with.
+- This seems to be a common design that many people are familiar with.
 
 
 ## High-level overview of the rust code
