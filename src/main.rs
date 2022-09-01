@@ -4,11 +4,11 @@ extern crate lazy_static;
 use crate::client::Client;
 use crate::client::ClientLogger;
 use crate::connection::initialize_connection;
-use crate::connection::IpTracker;
 use crate::connection::Sender;
+use crate::ip_tracker::websocket_connections_come_from_a_proxy;
+use crate::ip_tracker::IpTracker;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
-use std::env;
 use std::io;
 use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
@@ -28,6 +28,7 @@ mod game_logic;
 mod game_wrapper;
 mod high_scores;
 mod ingame_ui;
+mod ip_tracker;
 mod lobby;
 mod render;
 mod views;
@@ -146,15 +147,14 @@ pub async fn handle_connection(
 async fn main() {
     let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
-    let ip_tracker = Arc::new(Mutex::new(IpTracker::new())); // not invasive, doesn't print most IPs
+    let ip_tracker = Arc::new(Mutex::new(IpTracker::new()));
 
     let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
     println!("Listening for raw TCP connections on port 12345...");
 
     let ws_listener;
-    if env::var("CATRIS_WEBSOCKET_PROXIED").is_ok() {
+    if websocket_connections_come_from_a_proxy() {
         // In production, avoid unnecessary non-localhost listening.
-        // Websocket connections go through nginx.
         ws_listener = TcpListener::bind("127.0.0.1:54321").await.unwrap();
         println!("Listening for websocket connections on port 54321 (only from localhost)...");
     } else {
