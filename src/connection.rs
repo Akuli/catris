@@ -1,6 +1,5 @@
 use crate::ansi::parse_key_press;
 use crate::ansi::KeyPress;
-use crate::ip_tracker::CheckProxyIpCallback;
 use crate::ip_tracker::ForgetClientOnDrop;
 use crate::ip_tracker::IpTracker;
 use crate::ClientLogger;
@@ -24,9 +23,21 @@ use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite;
+use tokio_tungstenite::tungstenite::handshake::server::Callback;
+use tokio_tungstenite::tungstenite::handshake::server::ErrorResponse;
+use tokio_tungstenite::tungstenite::handshake::server::Request;
+use tokio_tungstenite::tungstenite::handshake::server::Response;
+use tokio_tungstenite::tungstenite::http;
+use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
+
+pub fn websocket_connections_come_from_a_proxy() -> bool {
+    return !env::var("CATRIS_WEBSOCKET_PROXIED")
+        .unwrap_or("".to_string())
+        .is_empty();
+}
 
 // Errors can be io::Error or tungstenite::Error.
 // I can't box them because boxes aren't Send i.e. can't be held across await.
@@ -199,6 +210,76 @@ impl Sender {
     }
 }
 
+/*
+tokio-tungstenite offers a callback trait that gets called when connecting.
+Two WTF's here: 1) why is async library using callbacks? 2) why is it a trait and not FnMut?
+It is the only way to access the headers from nginx...
+
+To test that this gets a correct ip, create a file req.txt with this in it and TWO BLANK LINES after:
+
+GET /ws HTTP/1.1
+Host: localhost
+X-Real-IP: 12.34.56.78
+Connection: upgrade
+Upgrade: WebSocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: hello
+
+In one terminal:
+
+    $ CATRIS_WEBSOCKET_PROXIED=1 cargo r
+
+In another terminal:
+
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+
+You should see the dummy IP 12.34.56.78 printed.
+*/
+struct CheckRealIpCallback {
+    logger: ClientLogger,
+    ip_tracker: Arc<Mutex<IpTracker>>,
+    decrementers: Vec<ForgetClientOnDrop>,
+}
+impl Callback for &mut CheckRealIpCallback {
+    fn on_request(self, request: &Request, response: Response) -> Result<Response, ErrorResponse> {
+        let ip: IpAddr = request
+            .headers()
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| {
+                http::Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Some(
+                        "missing X-Real-IP header (should be set by proxy)".to_string(),
+                    ))
+                    .unwrap()
+            })?
+            .parse()
+            .map_err(|_| {
+                http::Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Some("cannot parse X-Real-IP header".to_string()))
+                    .unwrap()
+            })?;
+
+        self.decrementers
+            .push(
+                IpTracker::track(self.ip_tracker.clone(), ip, self.logger).map_err(|_| {
+                    http::Response::builder()
+                        .status(StatusCode::TOO_MANY_REQUESTS)
+                        .body(None)
+                        .unwrap()
+                })?,
+            );
+        Ok(response)
+    }
+}
+
 pub async fn initialize_connection(
     ip_tracker: Arc<Mutex<IpTracker>>,
     logger: ClientLogger,
@@ -223,8 +304,7 @@ pub async fn initialize_connection(
     let receiver;
 
     let mut decrementer: Option<ForgetClientOnDrop>;
-    let is_proxied_websocket = is_websocket && env::var("CATRIS_WEBSOCKET_PROXIED").is_ok();
-    if is_proxied_websocket {
+    if is_websocket && websocket_connections_come_from_a_proxy() {
         // Websocket connections should go through nginx and arrive to this process from localhost.
         // In fact it only listens on localhost (aka loopback).
         assert!(source_ip.is_loopback());
@@ -245,24 +325,26 @@ pub async fn initialize_connection(
         };
 
         let ws_result;
-        if is_proxied_websocket {
-            let mut cb = CheckProxyIpCallback::new(logger, ip_tracker.clone());
+        if websocket_connections_come_from_a_proxy() {
+            let mut cb = CheckRealIpCallback {
+                decrementers: vec![],
+                ip_tracker: ip_tracker,
+                logger: logger,
+            };
             ws_result =
                 tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
                     .await
                     .map_err(convert_error)?;
-            if let Some(result) = cb.result_if_called {
-                decrementer = Some(result?);
-            } else {
-                panic!("callback was not called???");
-            }
+            assert!(cb.decrementers.len() == 1);
+            decrementer = cb.decrementers.pop();
         } else {
-            // Client connects directly to server
-            decrementer = Some(IpTracker::track(ip_tracker, source_ip, logger)?);
+            // Client connects directly to server, source IP is not the IP of a proxy
             ws_result = tokio_tungstenite::accept_async_with_config(socket, Some(config))
                 .await
                 .map_err(convert_error)?;
         }
+
+        assert!(decrementer.is_some());
 
         let (ws_writer, ws_reader) = ws_result.split();
         sender = Sender::WebSocket { ws_writer };
