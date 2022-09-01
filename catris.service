@@ -1,14 +1,15 @@
-# Copy to /etc/systemd/system/catris.service and run:
+# After editing this file you need:
 #
-#    systemctl enable catris
-#    systemctl start catris
-#    systemctl status catris
+#    sudo systemctl daemon-reload
+#    sudo systemctl restart catris
 #    journalctl -fu catris
 #
-# Also add to end of /etc/sysctl.conf:
+# Setup: copy to /etc/systemd/system/catris.service and run:
 #
-#    net.ipv4.tcp_keepalive_time = 180
-#    net.ipv4.tcp_keepalive_intvl = 180
+#    sudo systemctl enable catris
+#    sudo systemctl start catris
+#    sudo systemctl status catris
+#    journalctl -fu catris
 
 [Unit]
 Description=catris

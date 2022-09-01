@@ -15,8 +15,9 @@
 # sudo systemctl restart nginx
 
 server {
-	listen [::]:443 ssl ipv6only=on; # managed by Certbot
-	listen 443 ssl; # managed by Certbot
+	listen 443 ssl so_keepalive=1m:5s:5;
+	listen [::]:443 ssl so_keepalive=1m:5s:5 ipv6only=on;
+
 	server_name catris.net; # managed by Certbot
 	ssl_certificate /etc/letsencrypt/live/catris.net/fullchain.pem; # managed by Certbot
 	ssl_certificate_key /etc/letsencrypt/live/catris.net/privkey.pem; # managed by Certbot
@@ -35,6 +36,7 @@ server {
 		proxy_set_header Connection "Upgrade";
 		proxy_set_header Host $host;
 		proxy_set_header X-Real-IP $remote_addr;
+		proxy_read_timeout 11m;  # backend closes after 10min inactive
 	}
 
 	location / {
@@ -48,8 +50,8 @@ server {
 
 # Redirect to https from port 80
 server {
-	listen 80;
-	listen [::]:80;
+	listen 80 so_keepalive=1m:5s:5;
+	listen [::]:80 so_keepalive=1m:5s:5 ipv6only=on;
 	# Hard-coded domain name in case someone connects with server IP.
 	# This was the only way to connect before I bought the domain.
 	# No longer good, because https only works if you use the domain name when connecting.
