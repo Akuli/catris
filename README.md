@@ -36,7 +36,7 @@ The IP address passed to `ip_tracker.rs` is determined in `connection.rs`:
 it uses a header named `X-Real-IP` (set in the nginx configuration) when proxied through nginx,
 and otherwise the IP that the connection to the rust program came from.
 To keep track of how many clients are currently connected from each IP,
-`ip_tracker.rs` also returns a token object that should be dropped when a client disconnects.
+`ip_tracker.rs` also returns a token object that is dropped when a client disconnects.
 
 Next a `Client` object is created.
 It is possible to receive and (indirectly) send through a `Client` object.
