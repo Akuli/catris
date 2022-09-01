@@ -267,15 +267,14 @@ impl Callback for &mut CheckRealIpCallback {
                     .unwrap()
             })?;
 
-        self.decrementers
-            .push(
-                IpTracker::track(self.ip_tracker.clone(), ip, self.logger).map_err(|_| {
-                    http::Response::builder()
-                        .status(StatusCode::TOO_MANY_REQUESTS)
-                        .body(None)
-                        .unwrap()
-                })?,
-            );
+        self.decrementers.push(
+            IpTracker::track(self.ip_tracker.clone(), ip, self.logger).map_err(|_| {
+                http::Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .body(None)
+                    .unwrap()
+            })?,
+        );
         Ok(response)
     }
 }
