@@ -250,7 +250,7 @@ impl Callback for &mut CheckRealIpCallback {
     fn on_request(self, request: &Request, response: Response) -> Result<Response, ErrorResponse> {
         let ip: IpAddr = request
             .headers()
-            .get("x-real-ip")
+            .get("X-Real-IP")
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| {
                 http::Response::builder()
