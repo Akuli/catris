@@ -63,7 +63,7 @@ impl ReceiveState {
         assert!(!bytes.is_empty());
 
         for byte in bytes {
-            self.buffer.push(byte);
+            self.buffer.push_back(*byte);
         }
         self.last_recv = Instant::now();
     }
@@ -104,6 +104,71 @@ pub enum Receiver {
     Test(String),
 }
 impl Receiver {
+    async fn receive_more_data(&mut self) -> Result<(), io::Error> {
+        match self {
+            Self::WebSocket {
+                recv_state,
+                ws_reader,
+            } => {
+                let item = timeout(recv_state.get_timeout(), ws_reader.next())
+                    .await? // error if timed out
+                    .ok_or_else(connection_closed_error)? // error if clean disconnect
+                    .map_err(convert_error)?; // error if receiving failed
+
+                match item {
+                    Message::Binary(bytes) => {
+                        if bytes.is_empty() {
+                            Err(io::Error::new(
+                                ErrorKind::Other,
+                                "received empty bytes from websocket message",
+                            ))
+                        } else {
+                            recv_state.add_received_bytes(&bytes);
+                            Ok(())
+                        }
+                    }
+                    Message::Close(_) => Err(connection_closed_error()),
+                    /*
+                    Pings can't make the connection stay open for more than 10min.
+                    That would cause confusion when people use different browsers and
+                    not all browsers send pings.
+
+                    Pings are counted as key presses, so that you will be disconnected
+                    if you spam the server with lots of pings.
+
+                    We don't have to send pongs, because tungstenite does it
+                    automatically.
+                    */
+                    Message::Ping(_) => {
+                        recv_state.check_key_press_frequency()?;
+                        Ok(())
+                    }
+                    other => {
+                        return Err(io::Error::new(
+                            ErrorKind::Other,
+                            format!("unexpected websocket frame: {:?}", other),
+                        ));
+                    }
+                }
+            }
+            Self::RawTcp {
+                recv_state,
+                read_half,
+            } => {
+                let mut buf = [0u8; 100];
+
+                let n = timeout(recv_state.get_timeout(), read_half.read(&mut buf)).await??;
+                if n == 0 {
+                    // a clean disconnect
+                    return Err(connection_closed_error());
+                }
+                recv_state.add_received_bytes(&buf[0..n]);
+                Ok(())
+            }
+            _ => panic!(),
+        }
+    }
+
     pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
         match self {
             Self::Test(string) => {
@@ -144,70 +209,7 @@ impl Receiver {
                     recv_state.buffer.drain(0..bytes_used);
                     return Ok(key);
                 }
-                None => {
-                    // Receive more data
-                    match self {
-                        Self::WebSocket {
-                            recv_state,
-                            ws_reader,
-                        } => {
-                            let item = timeout(recv_state.get_timeout(), ws_reader.next())
-                                .await? // error if timed out
-                                .ok_or_else(connection_closed_error)? // error if clean disconnect
-                                .map_err(convert_error)?; // error if receiving failed
-
-                            match item {
-                                Message::Binary(bytes) => {
-                                    if bytes.is_empty() {
-                                        return Err(io::Error::new(
-                                            ErrorKind::Other,
-                                            "received empty bytes from websocket message",
-                                        ));
-                                    }
-                                    recv_state.add_received_bytes(&bytes);
-                                }
-                                Message::Close(_) => {
-                                    return Err(connection_closed_error());
-                                }
-                                /*
-                                Pings can't make the connection stay open for more than 10min.
-                                That would cause confusion when people use different browsers and
-                                not all browsers send pings.
-
-                                Pings are counted as key presses, so that you will be disconnected
-                                if you spam the server with lots of pings.
-
-                                We don't have to send pongs, because tungstenite does it
-                                automatically.
-                                */
-                                Message::Ping(_) => {
-                                    recv_state.check_key_press_frequency()?;
-                                }
-                                other => {
-                                    return Err(io::Error::new(
-                                        ErrorKind::Other,
-                                        format!("unexpected websocket frame: {:?}", other),
-                                    ));
-                                }
-                            }
-                        }
-                        Self::RawTcp {
-                            recv_state,
-                            read_half,
-                        } => {
-                            let mut buf = [0u8; 100];
-
-                            let n = timeout(recv_state.get_timeout(), read_half.read(&mut buf))
-                                .await??;
-                            if n == 0 {
-                                // a clean disconnect
-                                return Err(connection_closed_error());
-                            }
-                            recv_state.add_received_bytes(&buf[0..n]);
-                        }
-                        _ => panic!(),
-                    }
-                }
+                None => self.receive_more_data().await?,
             }
         }
     }
