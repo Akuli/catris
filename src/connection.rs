@@ -326,14 +326,14 @@ pub async fn initialize_connection(
             ..Default::default()
         };
 
-        let ws_result;
+        let ws;
         if get_websocket_proxy_ip().is_some() {
             let mut cb = CheckRealIpCallback {
                 decrementers: vec![],
                 ip_tracker: ip_tracker,
                 logger: logger,
             };
-            ws_result =
+            ws =
                 tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
                     .await
                     .map_err(convert_error)?;
@@ -341,14 +341,14 @@ pub async fn initialize_connection(
             decrementer = cb.decrementers.pop();
         } else {
             // Clients connect directly to server, source ip is usable
-            ws_result = tokio_tungstenite::accept_async_with_config(socket, Some(config))
+            ws = tokio_tungstenite::accept_async_with_config(socket, Some(config))
                 .await
                 .map_err(convert_error)?;
         }
 
         assert!(decrementer.is_some());
 
-        let (ws_writer, ws_reader) = ws_result.split();
+        let (ws_writer, ws_reader) = ws.split();
         sender = Sender::WebSocket { ws_writer };
         receiver = Receiver::WebSocket {
             ws_reader,
