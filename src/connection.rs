@@ -1,12 +1,19 @@
 use crate::ansi::parse_key_press;
 use crate::ansi::KeyPress;
+use crate::ip_tracker::ForgetClientOnDrop;
+use crate::ip_tracker::IpTracker;
+use crate::ClientLogger;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use std::collections::VecDeque;
+use std::env;
 use std::io;
 use std::io::ErrorKind;
+use std::net::IpAddr;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::AsyncReadExt;
@@ -16,9 +23,24 @@ use tokio::net::tcp::OwnedWriteHalf;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite;
+use tokio_tungstenite::tungstenite::handshake::server::Callback;
+use tokio_tungstenite::tungstenite::handshake::server::ErrorResponse;
+use tokio_tungstenite::tungstenite::handshake::server::Request;
+use tokio_tungstenite::tungstenite::handshake::server::Response;
+use tokio_tungstenite::tungstenite::http;
+use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
+
+pub fn get_websocket_proxy_ip() -> Option<IpAddr> {
+    let string = env::var("CATRIS_WEBSOCKET_PROXY_IP").unwrap_or("".to_string());
+    if string.is_empty() {
+        None
+    } else {
+        Some(string.parse().unwrap())
+    }
+}
 
 // Errors can be io::Error or tungstenite::Error.
 // I can't box them because boxes aren't Send i.e. can't be held across await.
@@ -191,10 +213,83 @@ impl Sender {
     }
 }
 
+/*
+tokio-tungstenite offers a callback trait that gets called when connecting.
+Two WTF's here: 1) why is async library using callbacks? 2) why is it a trait and not FnMut?
+It is the only way to access the headers from nginx...
+
+To test that this gets the ip, create a file req.txt with this in it and TWO BLANK LINES after.
+This file represents what nginx would sends when proxying.
+
+GET /ws HTTP/1.1
+Host: localhost
+X-Real-IP: 12.34.56.78
+Connection: upgrade
+Upgrade: WebSocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: hello
+
+In one terminal:
+
+    $ CATRIS_WEBSOCKET_PROXY_IP=127.0.0.1 cargo r
+
+In another terminal:
+
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+    $ nc localhost 54321 < req.txt
+
+You should see the dummy IP 12.34.56.78 printed.
+*/
+struct CheckRealIpCallback {
+    logger: ClientLogger,
+    ip_tracker: Arc<Mutex<IpTracker>>,
+    decrementers: Vec<ForgetClientOnDrop>,
+}
+impl Callback for &mut CheckRealIpCallback {
+    fn on_request(self, request: &Request, response: Response) -> Result<Response, ErrorResponse> {
+        let ip: IpAddr = request
+            .headers()
+            .get("X-Real-IP")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| {
+                http::Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Some(
+                        "missing X-Real-IP header (should be set by proxy)".to_string(),
+                    ))
+                    .unwrap()
+            })?
+            .parse()
+            .map_err(|_| {
+                http::Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Some("cannot parse X-Real-IP header".to_string()))
+                    .unwrap()
+            })?;
+
+        self.decrementers.push(
+            IpTracker::track(self.ip_tracker.clone(), ip, self.logger).map_err(|_| {
+                http::Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .body(None)
+                    .unwrap()
+            })?,
+        );
+        Ok(response)
+    }
+}
+
 pub async fn initialize_connection(
+    ip_tracker: Arc<Mutex<IpTracker>>,
+    logger: ClientLogger,
     socket: TcpStream,
+    source_ip: IpAddr,
     is_websocket: bool,
-) -> Result<(Sender, Receiver), io::Error> {
+) -> Result<(Sender, Receiver, ForgetClientOnDrop), io::Error> {
     /*
     Tell the kernel to prefer sending in small pieces, as soon as possible.
 
@@ -211,6 +306,16 @@ pub async fn initialize_connection(
     let sender;
     let receiver;
 
+    let mut decrementer: Option<ForgetClientOnDrop>;
+    if is_websocket && get_websocket_proxy_ip().is_some() {
+        // Websocket connections should go through nginx and arrive to this process from the proxy ip.
+        // The actual client IP is in X-Real-IP header.
+        decrementer = None; // created later
+    } else {
+        // Client connects to rust program directly. Log and limit access with source ip.
+        decrementer = Some(IpTracker::track(ip_tracker.clone(), source_ip, logger)?);
+    }
+
     if is_websocket {
         let config = WebSocketConfig {
             // Prevent various denial-of-service attacks that fill up server's memory.
@@ -220,9 +325,28 @@ pub async fn initialize_connection(
             max_frame_size: Some(1024),
             ..Default::default()
         };
-        let ws = tokio_tungstenite::accept_async_with_config(socket, Some(config))
-            .await
-            .map_err(convert_error)?;
+
+        let ws;
+        if get_websocket_proxy_ip().is_some() {
+            let mut cb = CheckRealIpCallback {
+                decrementers: vec![],
+                ip_tracker: ip_tracker,
+                logger: logger,
+            };
+            ws = tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
+                .await
+                .map_err(convert_error)?;
+            assert!(cb.decrementers.len() == 1);
+            decrementer = cb.decrementers.pop();
+        } else {
+            // Clients connect directly to server, source ip is usable
+            ws = tokio_tungstenite::accept_async_with_config(socket, Some(config))
+                .await
+                .map_err(convert_error)?;
+        }
+
+        assert!(decrementer.is_some());
+
         let (ws_writer, ws_reader) = ws.split();
         sender = Sender::WebSocket { ws_writer };
         receiver = Receiver::WebSocket {
@@ -242,5 +366,5 @@ pub async fn initialize_connection(
         };
     }
 
-    Ok((sender, receiver))
+    Ok((sender, receiver, decrementer.unwrap()))
 }
