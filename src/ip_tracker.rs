@@ -25,7 +25,7 @@ impl Drop for ForgetClientOnDrop {
         assert!(n > 0);
         if n == 1 {
             // last client
-            _ = tracker.client_counts_by_ip.remove(&self.ip).unwrap();
+            tracker.client_counts_by_ip.remove(&self.ip).unwrap();
         } else {
             tracker.client_counts_by_ip.insert(self.ip, n - 1);
         }
