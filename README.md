@@ -1,7 +1,7 @@
 # catris
 
 This is a Tetris clone for multiple players that connect to a server with netcat or a web interface.
-You can play it here: https://akuli.github.io/catris/
+You can play it here: https://catris.net/
 
 ![Screenshot](screenshot.png)
 
@@ -9,14 +9,24 @@ My server is in Europe, so the game may be very laggy if you're not in Europe.
 Please create an issue if this is a problem for you.
 
 
-## High-level overview of the code
+## Architecture
 
-When the rust program starts, `main()` starts listening on two TCP ports,
+I bought `catris.net` from namecheap and connected it to a Linode server that has:
+- nginx (configuration is in `catris-nginx-site`, serves files from `web-ui/`)
+- the rust program (binary copied to server with `scp`, started and stopped with `catris.service`)
+- HTTPS setup done with LetsEncrypt and certbot
+
+The rust program listens on two TCP ports,
 54321 for websocket connections and 12345 for plain TCP connections (e.g. netcat).
-The `web-ui/` folder contains static files served by nginx.
+Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) defined in `ansi.rs`.
+This means that the javascript code in `web-ui/` must interpret ANSI codes,
+but on the other hand it also makes the rust code simpler,
+because it needs to use ANSI codes for raw TCP connections anyway.
+
 When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
-On `catris.net`, it instead connects to port 443 (the default https port)
-and lets nginx proxy the connection to port 12345 on the server.
+On `catris.net`, it instead connects to port 443 (the default https port),
+and nginx proxies the connection to port 12345 on the server.
+In fact, in `catris.net` the server listens to websocket connections only on localhost.
 This has several advantages:
 - You can play catris if you have a firewall that only allows port 443 out.
 - The rust program doesn't need special privileges to listen on port 443.
@@ -24,22 +34,23 @@ This has several advantages:
 - If there is a security bug in the websocket libraries I use (unlikely in rust),
     it may be impossible to exploit through nginx
     because nginx parses and validates the structure of each request.
+- This is a common design that many people are familiar with.
 
+
+## High-level overview of the rust code
+
+When the rust program starts, `main()` starts listening for connections.
 After a client connects, it mostly doesn't matter whether they use
 a websocket connection or a plain TCP connection,
 as `connection.rs` abstracts the differences away.
-Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code) defined in `ansi.rs`.
-This means that the javascript code in `web-ui/` must interpret ANSI codes,
-but this also makes the rust code simpler:
-it needs to use ANSI codes for raw TCP connections anyway.
 
 The purpose of `ip_tracker.rs` is to limit the number of simultaneous connections for each IP address
 and to log IPs that spam the server with many connections.
 This way most IP addresses are stored only in RAM (which is needed anyway),
 and not written to disk, as many users don't want me to know their IP address.
 The IP address passed to `ip_tracker.rs` is determined in `connection.rs`:
-it uses a header named `X-Real-IP` (set in the nginx configuration) when proxied through nginx,
-and otherwise the IP that the connection to the rust program came from.
+it uses a header named `X-Real-IP` (set in the nginx configuration) for proxied websocket connections,
+and otherwise uses the IP that the connection to the rust program came from.
 To keep track of how many clients are currently connected from each IP,
 `ip_tracker.rs` also returns a token object that is dropped when a client disconnects.
 
