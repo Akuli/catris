@@ -4,11 +4,11 @@ extern crate lazy_static;
 use crate::client::Client;
 use crate::client::ClientLogger;
 use crate::connection::initialize_connection;
+use crate::connection::IpTracker;
 use crate::connection::Sender;
 use crate::render::RenderBuffer;
-use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::VecDeque;
+use std::env;
 use std::io;
 use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
@@ -16,7 +16,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use std::time::Instant;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -94,66 +93,14 @@ async fn handle_sending(
     }
 }
 
-fn log_ip_if_connects_a_lot(
-    logger: ClientLogger,
-    ip: IpAddr,
-    recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
-) {
-    let n;
-    {
-        let mut recent_ips = recent_ips.lock().unwrap();
-        recent_ips.push_back((Instant::now(), ip));
-        while !recent_ips.is_empty() && recent_ips[0].0.elapsed().as_secs_f32() > 60.0 {
-            recent_ips.pop_front();
-        }
-        n = recent_ips
-            .iter()
-            .filter(|(_, recent_ip)| *recent_ip == ip)
-            .count();
-    }
-
-    if n >= 5 {
-        logger.log(&format!(
-            "This is the {}th connection from IP address {} within the last minute",
-            n, ip
-        ));
-    }
-}
-
-fn log_total(logger: ClientLogger, counts: &HashMap<IpAddr, usize>) {
-    let total: usize = counts.values().sum();
-    logger.log(&format!("There are now {} connected clients", total));
-}
-
-struct DecrementClientCoundOnDrop {
-    logger: ClientLogger,
-    client_counts_by_ip: Arc<Mutex<HashMap<IpAddr, usize>>>,
-    ip: IpAddr,
-}
-impl Drop for DecrementClientCoundOnDrop {
-    fn drop(&mut self) {
-        let mut counts = self.client_counts_by_ip.lock().unwrap();
-        let n = *counts.get(&self.ip).unwrap();
-        assert!(n > 0);
-        if n == 1 {
-            // last client
-            _ = counts.remove(&self.ip).unwrap();
-        } else {
-            counts.insert(self.ip, n - 1);
-        }
-        log_total(self.logger, &counts);
-    }
-}
-
 static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 pub async fn handle_connection(
     socket: TcpStream,
-    ip: IpAddr,
+    source_ip: IpAddr,
     lobbies: lobby::Lobbies,
     used_names: Arc<Mutex<HashSet<String>>>,
-    recent_ips: Arc<Mutex<VecDeque<(Instant, IpAddr)>>>,
-    client_counts_by_ip: Arc<Mutex<HashMap<IpAddr, usize>>>,
+    ip_tracker: Arc<Mutex<IpTracker>>,
     is_websocket: bool,
 ) {
     // https://stackoverflow.com/a/32936288
@@ -167,49 +114,30 @@ pub async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
-    log_ip_if_connects_a_lot(logger, ip, recent_ips);
+    let error: io::Error =
+        match initialize_connection(ip_tracker, logger, socket, source_ip, is_websocket).await {
+            Ok((mut sender, receiver, _decrementer)) => {
+                let client = Client::new(client_id, receiver);
+                let render_data = client.render_data.clone();
+                let error = tokio::select! {
+                    res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
+                    res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
+                };
 
-    let _decrementer = {
-        let mut counts = client_counts_by_ip.lock().unwrap();
-        let old_count = *counts.get(&ip).unwrap_or(&0);
-        if old_count >= 5 {
-            logger.log(&format!("Closing connection because there are already {} other connections from the same IP", old_count));
-            return;
-        }
+                // Try to leave the terminal in a sane state
+                let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
+                    + &ansi::move_cursor_horizontally(0)
+                    + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
+                _ = timeout(
+                    Duration::from_millis(500),
+                    sender.send(cleanup_ansi_codes.as_bytes()),
+                )
+                .await;
 
-        counts.insert(ip, old_count + 1);
-        let decrementer = DecrementClientCoundOnDrop {
-            logger,
-            client_counts_by_ip: client_counts_by_ip.clone(),
-            ip,
+                error
+            }
+            Err(e) => e,
         };
-        log_total(logger, &counts);
-        decrementer
-    };
-
-    let error: io::Error = match initialize_connection(socket, is_websocket).await {
-        Ok((mut sender, receiver)) => {
-            let client = Client::new(client_id, receiver);
-            let render_data = client.render_data.clone();
-            let error = tokio::select! {
-                res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
-                res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
-            };
-
-            // Try to leave the terminal in a sane state
-            let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
-                + &ansi::move_cursor_horizontally(0)
-                + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
-            _ = timeout(
-                Duration::from_millis(500),
-                sender.send(cleanup_ansi_codes.as_bytes()),
-            )
-            .await;
-
-            error
-        }
-        Err(e) => e,
-    };
 
     logger.log(&format!("Disconnected: {}", error));
 }
@@ -218,16 +146,22 @@ pub async fn handle_connection(
 async fn main() {
     let used_names = Arc::new(Mutex::new(HashSet::new()));
     let lobbies: lobby::Lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
-    let recent_ips = Arc::new(Mutex::new(VecDeque::new()));
-    let client_counts_by_ip = Arc::new(Mutex::new(HashMap::new()));
+    let ip_tracker = Arc::new(Mutex::new(IpTracker::new())); // not invasive, doesn't print most IPs
 
     let raw_listener = TcpListener::bind("0.0.0.0:12345").await.unwrap();
     println!("Listening for raw TCP connections on port 12345...");
 
-    // FIXME: Add an option to listen on 0.0.0.0, for local-playing.md
-    // Can't be always 0.0.0.0, because in production we avoid unnecessary non-localhost listening
-    let ws_listener = TcpListener::bind("127.0.0.1:54321").await.unwrap();
-    println!("Listening for websocket connections on port 54321...");
+    let ws_listener;
+    if env::var("CATRIS_WEBSOCKET_PROXIED").is_ok() {
+        // In production, avoid unnecessary non-localhost listening.
+        // Websocket connections go through nginx.
+        ws_listener = TcpListener::bind("127.0.0.1:54321").await.unwrap();
+        println!("Listening for websocket connections on port 54321 (only from localhost)...");
+    } else {
+        // Allow connections from anywhere. Needed for local-playing.md
+        ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
+        println!("Listening for websocket connections on port 54321 (only from localhost)...");
+    }
 
     loop {
         tokio::select! {
@@ -238,8 +172,7 @@ async fn main() {
                     sockaddr.ip(),
                     lobbies.clone(),
                     used_names.clone(),
-                    recent_ips.clone(),
-                    client_counts_by_ip.clone(),
+                    ip_tracker.clone(),
                     false,
                 ));
             }
@@ -250,8 +183,7 @@ async fn main() {
                     sockaddr.ip(),
                     lobbies.clone(),
                     used_names.clone(),
-                    recent_ips.clone(),
-                    client_counts_by_ip.clone(),
+                    ip_tracker.clone(),
                     true,
                 ));
             }

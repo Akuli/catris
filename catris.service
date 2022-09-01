@@ -16,6 +16,7 @@ Description=catris
 [Service]
 ExecStart=/home/catris/catris
 Environment="RUST_BACKTRACE=1"
+Environment="CATRIS_WEBSOCKET_PROXIED=1"
 
 # adduser --system catris
 WorkingDirectory=/home/catris
