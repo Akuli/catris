@@ -144,10 +144,10 @@ impl Receiver {
                         Ok(())
                     }
                     other => {
-                        return Err(io::Error::new(
+                        Err(io::Error::new(
                             ErrorKind::Other,
                             format!("unexpected websocket frame: {:?}", other),
-                        ));
+                        ))
                     }
                 }
             }
