@@ -255,18 +255,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const ws = new WebSocket(wsUrl);
 
-  function sendKeyPress(text) {
+  function sendText(text) {
     const utf8 = new TextEncoder().encode(text);
-    if(ws.readyState === WebSocket.OPEN) {
+    if(ws.readyState === WebSocket.OPEN && utf8.length > 0) {
       ws.send(utf8);
     }
   }
 
   document.addEventListener("paste", event => {
-    const pastedText = event.clipboardData.getData("text/plain");
-    for (const character of pastedText.replace(/\n|\r|\x1b/g, "")) {
-      sendKeyPress(character);
-    }
+    sendText(event.clipboardData.getData("text/plain"));
   });
 
   document.onkeydown = (event) => {
@@ -276,19 +273,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (event.key.length === 1) {
-      sendKeyPress(event.key);
+      sendText(event.key);
     } else if (event.key === "ArrowUp") {
-      sendKeyPress("\x1b[A");
+      sendText("\x1b[A");
     } else if (event.key === "ArrowDown") {
-      sendKeyPress("\x1b[B");
+      sendText("\x1b[B");
     } else if (event.key === "ArrowRight") {
-      sendKeyPress("\x1b[C");
+      sendText("\x1b[C");
     } else if (event.key === "ArrowLeft") {
-      sendKeyPress("\x1b[D");
+      sendText("\x1b[D");
     } else if (event.key === "Backspace") {
-      sendKeyPress("\x7f");
+      sendText("\x7f");
     } else if (event.key === "Enter") {
-      sendKeyPress("\r");
+      sendText("\r");
     } else {
       console.log("Unrecognized key:", event.key);
       return;
