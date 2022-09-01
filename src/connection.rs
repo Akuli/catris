@@ -33,10 +33,13 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
-pub fn websocket_connections_come_from_a_proxy() -> bool {
-    return !env::var("CATRIS_WEBSOCKET_PROXIED")
-        .unwrap_or("".to_string())
-        .is_empty();
+pub fn get_websocket_proxy_ip() -> Option<IpAddr> {
+    let string = env::var("CATRIS_WEBSOCKET_PROXY_IP").unwrap_or("".to_string());
+    if string.is_empty() {
+        None
+    } else {
+        Some(string.parse().unwrap())
+    }
 }
 
 // Errors can be io::Error or tungstenite::Error.
@@ -228,7 +231,7 @@ Sec-WebSocket-Key: hello
 
 In one terminal:
 
-    $ CATRIS_WEBSOCKET_PROXIED=1 cargo r
+    $ CATRIS_WEBSOCKET_PROXY_IP=127.0.0.1 cargo r
 
 In another terminal:
 
@@ -304,10 +307,9 @@ pub async fn initialize_connection(
     let receiver;
 
     let mut decrementer: Option<ForgetClientOnDrop>;
-    if is_websocket && websocket_connections_come_from_a_proxy() {
-        // Websocket connections should go through nginx and arrive to this process from localhost.
-        // In fact it only listens on localhost (aka loopback).
-        assert!(source_ip.is_loopback());
+    if is_websocket && get_websocket_proxy_ip().is_some() {
+        // Websocket connections should go through nginx and arrive to this process from the proxy ip.
+        // The actual client IP is in X-Real-IP header.
         decrementer = None; // created later
     } else {
         // Client connects to rust program directly. Log and limit access with source ip.
@@ -325,7 +327,7 @@ pub async fn initialize_connection(
         };
 
         let ws_result;
-        if websocket_connections_come_from_a_proxy() {
+        if get_websocket_proxy_ip().is_some() {
             let mut cb = CheckRealIpCallback {
                 decrementers: vec![],
                 ip_tracker: ip_tracker,
@@ -338,7 +340,7 @@ pub async fn initialize_connection(
             assert!(cb.decrementers.len() == 1);
             decrementer = cb.decrementers.pop();
         } else {
-            // Client connects directly to server, source IP is not the IP of a proxy
+            // Clients connect directly to server, source ip is usable
             ws_result = tokio_tungstenite::accept_async_with_config(socket, Some(config))
                 .await
                 .map_err(convert_error)?;
