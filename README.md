@@ -28,6 +28,16 @@ This means that the javascript code in `web-ui/` must interpret ANSI codes,
 but this also makes the rust code simpler:
 it needs to use ANSI codes for raw TCP connections anyway.
 
+The purpose of `ip_tracker.rs` is to limit the number of simultaneous connections for each IP address
+and to log the IP if someone is creating many connections.
+This way IP addresses of most users are only stored in RAM (as they would be anyways),
+and not written to disk, as many users don't want me to know their IP address.
+The IP address passed to `ip_tracker.rs` is determined in `connection.rs`:
+it uses a header named `X-Real-IP` (set in the nginx configuration) when proxied through nginx,
+and otherwise the IP that the connection to the rust program came from.
+To keep track of how many clients are currently connected from each IP,
+`ip_tracker.rs` also returns a token object that should be dropped when a client disconnects.
+
 Next a `Client` object is created.
 It is possible to receive and (indirectly) send through a `Client` object.
 Specifically, `connection.rs` provides a method to receive a single key press,
