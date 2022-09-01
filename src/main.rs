@@ -3,8 +3,8 @@ extern crate lazy_static;
 
 use crate::client::Client;
 use crate::client::ClientLogger;
-use crate::connection::initialize_connection;
 use crate::connection::get_websocket_proxy_ip;
+use crate::connection::initialize_connection;
 use crate::connection::Sender;
 use crate::ip_tracker::IpTracker;
 use crate::render::RenderBuffer;
@@ -156,7 +156,10 @@ async fn main() {
     if let Some(proxy_ip) = get_websocket_proxy_ip() {
         // In production, avoid unnecessary listening.
         ws_listener = TcpListener::bind((proxy_ip, 54321)).await.unwrap();
-        println!("Listening for websocket connections on port 54321 (only from {})...", proxy_ip);
+        println!(
+            "Listening for websocket connections on port 54321 (only from {})...",
+            proxy_ip
+        );
     } else {
         // Allow connections from anywhere. Needed for local-playing.md
         ws_listener = TcpListener::bind("0.0.0.0:54321").await.unwrap();
