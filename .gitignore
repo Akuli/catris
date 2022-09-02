@@ -5,6 +5,3 @@
 # web-ui stuff
 /node_modules/
 /package-lock.json
-
-# see wsclient.py
-/env
