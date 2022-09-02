@@ -335,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
     instructionsDiv.innerHTML = `
     <p>You can also play this game on a terminal:</p>
     <pre class="nc-instructions"></pre>
-    <p>Alternatively, you can use <a href="https://github.com/Akuli/catris/blob/main/catris-client.sh">catris-client.sh</a>:</p>
+    <p>Alternatively, you can download and run <a href="https://github.com/Akuli/catris/blob/main/catris-client.sh">catris-client.sh</a>:</p>
     <pre class="catris-client-instructions"></pre>
     `;
     instructionsDiv.querySelector("pre.nc-instructions").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
