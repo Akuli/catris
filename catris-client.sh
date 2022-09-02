@@ -73,7 +73,7 @@ Host: $host_and_port
 User-Agent: $0
 Connection: Upgrade
 Upgrade: WebSocket
-Sec-WebSocket-Key: $(echo asd asd asd asd | base64)
+Sec-WebSocket-Key: $(echo asd asd asd asd | openssl base64)
 Sec-WebSocket-Version: 13
 " >&$send_fd
 
