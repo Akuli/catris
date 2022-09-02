@@ -335,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
     instructionsDiv.innerHTML = `
     <p>You can also play this game on a terminal:</p>
     <pre class="nc-instructions"></pre>
-    <p>If you want a secure connection, you can use <a href="https://github.com/Akuli/catris/blob/main/wsclient.py">wsclient.py</a>:</p>
+    <p>If you want a secure connection, you can download <a href="https://github.com/Akuli/catris/blob/main/wsclient.py">wsclient.py</a>:</p>
     <pre class="wsclient-instructions"></pre>
     `;
     instructionsDiv.querySelector("pre.nc-instructions").textContent =
