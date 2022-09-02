@@ -33,7 +33,7 @@ function fail() {
     # Do not display multiple messages when quitting
     if mkdir $temp_dir/quit 2>/dev/null; then
         # terminal might be still in raw mode
-        printf "\r\n\r\n%s: %s\r\n" "$0" "$1"
+        printf "\r\n\r\n%s: %s\r\n" "$0" "$1" >&2
     fi
     return 1
 }
