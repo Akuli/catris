@@ -338,7 +338,8 @@ document.addEventListener("DOMContentLoaded", () => {
     <p>If you want a secure connection, you can use <a href="https://github.com/Akuli/catris/blob/main/wsclient.py">wsclient.py</a>:</p>
     <pre class="wsclient-instructions"></pre>
     `;
-    instructionsDiv.querySelector("pre.nc-instructions").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    instructionsDiv.querySelector("pre.nc-instructions").textContent =
+`$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
     instructionsDiv.querySelector("pre.wsclient-instructions").textContent =
 `$ python3 -m pip install aiofiles websockets
 $ python3 wsclient.py ${wsUrl}`;
