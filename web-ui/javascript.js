@@ -335,13 +335,10 @@ document.addEventListener("DOMContentLoaded", () => {
     instructionsDiv.innerHTML = `
     <p>You can also play this game on a terminal:</p>
     <pre class="nc-instructions"></pre>
-    <p>If you want a secure connection, you can download <a href="https://github.com/Akuli/catris/blob/main/wsclient.py">wsclient.py</a>:</p>
-    <pre class="wsclient-instructions"></pre>
+    <p>Alternatively, you can use <a href="https://github.com/Akuli/catris/blob/main/catris-client.sh">catris-client.sh</a>:</p>
+    <pre class="catris-client-instructions"></pre>
     `;
-    instructionsDiv.querySelector("pre.nc-instructions").textContent =
-`$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
-    instructionsDiv.querySelector("pre.wsclient-instructions").textContent =
-`$ python3 -m pip install aiofiles websockets
-$ python3 wsclient.py ${wsUrl}`;
+    instructionsDiv.querySelector("pre.nc-instructions").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    instructionsDiv.querySelector("pre.catris-client-instructions").textContent = `$ ./catris-client.sh ${wsUrl}`;
   }
 });
