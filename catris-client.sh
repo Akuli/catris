@@ -126,7 +126,7 @@ function receive_binary_frame_to_stdout() {
     #   1       the last frame of a chunk of binary
     #   000     reserved bits
     #   0010    opcode 2 (bytes frame)
-    first_byte=$(( 0x$(receive 1) ))
+    local first_byte=$(( 0x$(receive 1) ))
     if (( first_byte != 0x82 )); then
         fail "read frame: bad first byte: $first_byte"
     fi
