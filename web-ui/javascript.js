@@ -331,8 +331,17 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   if (!navigator.userAgent.includes("Windows")) {
-    const nc = document.getElementById("netcat-instructions");
-    nc.innerHTML = "<p>You can also play this game on a terminal:</p><pre></pre>";
-    nc.querySelector("pre").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    const instructionsDiv = document.getElementById("command-line-instructions");
+    instructionsDiv.innerHTML = `
+    <p>You can also play this game on a terminal:</p>
+    <pre class="nc-instructions"></pre>
+    <p>If you want a secure connection, you can use <a href="https://github.com/Akuli/catris/blob/main/wsclient.py">wsclient.py</a>:</p>
+    <pre class="wsclient-instructions"></pre>
+    `;
+    instructionsDiv.querySelector("pre.nc-instructions").textContent =
+`$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
+    instructionsDiv.querySelector("pre.wsclient-instructions").textContent =
+`$ python3 -m pip install aiofiles websockets
+$ python3 wsclient.py ${wsUrl}`;
   }
 });
