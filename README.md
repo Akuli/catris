@@ -157,4 +157,4 @@ $ ./deploy2.sh  # Interrupts ongoing games
 
 Currently I run `./deploy2.sh` when nobody is currently playing.
 If in the future there is always someone playing,
-use `/home/catris/catris_motd.txt` to clearly announce the downtime beforehand.
+use `/home/catris/catris_motd.txt` to clearly announce the update beforehand.
