@@ -152,7 +152,7 @@ function send_byte_from_stdin() {
     #   1           masking enabled
     #   0000001     payload length is 1 byte
     #
-    # I don't actually want to use masking, but the server errors if I don't.
+    # I don't actually want to use masking, but the server errors if I don't, or I set mask to zero.
     # So I use a hard-coded mask FFFFFFFF instead, lol
     local byte=0x$(head -c 1 | hex)
     local masked_byte=$(printf '%02x\n' $(( byte^0xFF )))
