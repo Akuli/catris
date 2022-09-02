@@ -21,7 +21,7 @@ cargo build --release
 ls -lh target/release/catris
 
 info "Copy files to /tmp/deploy"
-ssh catris.net 'rm -rfv /tmp/deploy && mkdir /tmp/deploy'
+ssh catris.net 'rm -rfv /tmp/deploy && mkdir -v /tmp/deploy'
 scp -C target/release/catris catris.service catris-nginx-site catris.net:/tmp/deploy/
 
 echo ""
