@@ -150,7 +150,7 @@ If you want to run catris in a local network, see [local-playing.md](local-playi
 If you run a bigger catris server, please let me know by creating an issue :)
 
 ```
-$ your_favorite_editor Cargo.toml
+$ your_favorite_editor Cargo.toml   # Edit version number
 $ ./deploy1.sh  # Safe
 $ ./deploy2.sh  # Interrupts ongoing games
 ```
