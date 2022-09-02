@@ -110,15 +110,6 @@ function receive() {
     echo "$result"
 }
 
-function unhex() {
-    # "echo abcd | unhex" does "printf '\xab\xcd'"
-    printf "$(grep -o '\S\S' | sed 's/^/\\x/' | tr -d '\n')"
-}
-
-function send() {
-    unhex >&$send_fd
-}
-
 function receive_binary_frame_to_stdout() {
     # See "5.2. Base Framing Protocol" in RFC6455
 
@@ -162,10 +153,10 @@ function send_byte_from_stdin() {
     #   0000001     payload length is 1 byte
     #
     # I don't actually want to use masking, but the server errors if I don't.
-    # So I use a hard-coded mask instead, lol
+    # So I use a hard-coded mask FFFFFFFF instead, lol
     local byte=0x$(head -c 1 | hex)
     local masked_byte=$(printf '%02x\n' $(( byte^0xFF )))
-    echo 82 81 FFFFFFFF $masked_byte | send
+    printf "\x82\x81\xFF\xFF\xFF\xFF\x$masked_byte" >&$send_fd
 }
 
 echo "Set terminal mode"
