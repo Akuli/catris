@@ -52,142 +52,162 @@ fn connection_closed_error() -> io::Error {
     io::Error::new(ErrorKind::ConnectionAborted, "connection closed")
 }
 
-fn check_key_press_frequency(key_press_times: &mut VecDeque<Instant>) -> Result<(), io::Error> {
-    key_press_times.push_back(Instant::now());
-    while !key_press_times.is_empty() && key_press_times[0].elapsed().as_secs_f32() > 1.0 {
-        key_press_times.pop_front();
-    }
-    if key_press_times.len() > 100 {
-        return Err(io::Error::new(
-            ErrorKind::ConnectionAborted,
-            "received more than 100 key presses / sec",
-        ));
-    }
-    Ok(())
+pub struct ReceiveState {
+    buffer: VecDeque<u8>,
+    key_press_times: VecDeque<Instant>,
+    last_recv: Instant,
 }
+impl ReceiveState {
+    fn add_received_bytes(&mut self, bytes: &[u8]) {
+        // Receiving empty bytes has a special meaning in raw TCP and should never happen in websocket
+        assert!(!bytes.is_empty());
 
-fn get_timeout(last_recv: Instant) -> Duration {
-    let deadline = last_recv + Duration::from_secs(10 * 60);
-    deadline.saturating_duration_since(Instant::now())
+        for byte in bytes {
+            self.buffer.push_back(*byte);
+        }
+        self.last_recv = Instant::now();
+    }
+
+    fn get_timeout(&self) -> Duration {
+        let deadline = self.last_recv + Duration::from_secs(10 * 60);
+        deadline.saturating_duration_since(Instant::now())
+    }
+
+    fn check_key_press_frequency(&mut self) -> Result<(), io::Error> {
+        self.key_press_times.push_back(Instant::now());
+        while !self.key_press_times.is_empty()
+            && self.key_press_times[0].elapsed().as_secs_f32() > 1.0
+        {
+            self.key_press_times.pop_front();
+        }
+
+        if self.key_press_times.len() > 100 {
+            return Err(io::Error::new(
+                ErrorKind::ConnectionAborted,
+                "received more than 100 key presses / sec",
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub enum Receiver {
     WebSocket {
         ws_reader: SplitStream<WebSocketStream<TcpStream>>,
-        key_press_times: VecDeque<Instant>,
-        last_recv: Instant,
+        recv_state: ReceiveState,
     },
     RawTcp {
         read_half: OwnedReadHalf,
-        buffer: [u8; 100], // keep small, receiving a single key press is O(recv buffer size)
-        buffer_size: usize,
-        key_press_times: VecDeque<Instant>,
-        last_recv: Instant,
+        recv_state: ReceiveState,
     },
     #[allow(dead_code)]
     Test(String),
 }
 impl Receiver {
-    pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
+    async fn receive_more_data(&mut self) -> Result<(), io::Error> {
         match self {
             Self::WebSocket {
+                recv_state,
                 ws_reader,
-                key_press_times,
-                last_recv,
             } => {
-                loop {
-                    let item = timeout(get_timeout(*last_recv), ws_reader.next()).await?;
-                    if item.is_none() {
-                        return Err(connection_closed_error());
-                    }
-                    let item = item.unwrap();
-                    check_key_press_frequency(key_press_times)?;
+                let item = timeout(recv_state.get_timeout(), ws_reader.next())
+                    .await? // error if timed out
+                    .ok_or_else(connection_closed_error)? // error if clean disconnect
+                    .map_err(convert_error)?; // error if receiving failed
 
-                    match item.map_err(convert_error)? {
-                        Message::Binary(bytes) => {
-                            *last_recv = Instant::now();
-                            match parse_key_press(&bytes) {
-                                // Websocket never splits a key press to multiple messages.
-                                // Also can't have multiple key presses inside the same message.
-                                Some((key, n)) if n == bytes.len() => {
-                                    return Ok(key);
-                                }
-                                Some(_) | None => {
-                                    return Err(io::Error::new(
-                                        ErrorKind::Other,
-                                        "received bad key press from websocket",
-                                    ))
-                                }
-                            }
-                        }
-                        Message::Close(_) => {
-                            return Err(connection_closed_error());
-                        }
-                        /*
-                        Pings can't make the connection stay open for more than 10min.
-                        That would cause confusion when people use different browsers and
-                        not all browsers send pings.
-
-                        Pings are counted as key presses, so that you will be disconnected
-                        if you spam the server with lots of pings.
-
-                        We don't have to send pongs, because tungstenite does it
-                        automatically.
-                        */
-                        Message::Ping(_) => {}
-                        other => {
-                            return Err(io::Error::new(
+                match item {
+                    Message::Binary(bytes) => {
+                        if bytes.is_empty() {
+                            Err(io::Error::new(
                                 ErrorKind::Other,
-                                format!("unexpected websocket frame: {:?}", other),
-                            ));
+                                "received empty bytes from websocket message",
+                            ))
+                        } else {
+                            recv_state.add_received_bytes(&bytes);
+                            Ok(())
                         }
                     }
+                    Message::Close(_) => Err(connection_closed_error()),
+                    /*
+                    Pings can't make the connection stay open for more than 10min.
+                    That would cause confusion when people use different browsers and
+                    not all browsers send pings.
+
+                    Pings are counted as key presses, so that you will be disconnected
+                    if you spam the server with lots of pings.
+
+                    We don't have to send pongs, because tungstenite does it
+                    automatically.
+                    */
+                    Message::Ping(_) => {
+                        recv_state.check_key_press_frequency()?;
+                        Ok(())
+                    }
+                    other => Err(io::Error::new(
+                        ErrorKind::Other,
+                        format!("unexpected websocket frame: {:?}", other),
+                    )),
                 }
             }
-
             Self::RawTcp {
+                recv_state,
                 read_half,
-                buffer,
-                buffer_size,
-                key_press_times,
-                last_recv,
             } => {
-                loop {
-                    match parse_key_press(&buffer[..*buffer_size]) {
-                        Some((key, bytes_used)) => {
-                            check_key_press_frequency(key_press_times)?;
-                            buffer[..*buffer_size].rotate_left(bytes_used);
-                            *buffer_size -= bytes_used;
-                            return Ok(key);
-                        }
-                        None => {
-                            // Receive more data
-                            let dest = &mut buffer[*buffer_size..];
-                            let n =
-                                timeout(get_timeout(*last_recv), read_half.read(dest)).await??;
-                            if n == 0 {
-                                return Err(connection_closed_error());
-                            }
-                            *buffer_size += n;
-                            *last_recv = Instant::now();
-                        }
-                    }
-                }
-            }
+                let mut buf = [0u8; 100];
 
+                let n = timeout(recv_state.get_timeout(), read_half.read(&mut buf)).await??;
+                if n == 0 {
+                    // a clean disconnect
+                    return Err(connection_closed_error());
+                }
+                recv_state.add_received_bytes(&buf[0..n]);
+                Ok(())
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
+        match self {
             Self::Test(string) => {
                 if string == "BLOCK" {
                     loop {
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 }
-                match parse_key_press(string.as_bytes()) {
+                return match parse_key_press(string.as_bytes()) {
                     Some((key, bytes_used)) => {
                         *string = string[bytes_used..].to_string();
                         Ok(key)
                     }
                     None => Err(connection_closed_error()),
+                };
+            }
+            _ => {}
+        }
+
+        loop {
+            let received_so_far: &[u8] = match self {
+                Self::Test(_) => panic!(),
+                Self::WebSocket { recv_state, .. } | Self::RawTcp { recv_state, .. } => {
+                    recv_state.buffer.make_contiguous();
+                    recv_state.buffer.as_slices().0
                 }
+            };
+
+            match parse_key_press(received_so_far) {
+                Some((key, bytes_used)) => {
+                    let recv_state = match self {
+                        Self::Test(_) => panic!(),
+                        Self::WebSocket { recv_state, .. } | Self::RawTcp { recv_state, .. } => {
+                            recv_state
+                        }
+                    };
+                    recv_state.check_key_press_frequency()?;
+                    recv_state.buffer.drain(0..bytes_used);
+                    return Ok(key);
+                }
+                None => self.receive_more_data().await?,
             }
         }
     }
@@ -316,6 +336,12 @@ pub async fn initialize_connection(
         decrementer = Some(IpTracker::track(ip_tracker.clone(), source_ip, logger)?);
     }
 
+    let recv_state = ReceiveState {
+        buffer: VecDeque::new(),
+        key_press_times: VecDeque::new(),
+        last_recv: Instant::now(),
+    };
+
     if is_websocket {
         let config = WebSocketConfig {
             // Prevent various denial-of-service attacks that fill up server's memory.
@@ -351,18 +377,14 @@ pub async fn initialize_connection(
         sender = Sender::WebSocket { ws_writer };
         receiver = Receiver::WebSocket {
             ws_reader,
-            key_press_times: VecDeque::new(),
-            last_recv: Instant::now(),
+            recv_state,
         };
     } else {
         let (read_half, write_half) = socket.into_split();
         sender = Sender::RawTcp { write_half };
         receiver = Receiver::RawTcp {
             read_half,
-            buffer: [0u8; 100],
-            buffer_size: 0,
-            key_press_times: VecDeque::new(),
-            last_recv: Instant::now(),
+            recv_state,
         };
     }
 
