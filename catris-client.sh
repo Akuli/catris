@@ -101,8 +101,8 @@ function hex() {
 }
 
 function receive() {
-    # Using head is unnecessary, even if converting the result to hex.
-    # I tried hexdump's option to read n bytes, but then it still reads more than n bytes.
+    # Using head is needed even if converting the result to hex.
+    # I tried hexdump's option to read n bytes, but it consumed more than n bytes.
     local result="$(head -c $1 <&$recv_fd | hex)"
     if [ "$result" == "" ]; then
         fail "connection closed"
