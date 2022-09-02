@@ -1,11 +1,7 @@
 # This script is a secure alternative to connecting with netcat.
 # Does not work on windows!
 #
-#   $ python3 -m venv env
-#   $ . env/bin/activate
-#   $ pip install aiofiles websockets
-#   $ python3 wsclient.py
-#
+# For instructions see https://catris.net/ (on a non-Windows computer)
 import asyncio
 import os
 import sys
@@ -20,18 +16,14 @@ async def stdin_to_websocket(ws):
             await ws.send(await file.read1(1024))
 
 
-async def websocket_to_stdout(ws):
-    async for message in ws:
-        assert isinstance(message, bytes)
-        sys.stdout.buffer.write(message)
-        sys.stdout.buffer.flush()
-
-
-async def hello():
-    async with websockets.connect("wss://catris.net/websocket") as ws:
+async def main():
+    [url] = sys.argv[1:]
+    async with websockets.connect(url) as ws:
         asyncio.create_task(stdin_to_websocket(ws))
         try:
-            await websocket_to_stdout(ws)
+            async for message in ws:
+                sys.stdout.buffer.write(message)
+                sys.stdout.buffer.flush()
         except websockets.exceptions.ConnectionClosed:
             # couldn't get a clean quit to work, asyncio was doing something weird
             os.system("stty cooked")
@@ -40,6 +32,6 @@ async def hello():
 
 os.system("stty raw")
 try:
-    asyncio.run(hello())
+    asyncio.run(main())
 finally:
     os.system("stty cooked")

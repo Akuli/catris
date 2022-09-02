@@ -1,2 +1,10 @@
 [catris-nginx-site]
 indent_style = tab
+
+[*.{css,js}]
+indent_style = space
+indent_size = 2
+
+[*.{rs,py}]
+indent_style = space
+indent_size = 4
