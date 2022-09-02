@@ -341,6 +341,6 @@ document.addEventListener("DOMContentLoaded", () => {
     instructionsDiv.querySelector("pre.nc-instructions").textContent = `$ stty raw; nc ${window.location.hostname} 12345; stty cooked`;
     instructionsDiv.querySelector("pre.wsclient-instructions").textContent =
 `$ python3 -m pip install aiofiles websockets
-$ python3 wsclient.py wss://${window.location.host}/websocket`;
+$ python3 wsclient.py ${wsUrl}`;
   }
 });
