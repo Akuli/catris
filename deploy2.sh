@@ -29,7 +29,7 @@ echo ""
 ssh catris.net 'journalctl -u catris -n 10'
 echo ""
 echo "The above log output should show how many people are playing now."
-echo "You can abort now, but then the following will not be updated:"
+echo "You can still abort the deploy, but then the following will not be updated:"
 echo "  - The rust program"
 echo "  - systemd service file"
 echo "  - nginx configuration"
