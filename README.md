@@ -149,35 +149,12 @@ These instructions are mostly for me.
 If you want to run catris in a local network, see [local-playing.md](local-playing.md).
 If you run a bigger catris server, please let me know by creating an issue :)
 
-Bump the version number and add a tag (so I know what's currently in production):
-
 ```
-$ your_favorite_editor Cargo.toml
-$ cargo build      # updates version number in Cargo.lock
-$ git add Cargo.*
-$ git commit -m "Bump version"
-$ git tag v$(grep ^version Cargo.toml | cut -d'"' -f2)
-$ git push --tags origin main
+$ your_favorite_editor Cargo.toml   # Edit version number
+$ ./deploy1.sh  # Safe
+$ ./deploy2.sh  # Interrupts ongoing games
 ```
 
-Look at `journalctl -fu catris` to make sure nobody is currently playing.
+Currently I run `./deploy2.sh` when nobody is currently playing.
 If in the future there is always someone playing,
-use `/home/catris/catris_motd.txt` to clearly announce the downtime beforehand.
-
-If you changed rust code, build the executable, copy it to the server, and restart the systemd service:
-
-```
-locally:    $ cargo build --release
-locally:    $ ls -l target/release/catris
-on server:  $ sudo systemctl stop catris
-locally:    $ scp target/release/catris catris.net:/home/catris/catris
-on server:  $ sudo systemctl start catris
-on server:  $ journalctl -fu catris
-```
-
-If you modified the web UI, copy the contents of the `web-ui` directory to the server:
-
-```
-$ ls -a web-ui/
-$ scp web-ui/* catris.net:/var/www/html/
-```
+use `/home/catris/catris_motd.txt` to clearly announce the update beforehand.
