@@ -148,7 +148,7 @@ const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
 
 // Various adventure mode parameters to tweak.
 // Please try to keep them all here in one place.
-const ADVENTURE_ROWS_BLANKED_ON_SCROLL: usize = 10;
+pub const ADVENTURE_ROWS_BLANKED_ON_SCROLL: usize = 10;
 const ADVENTURE_BLOCK_MAX_SCREEN_Y: usize = 14;
 const ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS: usize = 3;
 
@@ -332,6 +332,10 @@ impl Game {
         }
     }
 
+    pub fn get_scroll_count(&self) -> usize {
+        self.adventure_data.as_ref().unwrap().scroll_count
+    }
+
     fn generate_rows(&mut self) {
         if self.mode != Mode::Adventure {
             return;
@@ -349,8 +353,8 @@ impl Game {
         let min_count = biggest_y_used + (ADVENTURE_EXTRA_ROWS_BOTTOM as i32);
 
         while (self.landed_rows.len() as i32) < min_count {
-            let y = self.adventure_data.as_ref().unwrap().scroll_count + self.landed_rows.len();
-            let prefill = if y < self.get_height()-1 {
+            let y = self.get_scroll_count() + self.landed_rows.len();
+            let prefill = if y < self.get_height() - 1 {
                 false // Start with most of the playing area empty
             } else if y == self.get_height() - 1 {
                 true // But with one pre-filled row at the bottom
@@ -379,7 +383,9 @@ impl Game {
                 let expected_value_of_prefilled_count = 1.5 + s / 5000.0;
                 let p = 1.0 - (1.0 / expected_value_of_prefilled_count).sqrt();
                 rand::thread_rng().gen_bool(p)
-            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS {
+            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill
+                == ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS
+            {
                 true
             } else {
                 false

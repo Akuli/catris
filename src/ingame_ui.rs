@@ -3,6 +3,7 @@ use crate::client::Client;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
+use crate::game_logic::game::ADVENTURE_ROWS_BLANKED_ON_SCROLL;
 use crate::game_logic::game::BOTTLE_MAP;
 use crate::game_logic::game::RING_MAP;
 use crate::game_logic::game::RING_OUTER_RADIUS;
@@ -219,10 +220,17 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 false,
             );
 
-            for y in 2..(2 + game.get_height()) {
-                // TODO: display scrolling so that it is clear how it works
-                buffer.set_char(0, y, ':');
-                buffer.set_char(2 * game.get_width() + 1, y, ':');
+            for y in 0..game.get_height() {
+                buffer.set_char(0, 2 + y, ':');
+                buffer.set_char(2 * game.get_width() + 1, 2 + y, ':');
+            }
+            for y in ADVENTURE_ROWS_BLANKED_ON_SCROLL..game.get_height() {
+                let character = match (y + game.get_scroll_count()) % 3 {
+                    0 => 'I',
+                    _ => '|',
+                };
+                buffer.set_char(0, 2 + y, character);
+                buffer.set_char(2 * game.get_width() + 1, 2 + y, character);
             }
         }
         Mode::Bottle => {
