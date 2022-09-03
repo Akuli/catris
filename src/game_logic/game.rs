@@ -332,8 +332,10 @@ impl Game {
         if self.mode == Mode::Adventure {
             let i = landed_rows_index + self.adventure_data.as_ref().unwrap().scroll_count;
             // Start game without rows, after that add two consecutive rows at a time
+            // TODO: need randomness in the number of rows generated, not always 2
+            // TODO: 15 not good, blocks left above previous row are too far up
             if i > self.get_height() && (i % 15 == 0 || i % 15 == 1) {
-                return Some(SquareContent::with_color(Color::WHITE_BACKGROUND));
+                return Some(SquareContent::new_undrillable());
             }
         }
         None
@@ -360,12 +362,15 @@ impl Game {
             let mut row = vec![fill; self.get_width()];
 
             // Put a hole in a random location, avoiding the walls if we added any
+            // TODO: need randomly multiple holes
             let n = row.len(); // borrow checker is lol
             row[rand::thread_rng().gen_range(0..n)] = None;
 
             self.landed_rows.push(row);
         }
 
+        // TODO: this is not an ideal place for this as it erases landed squares
+        // Should probably run when scrolling?
         for row in &mut self.landed_rows[..ADVENTURE_BLANK_ROWS_TOP] {
             *row = vec![None; row.len()];
         }
@@ -525,6 +530,8 @@ impl Game {
             Mode::Traditional | Mode::Adventure => {
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
+                        // FIXME: need different score logic for adventure mode
+                        // Maybe just increment every time u scroll?
                         full_count_everyone += 1;
                         for (x, _) in row.iter().enumerate() {
                             full_points.push((x as i16, y as i16));
@@ -703,7 +710,7 @@ impl Game {
         match self.mode {
             Mode::Traditional | Mode::Adventure => {
                 let w = self.get_width() as i16;
-                let h = self.get_height() as i16;
+                let h = self.landed_rows.len() as i16; // can be below view in adventure mode
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
             Mode::Bottle => {

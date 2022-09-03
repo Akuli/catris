@@ -220,6 +220,7 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             );
 
             for y in 2..(2 + game.get_height()) {
+                // TODO: display scrolling so that it is clear how it works
                 buffer.set_char(0, y, ':');
                 buffer.set_char(2 * game.get_width() + 1, y, ':');
             }

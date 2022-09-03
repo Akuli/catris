@@ -181,6 +181,12 @@ impl SquareContent {
         Self::Normal([(' ', color), (' ', color)])
     }
 
+    pub fn new_undrillable() -> Self {
+        Self::LandedDrill {
+            texts_by_viewer_direction: ["  ", "  ", "  ", "  "],
+        }
+    }
+
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
