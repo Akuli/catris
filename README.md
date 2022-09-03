@@ -25,7 +25,7 @@ because it needs to use ANSI codes for raw TCP connections anyway.
 
 When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
 On `catris.net`, it instead connects to port 443 (the default https port),
-and nginx proxies the connection to port 12345 on the server.
+and nginx proxies the connection to port 54321 on the server.
 In fact, in `catris.net` the server listens to websocket connections only on localhost.
 This has several advantages:
 - You can play catris if you have a firewall that only allows port 443 out.
