@@ -150,7 +150,6 @@ const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
 // This gives the player time to guide the block through a hole in previous landed squares.
 // There are never landed squares above the top of the view, I tried that and it was very confusing.
 const ADVENTURE_BLANK_ROWS_TOP: usize = 4;
-const ADVENTURE_EXTRA_ROWS_TOP: usize = 0;
 
 // TODO: get rid of this, if turns out i don't add anything extra here
 struct AdventureModeData {
@@ -247,9 +246,8 @@ impl Game {
     // Where is world coordinate (0,0) in the landed_rows array?
     fn get_center_offset(&self) -> (i16, i16) {
         match self.mode {
-            Mode::Traditional | Mode::Bottle => (0, 0),
+            Mode::Traditional | Mode::Bottle | Mode::Adventure => (0, 0),
             Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
-            Mode::Adventure => (0, ADVENTURE_EXTRA_ROWS_TOP as i16),
         }
     }
 
@@ -333,8 +331,8 @@ impl Game {
     fn get_fill_square(&self, landed_rows_index: usize) -> Option<SquareContent> {
         if self.mode == Mode::Adventure {
             let i = landed_rows_index + self.adventure_data.as_ref().unwrap().scroll_count;
-            // Start game without rows, after that add two consecutive rows
-            if i > ADVENTURE_EXTRA_ROWS_TOP + self.get_height() && (i % 15 == 0 || i % 15 == 1) {
+            // Start game without rows, after that add two consecutive rows at a time
+            if i > self.get_height() && (i % 15 == 0 || i % 15 == 1) {
                 return Some(SquareContent::with_color(Color::WHITE_BACKGROUND));
             }
         }
@@ -346,14 +344,13 @@ impl Game {
             return;
         }
 
-        let bottom = ADVENTURE_EXTRA_ROWS_TOP + self.get_height();
         let biggest_y_used = self
             .players
             .iter()
             .map(|p| p.borrow().block_or_timer.get_coords())
             .flatten()
             .map(|(_, y)| y)
-            .chain([bottom as i32].into_iter())
+            .chain([self.get_height() as i32].into_iter())
             .max()
             .unwrap();
         let min_count = biggest_y_used + (ADVENTURE_EXTRA_ROWS_BOTTOM as i32);
@@ -525,21 +522,10 @@ impl Game {
         let mut full_count_single_player = 0;
 
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
                         full_count_everyone += 1;
-                        for (x, _) in row.iter().enumerate() {
-                            full_points.push((x as i16, y as i16));
-                        }
-                    }
-                }
-            }
-            Mode::Adventure => {
-                for (row_index, row) in self.landed_rows.iter().enumerate() {
-                    if !row.iter().any(|cell| cell.is_none()) {
-                        full_count_everyone += 1;
-                        let y = (row_index as i16) - (ADVENTURE_EXTRA_ROWS_TOP as i16);
                         for (x, _) in row.iter().enumerate() {
                             full_points.push((x as i16, y as i16));
                         }
@@ -604,7 +590,7 @@ impl Game {
 
     pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 for y in 0..self.landed_rows.len() {
                     if full.contains(&(0, y as i16)) {
                         self.landed_rows[..(y + 1)].rotate_right(1);
@@ -613,16 +599,6 @@ impl Game {
                         }
                     }
                 }
-            }
-            Mode::Adventure => {
-                for i in (0..self.landed_rows.len()).rev() {
-                    let y = (i as i16) - (ADVENTURE_EXTRA_ROWS_TOP as i16);
-                    if full.contains(&(0, y)) {
-                        self.landed_rows.remove(i);
-                        self.landed_rows.insert(0, vec![None; self.get_width()]);
-                    }
-                }
-                self.generate_rows();
             }
             Mode::Bottle => {
                 for (i, _) in self.players.iter().enumerate() {
@@ -725,7 +701,7 @@ impl Game {
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
         let (x, y) = point;
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 let w = self.get_width() as i16;
                 let h = self.get_height() as i16;
                 (0..w).contains(&x) && (0..h).contains(&y)
@@ -751,14 +727,6 @@ impl Game {
                 let map_y = (y + (RING_OUTER_RADIUS as i16)) as usize + 1;
                 let line = RING_MAP[map_y as usize].as_bytes();
                 line[map_x as usize] == b'x'
-            }
-            Mode::Adventure => {
-                // Need to place some restrictions on y so that landing prediction code doesn't error.
-                // Otherwise it tries to access landed rows beyond what was generated so far.
-                // We generate ahead by at least ADVENTURE_EXTRA_ROWS_BOTTOM, so enough to not be visible to users
-                let w = self.get_width() as i16;
-                let h = (self.landed_rows.len() - ADVENTURE_EXTRA_ROWS_TOP) as i16;
-                (0..w).contains(&x) && (0..h).contains(&y)
             }
         }
     }
@@ -1385,24 +1353,12 @@ impl Game {
 
     fn clear_playing_area(&mut self, player_idx: usize) {
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 let w = self.get_width_per_player().unwrap();
+                let h = self.get_height();
                 let left = w * player_idx;
                 let right = w * (player_idx + 1);
-                for row in self.landed_rows.iter_mut() {
-                    for square_ref in row[left..right].iter_mut() {
-                        *square_ref = None;
-                    }
-                }
-            }
-            Mode::Adventure => {
-                let w = self.get_width_per_player().unwrap();
-                let left = w * player_idx;
-                let right = w * (player_idx + 1);
-
-                // Avoid deleting below the visibile part by only deleting the first n rows
-                let n = ADVENTURE_EXTRA_ROWS_TOP + self.get_height();
-                for row in self.landed_rows[0..n].iter_mut() {
+                for row in self.landed_rows[0..h].iter_mut() {
                     for square_ref in row[left..right].iter_mut() {
                         *square_ref = None;
                     }
