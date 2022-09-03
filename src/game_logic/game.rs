@@ -152,10 +152,9 @@ In that case, the map will be generated enough for the lowest square of that blo
 const ADVENTURE_EXTRA_ROWS_TOP: usize = 50;
 const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
 
+// TODO: get rid of this, if turns out i don't add anything extra here
 struct AdventureModeData {
     scroll_count: usize,
-    previous_row_had_side_bumps: (bool, bool),
-    next_row_will_have_side_bumps: (bool, bool),
 }
 
 pub struct Game {
@@ -186,11 +185,7 @@ impl Game {
             }
         };
         let adventure_data = if mode == Mode::Adventure {
-            Some(AdventureModeData {
-                scroll_count: 0,
-                previous_row_had_side_bumps: (false, false),
-                next_row_will_have_side_bumps: (false, false),
-            })
+            Some(AdventureModeData { scroll_count: 0 })
         } else {
             None
         };
@@ -367,46 +362,9 @@ impl Game {
             let fill = self.get_fill_square(self.landed_rows.len());
             let mut row = vec![fill; self.get_width()];
 
-            // Add bumps. This is a bit tricky, but very visible in the game if this is wrong.
-            let adventure_data = self.adventure_data.as_mut().unwrap();
-            let (prev_left, prev_right) = adventure_data.previous_row_had_side_bumps;
-            let (curr_left, curr_right) = adventure_data.next_row_will_have_side_bumps;
-            let (next_left, next_right) = rand::thread_rng().gen::<(bool, bool)>();
-            adventure_data.previous_row_had_side_bumps = (curr_left, curr_right);
-            adventure_data.next_row_will_have_side_bumps = (next_left, next_right);
-
-            let left_text = match (prev_left, curr_left, next_left) {
-                (_, false, _) => None,
-                (false, true, true) => Some("'."),  // wall starts
-                (true, true, true) => Some(" :"),   // wall continues
-                (true, true, false) => Some(".'"),  // wall ends
-                (false, true, false) => Some("~'"), // single-square wall
-            };
-            let right_text = match (prev_right, curr_right, next_right) {
-                (_, false, _) => None,
-                (false, true, true) => Some(".'"),  // wall starts
-                (true, true, true) => Some(": "),   // wall continues
-                (true, true, false) => Some("'."),  // wall ends
-                (false, true, false) => Some("'~"), // single-square wall
-            };
-
-            if let Some(s) = left_text {
-                row[0] = Some(SquareContent::with_text(s));
-            }
-            if let Some(s) = right_text {
-                *row.last_mut().unwrap() = Some(SquareContent::with_text(s));
-            }
-
             // Put a hole in a random location, avoiding the walls if we added any
-            let mut range_start = 0usize;
-            let mut range_end = row.len();
-            if left_text.is_some() {
-                range_start += 1;
-            }
-            if right_text.is_some() {
-                range_end -= 1;
-            }
-            row[rand::thread_rng().gen_range(range_start..range_end)] = None;
+            let n = row.len(); // borrow checker is lol
+            row[rand::thread_rng().gen_range(0..n)] = None;
 
             self.landed_rows.push(row);
         }

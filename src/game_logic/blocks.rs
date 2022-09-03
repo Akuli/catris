@@ -181,14 +181,6 @@ impl SquareContent {
         Self::Normal([(' ', color), (' ', color)])
     }
 
-    pub fn with_text(text: &str) -> Self {
-        let mut chars = text.chars();
-        let first = chars.next().unwrap();
-        let second = chars.next().unwrap();
-        assert!(chars.next().is_none());
-        Self::Normal([(first, Color::DEFAULT), (second, Color::DEFAULT)])
-    }
-
     pub fn is_bomb(&self) -> bool {
         matches!(self, Self::Bomb { .. })
     }
