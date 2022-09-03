@@ -138,19 +138,19 @@ pub fn wrap_around(mode: Mode, y: &mut i32) {
 }
 
 /*
-In adventure mode, the map always extends this much above and below the top of the view.
-This way:
-    - A block can bump into landed square before the block becomes visible.
-    - The landing places prediction will work even for blocks that aren't visible yet.
-    - When a row is removed and rows move down in the view, we don't need to generate
-      rows on the top of the view because we still remember enough old rows.
-      For this to work we need a lot of extra rows on top.
+In adventure mode, the map always extends below the top of the view.
+This way the landing places prediction will work even for blocks that aren't visible yet.
 
-With multiple players, it's also possible to move blocks more than this amount below
+With multiple players, it's also possible to move blocks more than this amount below the view.
 In that case, the map will be generated enough for the lowest square of that block.
 */
-const ADVENTURE_EXTRA_ROWS_TOP: usize = 50;
 const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
+
+// In adventure mode, there are this many rows at top of game that never have blocks in them.
+// This gives the player time to guide the block through a hole in previous landed squares.
+// There are never landed squares above the top of the view, I tried that and it was very confusing.
+const ADVENTURE_BLANK_ROWS_TOP: usize = 4;
+const ADVENTURE_EXTRA_ROWS_TOP: usize = 0;
 
 // TODO: get rid of this, if turns out i don't add anything extra here
 struct AdventureModeData {
@@ -367,6 +367,10 @@ impl Game {
             row[rand::thread_rng().gen_range(0..n)] = None;
 
             self.landed_rows.push(row);
+        }
+
+        for row in &mut self.landed_rows[..ADVENTURE_BLANK_ROWS_TOP] {
+            *row = vec![None; row.len()];
         }
     }
 
@@ -754,7 +758,7 @@ impl Game {
                 // We generate ahead by at least ADVENTURE_EXTRA_ROWS_BOTTOM, so enough to not be visible to users
                 let w = self.get_width() as i16;
                 let h = (self.landed_rows.len() - ADVENTURE_EXTRA_ROWS_TOP) as i16;
-                (0..w).contains(&x) && (..h).contains(&y)
+                (0..w).contains(&x) && (0..h).contains(&y)
             }
         }
     }
@@ -787,6 +791,9 @@ impl Game {
 
     pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         let (x, y) = point;
+        if self.mode == Mode::Adventure && (0..(ADVENTURE_BLANK_ROWS_TOP as i16)).contains(&y) {
+            return;
+        }
         let (offset_x, offset_y) = self.get_center_offset();
         self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize] = value;
     }
