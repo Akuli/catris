@@ -151,9 +151,9 @@ const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
 // There are never landed squares above the top of the view, I tried that and it was very confusing.
 const ADVENTURE_BLANK_ROWS_TOP: usize = 4;
 
-// TODO: get rid of this, if turns out i don't add anything extra here
 struct AdventureModeData {
     scroll_count: usize,
+    rows_since_prefill: u8, // Pre-filled row is a row that already contains squares when it appears
 }
 
 pub struct Game {
@@ -184,7 +184,10 @@ impl Game {
             }
         };
         let adventure_data = if mode == Mode::Adventure {
-            Some(AdventureModeData { scroll_count: 0 })
+            Some(AdventureModeData {
+                scroll_count: 0,
+                rows_since_prefill: 0,
+            })
         } else {
             None
         };
@@ -328,19 +331,6 @@ impl Game {
         }
     }
 
-    fn get_fill_square(&self, landed_rows_index: usize) -> Option<SquareContent> {
-        if self.mode == Mode::Adventure {
-            let i = landed_rows_index + self.adventure_data.as_ref().unwrap().scroll_count;
-            // Start game without rows, after that add two consecutive rows at a time
-            // TODO: need randomness in the number of rows generated, not always 2
-            // TODO: 15 not good, blocks left above previous row are too far up
-            if i > self.get_height() && (i % 15 == 0 || i % 15 == 1) {
-                return Some(SquareContent::new_undrillable());
-            }
-        }
-        None
-    }
-
     fn generate_rows(&mut self) {
         if self.mode != Mode::Adventure {
             return;
@@ -358,15 +348,62 @@ impl Game {
         let min_count = biggest_y_used + (ADVENTURE_EXTRA_ROWS_BOTTOM as i32);
 
         while (self.landed_rows.len() as i32) < min_count {
-            let fill = self.get_fill_square(self.landed_rows.len());
-            let mut row = vec![fill; self.get_width()];
+            let y = self.adventure_data.as_ref().unwrap().scroll_count + self.landed_rows.len();
+            let prefill = if y < self.get_height()-1 {
+                false // Start with most of the playing area empty
+            } else if y == self.get_height() - 1 {
+                true // But with one pre-filled row at the bottom
+            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == 0 {
+                /*
+                Previous row was prefilled. Add another prefilled row with probability p.
+                This way, expected value of number of rows added is
 
-            // Put a hole in a random location, avoiding the walls if we added any
-            // TODO: need randomly multiple holes
-            let n = row.len(); // borrow checker is lol
-            row[rand::thread_rng().gen_range(0..n)] = None;
+                     inf
+                    .---    k-1         1
+                     )   k p     = -----------
+                    '---            (1 - p)^2
+                     k=1
 
-            self.landed_rows.push(row);
+                where kp^(k-1) is the probability of getting k consecutive pre-filled rows.
+
+                We first choose the expected value of rows so that the game reasonably
+                becomes more challenging as you play, and then compute the corresponding
+                probability p.
+
+                The expected value is >1, meaning p>0. Otherwise users could wait for a
+                block that fits through a single hole and keep moving it to the matching
+                hole when new rows arrive.
+                */
+                let s = self.score as f64;
+                let expected_value_of_prefilled_count = 1.5 + s / 5000.0;
+                let p = 1.0 - (1.0 / expected_value_of_prefilled_count).sqrt();
+                rand::thread_rng().gen_bool(p)
+            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == 4 {
+                // Got enough normal rows, time for prefilled
+                true
+            } else {
+                false
+            };
+
+            if prefill {
+                self.adventure_data.as_mut().unwrap().rows_since_prefill = 0;
+            } else {
+                self.adventure_data.as_mut().unwrap().rows_since_prefill += 1;
+            }
+
+            if prefill {
+                let mut row = vec![Some(SquareContent::new_undrillable()); self.get_width()];
+
+                let n = row.len(); // borrow checker is lol
+                row[rand::thread_rng().gen_range(0..n)] = None;
+                if rand::thread_rng().gen_bool(0.1) {
+                    row[rand::thread_rng().gen_range(0..n)] = None;
+                }
+
+                self.landed_rows.push(row);
+            } else {
+                self.landed_rows.push(vec![None; self.get_width()]);
+            }
         }
 
         // TODO: this is not an ideal place for this as it erases landed squares
@@ -422,8 +459,7 @@ impl Game {
         match self.mode {
             Mode::Traditional => {
                 for y in 0..self.landed_rows.len() {
-                    let fill = self.get_fill_square(y);
-                    self.landed_rows[y].resize(w, fill);
+                    self.landed_rows[y].resize(w, None);
                 }
             }
             Mode::Bottle => {
@@ -527,12 +563,20 @@ impl Game {
         let mut full_count_single_player = 0;
 
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional => {
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
-                        // FIXME: need different score logic for adventure mode
-                        // Maybe just increment every time u scroll?
                         full_count_everyone += 1;
+                        for (x, _) in row.iter().enumerate() {
+                            full_points.push((x as i16, y as i16));
+                        }
+                    }
+                }
+            }
+            Mode::Adventure => {
+                // Same as traditional, but do not add score here
+                for (y, row) in self.landed_rows.iter().enumerate() {
+                    if !row.iter().any(|cell| cell.is_none()) {
                         for (x, _) in row.iter().enumerate() {
                             full_points.push((x as i16, y as i16));
                         }
@@ -993,7 +1037,7 @@ impl Game {
                 .min()
                 .unwrap_or(-1);
 
-            if smallest_center_y > 15 {
+            if smallest_center_y > 14 {
                 self.scroll_down();
                 need_render = true;
             }
@@ -1013,6 +1057,7 @@ impl Game {
 
         self.landed_rows.remove(0);
         self.generate_rows();
+        self.add_score(1, true);
     }
 
     fn flip_view(&mut self) -> bool {
