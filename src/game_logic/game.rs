@@ -146,14 +146,15 @@ In that case, the map will be generated enough for the lowest square of that blo
 */
 const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
 
-// In adventure mode, there are this many rows at top of game that never have blocks in them.
-// This gives the player time to guide the block through a hole in previous landed squares.
-// There are never landed squares above the top of the view, I tried that and it was very confusing.
-const ADVENTURE_BLANK_ROWS_TOP: usize = 4;
+// Various adventure mode parameters to tweak.
+// Please try to keep them all here in one place.
+const ADVENTURE_ROWS_BLANKED_ON_SCROLL: usize = 10;
+const ADVENTURE_BLOCK_MAX_SCREEN_Y: usize = 14;
+const ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS: usize = 3;
 
 struct AdventureModeData {
     scroll_count: usize,
-    rows_since_prefill: u8, // Pre-filled row is a row that already contains squares when it appears
+    rows_since_prefill: usize, // Pre-filled row is a row that already contains squares when it appears
 }
 
 pub struct Game {
@@ -378,8 +379,7 @@ impl Game {
                 let expected_value_of_prefilled_count = 1.5 + s / 5000.0;
                 let p = 1.0 - (1.0 / expected_value_of_prefilled_count).sqrt();
                 rand::thread_rng().gen_bool(p)
-            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == 4 {
-                // Got enough normal rows, time for prefilled
+            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS {
                 true
             } else {
                 false
@@ -393,23 +393,12 @@ impl Game {
 
             if prefill {
                 let mut row = vec![Some(SquareContent::new_undrillable()); self.get_width()];
-
                 let n = row.len(); // borrow checker is lol
                 row[rand::thread_rng().gen_range(0..n)] = None;
-                if rand::thread_rng().gen_bool(0.1) {
-                    row[rand::thread_rng().gen_range(0..n)] = None;
-                }
-
                 self.landed_rows.push(row);
             } else {
                 self.landed_rows.push(vec![None; self.get_width()]);
             }
-        }
-
-        // TODO: this is not an ideal place for this as it erases landed squares
-        // Should probably run when scrolling?
-        for row in &mut self.landed_rows[..ADVENTURE_BLANK_ROWS_TOP] {
-            *row = vec![None; row.len()];
         }
     }
 
@@ -810,9 +799,6 @@ impl Game {
 
     pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         let (x, y) = point;
-        if self.mode == Mode::Adventure && (0..(ADVENTURE_BLANK_ROWS_TOP as i16)).contains(&y) {
-            return;
-        }
         let (offset_x, offset_y) = self.get_center_offset();
         self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize] = value;
     }
@@ -1037,7 +1023,7 @@ impl Game {
                 .min()
                 .unwrap_or(-1);
 
-            if smallest_center_y > 14 {
+            if smallest_center_y > (ADVENTURE_BLOCK_MAX_SCREEN_Y as i32) {
                 self.scroll_down();
                 need_render = true;
             }
@@ -1057,7 +1043,10 @@ impl Game {
 
         self.landed_rows.remove(0);
         self.generate_rows();
-        self.add_score(1, true);
+        for row in &mut self.landed_rows[..ADVENTURE_ROWS_BLANKED_ON_SCROLL] {
+            *row = vec![None; row.len()];
+        }
+        self.add_score(10, true);
     }
 
     fn flip_view(&mut self) -> bool {
