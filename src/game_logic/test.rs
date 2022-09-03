@@ -35,7 +35,7 @@ fn dump_game_state(game: &Game) -> Vec<String> {
     let mut y_coords: Vec<Option<i32>> = vec![];
 
     match game.mode {
-        Mode::Traditional => {
+        Mode::Traditional | Mode::Adventure => {
             x_coords.append(&mut (x_top..x_bottom).map(Some).collect());
             y_coords.append(&mut (0..(game.get_height() as i32)).map(Some).collect());
         }

@@ -205,6 +205,25 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 buffer.set_char(x, bottom_y, '-');
             }
         }
+        Mode::Adventure => {
+            buffer.set_char(0, 1, 'o');
+            buffer.set_char(2 * game.get_width() + 1, 1, 'o');
+            render_name_lines(
+                &game.players,
+                client_id,
+                buffer,
+                1,
+                2 * game.get_width_per_player().unwrap(),
+                0,
+                1,
+                false,
+            );
+
+            for y in 2..(2 + game.get_height()) {
+                buffer.set_char(0, y, ':');
+                buffer.set_char(2 * game.get_width() + 1, y, ':');
+            }
+        }
         Mode::Bottle => {
             for (player_idx, player) in game.players.iter().enumerate() {
                 let left = player_idx * BOTTLE_MAP[0].len();
@@ -287,7 +306,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         .unwrap();
 
     let (offset_x, offset_y) = match game.mode {
-        Mode::Traditional => (1, 2),
+        Mode::Traditional | Mode::Adventure => (1, 2),
         Mode::Bottle => (1, 0),
         Mode::Ring => {
             let r = RING_OUTER_RADIUS as i32;
@@ -367,7 +386,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     let (extra_w, extra_h) = match game.mode {
         Mode::Traditional => (2, 3), // 3 = player names, dashes below them, dashes at bottom
-        Mode::Bottle | Mode::Ring => (2, 2),
+        Mode::Bottle | Mode::Ring | Mode::Adventure => (2, 2),
     };
     (game.get_width() * 2 + extra_w, game.get_height() + extra_h)
 }

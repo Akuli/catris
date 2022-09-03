@@ -20,6 +20,7 @@ pub enum Mode {
     Traditional,
     Bottle,
     Ring,
+    Adventure,
 }
 
 impl Mode {
@@ -30,12 +31,13 @@ impl Mode {
             Mode::Traditional => "Traditional game",
             Mode::Bottle => "Bottle game",
             Mode::Ring => "Ring game",
+            Mode::Adventure => "Adventure game",
         }
     }
 
     pub fn max_players(self) -> usize {
         match self {
-            Mode::Traditional | Mode::Bottle => MAX_CLIENTS_PER_LOBBY,
+            Mode::Traditional | Mode::Bottle | Mode::Adventure => MAX_CLIENTS_PER_LOBBY,
             Mode::Ring => 4,
         }
     }
@@ -133,11 +135,16 @@ pub fn wrap_around(mode: Mode, y: &mut i32) {
     }
 }
 
+// In adventure mode, the map always extends a little bit above the top of the view.
+// This way a block can bump into landed square before the block becomes visible.
+const ADVENTURE_ROWS_ABOVE_VIEW: usize = 10;
+
 pub struct Game {
     pub players: Vec<RefCell<Player>>,
     pub flashing_points: HashMap<WorldPoint, u8>,
     pub mode: Mode,
     landed_rows: Vec<Vec<Option<SquareContent>>>,
+    scroll_count: usize,  // zero when not in adventure mode
     score: usize,
     bomb_id_counter: u64,
     block_factory: fn(usize) -> FallingBlock,
@@ -147,6 +154,7 @@ impl Game {
         let landed_rows = match mode {
             Mode::Traditional => vec![vec![]; 20],
             Mode::Bottle => vec![vec![]; 21],
+            Mode::Adventure => vec![vec![]; 21 + ADVENTURE_ROWS_ABOVE_VIEW],
             Mode::Ring => {
                 let size = 2 * RING_OUTER_RADIUS + 1;
                 let mut rows = vec![];
@@ -163,6 +171,7 @@ impl Game {
             flashing_points: HashMap::new(),
             mode,
             landed_rows,
+            scroll_count: 0,
             score: 0,
             bomb_id_counter: 0,
             block_factory: |score| FallingBlock::new(BlockType::from_score(score)),
@@ -185,23 +194,28 @@ impl Game {
 
     pub fn get_width_per_player(&self) -> Option<usize> {
         match self.mode {
-            Mode::Traditional if self.players.len() >= 2 => Some(7),
-            Mode::Traditional => Some(10),
+            Mode::Traditional | Mode::Adventure if self.players.len() >= 2 => Some(7),
+            Mode::Traditional | Mode::Adventure => Some(10),
             Mode::Bottle | Mode::Ring => None,
         }
     }
 
     pub fn get_width(&self) -> usize {
         // can't always return self.landed_rows[0].len(), because this is called during resizing
+        // TODO: clean this up
         match self.mode {
-            Mode::Traditional => self.get_width_per_player().unwrap() * self.players.len(),
+            Mode::Traditional | Mode::Adventure => self.get_width_per_player().unwrap() * self.players.len(),
             Mode::Bottle => BOTTLE_OUTER_WIDTH * self.players.len() - 1,
             Mode::Ring => self.landed_rows[0].len(),
         }
     }
 
     pub fn get_height(&self) -> usize {
-        self.landed_rows.len()
+        match self.mode {
+            // Adventure mode has extra rows above and below the visible area
+            Mode::Adventure => 21,
+            _ => self.landed_rows.len(),
+        }
     }
 
     // Where is world coordinate (0,0) in the landed_rows array?
@@ -209,13 +223,14 @@ impl Game {
         match self.mode {
             Mode::Traditional | Mode::Bottle => (0, 0),
             Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
+            Mode::Adventure => (0, ADVENTURE_ROWS_ABOVE_VIEW as i16),
         }
     }
 
     // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
     pub fn get_bounds_in_player_coords(&self) -> (i32, i32, i32, i32) {
         match self.mode {
-            Mode::Traditional | Mode::Bottle => {
+            Mode::Traditional | Mode::Bottle | Mode::Adventure => {
                 (0, self.get_width() as i32, 0, self.get_height() as i32)
             }
             Mode::Ring => {
@@ -227,10 +242,11 @@ impl Game {
 
     fn update_spawn_points(&self) {
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 let w = self.get_width_per_player().unwrap() as i32;
                 for (player_idx, player) in self.players.iter().enumerate() {
                     let i = player_idx as i32;
+                    // This works in adventure mode because spawn points are in player coordinates
                     player.borrow_mut().spawn_point = ((i * w) + (w / 2), 0);
                 }
             }
@@ -245,9 +261,9 @@ impl Game {
     }
 
     fn wipe_vertical_slice(&mut self, left: usize, width: usize) {
-        // In these modes, player points and world points are the same.
+        // In these modes, player x coordinates and world x coordinates are the same.
         // So it doesn't matter whether "left" is in world or player points.
-        assert!(self.mode == Mode::Traditional || self.mode == Mode::Bottle);
+        assert!(self.mode == Mode::Traditional || self.mode == Mode::Bottle || self.mode == Mode::Adventure);
 
         let right = left + width;
         for row in &mut self.landed_rows {
@@ -284,6 +300,14 @@ impl Game {
         }
     }
 
+    fn get_fill_square(&self, y: usize) -> Option<SquareContent> {
+        if self.mode == Mode::Adventure && (0..=1).contains(&((y + self.scroll_count) % 15)) {
+            Some(SquareContent::with_color(Color::WHITE_BACKGROUND))
+        } else {
+            None
+        }
+    }
+
     pub fn add_player(&mut self, client_info: &ClientInfo) -> bool {
         if self.players.len() == self.mode.max_players() {
             return false;
@@ -291,7 +315,7 @@ impl Game {
 
         let player_idx = self.players.len();
         let down_direction = match self.mode {
-            Mode::Traditional | Mode::Bottle => (0, 1),
+            Mode::Traditional | Mode::Bottle | Mode::Adventure => (0, 1),
             Mode::Ring => {
                 /*
                 prefer opposite directions of existing players
@@ -314,8 +338,8 @@ impl Game {
             }
         };
         let spawn_point = match self.mode {
-            Mode::Traditional | Mode::Bottle => (0, 0), // dummy value to be changed soon
             Mode::Ring => (0, -(RING_OUTER_RADIUS as i32)),
+            _ => (0, 0), // dummy value to be changed soon
         };
         self.players.push(RefCell::new(Player::new(
             spawn_point,
@@ -328,9 +352,10 @@ impl Game {
 
         let w = self.get_width();
         match self.mode {
-            Mode::Traditional => {
-                for row in &mut self.landed_rows {
-                    row.resize(w, None);
+            Mode::Traditional | Mode::Adventure => {
+                for y in 0..self.landed_rows.len() {
+                    let fill = self.get_fill_square(y);
+                    self.landed_rows[y].resize(w, fill);
                 }
             }
             Mode::Bottle => {
@@ -370,7 +395,7 @@ impl Game {
         let i = i.unwrap();
 
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 let slice_x = self.get_width_per_player().unwrap() * i;
                 let old_width = self.get_width();
                 self.players.remove(i);
@@ -409,8 +434,8 @@ impl Game {
             although that wrongly assumes players are independent of each other.
 
             Currently this seems to give points more easily when there's a lot of
-            players, but maybe that's a feature, because it should encourage people to
-            play together :)
+            players, but maybe that's a feature, because it should encourage people
+            to play together :)
 
             The scores also feel quite different for single player and multiplayer.
             That's why they are shown separately in the high scores view.
@@ -426,7 +451,7 @@ impl Game {
         let mut full_count_single_player = 0;
 
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
                         full_count_everyone += 1;
@@ -494,7 +519,7 @@ impl Game {
 
     pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Adventure => {
                 for y in 0..self.landed_rows.len() {
                     if full.contains(&(0, y as i16)) {
                         self.landed_rows[..(y + 1)].rotate_right(1);
@@ -592,7 +617,7 @@ impl Game {
     fn is_valid_falling_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
-            Mode::Traditional | Mode::Bottle => 0,
+            Mode::Traditional | Mode::Bottle | Mode::Adventure => 0,
             Mode::Ring => -(RING_OUTER_RADIUS as i32),
         };
         if y < top_y {
@@ -631,6 +656,10 @@ impl Game {
                 let map_y = (y + (RING_OUTER_RADIUS as i16)) as usize + 1;
                 let line = RING_MAP[map_y as usize].as_bytes();
                 line[map_x as usize] == b'x'
+            }
+            Mode::Adventure => {
+                let w = self.get_width() as i16;
+                (0..w).contains(&x)
             }
         }
     }
@@ -1227,6 +1256,19 @@ impl Game {
                 let left = w * player_idx;
                 let right = w * (player_idx + 1);
                 for row in self.landed_rows.iter_mut() {
+                    for square_ref in row[left..right].iter_mut() {
+                        *square_ref = None;
+                    }
+                }
+            }
+            Mode::Adventure => {
+                let w = self.get_width_per_player().unwrap();
+                let left = w * player_idx;
+                let right = w * (player_idx + 1);
+
+                // Avoid deleting below the visibile part by only deleting the first n rows
+                let n = ADVENTURE_ROWS_ABOVE_VIEW + self.get_height();
+                for row in self.landed_rows[0..n].iter_mut() {
                     for square_ref in row[left..right].iter_mut() {
                         *square_ref = None;
                     }
