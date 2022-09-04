@@ -3,7 +3,7 @@ use crate::client::Client;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
-use crate::game_logic::game::ADVENTURE_ROWS_BLANKED_ON_SCROLL;
+use crate::game_logic::game::SCROLL_MODE_ROWS_BLANKED_ON_SCROLL;
 use crate::game_logic::game::BOTTLE_MAP;
 use crate::game_logic::game::RING_MAP;
 use crate::game_logic::game::RING_OUTER_RADIUS;
@@ -206,7 +206,7 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 buffer.set_char(x, bottom_y, '-');
             }
         }
-        Mode::Adventure => {
+        Mode::Scroll => {
             buffer.set_char(0, 1, 'o');
             buffer.set_char(2 * game.get_width() + 1, 1, 'o');
             render_name_lines(
@@ -224,7 +224,7 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 buffer.set_char(0, 2 + y, ':');
                 buffer.set_char(2 * game.get_width() + 1, 2 + y, ':');
             }
-            for y in ADVENTURE_ROWS_BLANKED_ON_SCROLL..game.get_height() {
+            for y in SCROLL_MODE_ROWS_BLANKED_ON_SCROLL..game.get_height() {
                 let character = match (y + game.get_scroll_count()) % 3 {
                     0 => 'I',
                     _ => '|',
@@ -315,7 +315,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
         .unwrap();
 
     let (offset_x, offset_y) = match game.mode {
-        Mode::Traditional | Mode::Adventure => (1, 2),
+        Mode::Traditional | Mode::Scroll => (1, 2),
         Mode::Bottle => (1, 0),
         Mode::Ring => {
             let r = RING_OUTER_RADIUS as i32;
@@ -395,7 +395,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     let (extra_w, extra_h) = match game.mode {
         Mode::Traditional => (2, 3), // 3 = player names, dashes below them, dashes at bottom
-        Mode::Bottle | Mode::Ring | Mode::Adventure => (2, 2),
+        Mode::Bottle | Mode::Ring | Mode::Scroll => (2, 2),
     };
     (game.get_width() * 2 + extra_w, game.get_height() + extra_h)
 }

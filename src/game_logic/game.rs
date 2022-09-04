@@ -21,25 +21,25 @@ pub enum Mode {
     Traditional,
     Bottle,
     Ring,
-    Adventure,
+    Scroll,
 }
 
 impl Mode {
     pub const ALL_MODES: &'static [Mode] =
-        &[Mode::Traditional, Mode::Bottle, Mode::Ring, Mode::Adventure];
+        &[Mode::Traditional, Mode::Bottle, Mode::Ring, Mode::Scroll];
 
     pub fn name(self) -> &'static str {
         match self {
             Mode::Traditional => "Traditional game",
             Mode::Bottle => "Bottle game",
             Mode::Ring => "Ring game",
-            Mode::Adventure => "Adventure game",
+            Mode::Scroll => "Scrolling game",
         }
     }
 
     pub fn max_players(self) -> usize {
         match self {
-            Mode::Traditional | Mode::Bottle | Mode::Adventure => MAX_CLIENTS_PER_LOBBY,
+            Mode::Traditional | Mode::Bottle | Mode::Scroll => MAX_CLIENTS_PER_LOBBY,
             Mode::Ring => 4,
         }
     }
@@ -138,21 +138,21 @@ pub fn wrap_around(mode: Mode, y: &mut i32) {
 }
 
 /*
-In adventure mode, the map always extends below the top of the view.
+In scroll mode, the map always extends below the top of the view.
 This way the landing places prediction will work even for blocks that aren't visible yet.
 
 With multiple players, it's also possible to move blocks more than this amount below the view.
 In that case, the map will be generated enough for the lowest square of that block.
 */
-const ADVENTURE_EXTRA_ROWS_BOTTOM: usize = 5;
+const SCROLL_MODE_EXTRA_ROWS_BOTTOM: usize = 5;
 
-// Various adventure mode parameters to tweak.
+// Various scroll mode parameters to tweak.
 // Please try to keep them all here in one place.
-pub const ADVENTURE_ROWS_BLANKED_ON_SCROLL: usize = 10;
-const ADVENTURE_BLOCK_MAX_SCREEN_Y: usize = 14;
-const ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS: usize = 3;
+pub const SCROLL_MODE_ROWS_BLANKED_ON_SCROLL: usize = 10;
+const SCROLL_MODE_BLOCK_MAX_SCREEN_Y: usize = 14;
+const SCROLL_MODE_BLANKS_BETWEEN_PRE_FILLED_ROWS: usize = 3;
 
-struct AdventureModeData {
+struct ScrollModeData {
     scroll_count: usize,
     rows_since_prefill: usize, // Pre-filled row is a row that already contains squares when it appears
 }
@@ -162,7 +162,7 @@ pub struct Game {
     pub flashing_points: HashMap<WorldPoint, u8>,
     pub mode: Mode,
     landed_rows: Vec<Vec<Option<SquareContent>>>,
-    adventure_data: Option<AdventureModeData>,
+    scroll_data: Option<ScrollModeData>,
     score: usize,
     bomb_id_counter: u64,
     block_factory: fn(usize) -> FallingBlock,
@@ -172,7 +172,7 @@ impl Game {
         let landed_rows = match mode {
             Mode::Traditional => vec![vec![]; 20],
             Mode::Bottle => vec![vec![]; 21],
-            Mode::Adventure => vec![],
+            Mode::Scroll => vec![],
             Mode::Ring => {
                 let size = 2 * RING_OUTER_RADIUS + 1;
                 let mut rows = vec![];
@@ -184,8 +184,8 @@ impl Game {
                 rows
             }
         };
-        let adventure_data = if mode == Mode::Adventure {
-            Some(AdventureModeData {
+        let scroll_data = if mode == Mode::Scroll {
+            Some(ScrollModeData {
                 scroll_count: 0,
                 rows_since_prefill: 0,
             })
@@ -198,7 +198,7 @@ impl Game {
             flashing_points: HashMap::new(),
             mode,
             landed_rows,
-            adventure_data,
+            scroll_data,
             score: 0,
             bomb_id_counter: 0,
             block_factory: |score| FallingBlock::new(BlockType::from_score(score)),
@@ -221,8 +221,8 @@ impl Game {
 
     pub fn get_width_per_player(&self) -> Option<usize> {
         match self.mode {
-            Mode::Traditional | Mode::Adventure if self.players.len() >= 2 => Some(7),
-            Mode::Traditional | Mode::Adventure => Some(10),
+            Mode::Traditional | Mode::Scroll if self.players.len() >= 2 => Some(7),
+            Mode::Traditional | Mode::Scroll => Some(10),
             Mode::Bottle | Mode::Ring => None,
         }
     }
@@ -231,7 +231,7 @@ impl Game {
         // can't always return self.landed_rows[0].len(), because this is called during resizing
         // TODO: clean this up
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 self.get_width_per_player().unwrap() * self.players.len()
             }
             Mode::Bottle => BOTTLE_OUTER_WIDTH * self.players.len() - 1,
@@ -241,8 +241,8 @@ impl Game {
 
     pub fn get_height(&self) -> usize {
         match self.mode {
-            // Adventure mode has extra rows above and below the visible area
-            Mode::Adventure => 21,
+            // Scroll mode has extra rows above and below the visible area
+            Mode::Scroll => 21,
             _ => self.landed_rows.len(),
         }
     }
@@ -250,7 +250,7 @@ impl Game {
     // Where is world coordinate (0,0) in the landed_rows array?
     fn get_center_offset(&self) -> (i16, i16) {
         match self.mode {
-            Mode::Traditional | Mode::Bottle | Mode::Adventure => (0, 0),
+            Mode::Traditional | Mode::Bottle | Mode::Scroll => (0, 0),
             Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
         }
     }
@@ -258,7 +258,7 @@ impl Game {
     // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
     pub fn get_bounds_in_player_coords(&self) -> (i32, i32, i32, i32) {
         match self.mode {
-            Mode::Traditional | Mode::Bottle | Mode::Adventure => {
+            Mode::Traditional | Mode::Bottle | Mode::Scroll => {
                 (0, self.get_width() as i32, 0, self.get_height() as i32)
             }
             Mode::Ring => {
@@ -270,11 +270,11 @@ impl Game {
 
     fn update_spawn_points(&self) {
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 let w = self.get_width_per_player().unwrap() as i32;
                 for (player_idx, player) in self.players.iter().enumerate() {
                     let i = player_idx as i32;
-                    // This works in adventure mode because spawn points are in player coordinates
+                    // This works in scroll mode because spawn points are in player coordinates
                     player.borrow_mut().spawn_point = ((i * w) + (w / 2), 0);
                 }
             }
@@ -294,7 +294,7 @@ impl Game {
         assert!(
             self.mode == Mode::Traditional
                 || self.mode == Mode::Bottle
-                || self.mode == Mode::Adventure
+                || self.mode == Mode::Scroll
         );
 
         let right = left + width;
@@ -333,11 +333,11 @@ impl Game {
     }
 
     pub fn get_scroll_count(&self) -> usize {
-        self.adventure_data.as_ref().unwrap().scroll_count
+        self.scroll_data.as_ref().unwrap().scroll_count
     }
 
     fn generate_rows(&mut self) {
-        if self.mode != Mode::Adventure {
+        if self.mode != Mode::Scroll {
             return;
         }
 
@@ -350,7 +350,7 @@ impl Game {
             .chain([self.get_height() as i32].into_iter())
             .max()
             .unwrap();
-        let min_count = biggest_y_used + (ADVENTURE_EXTRA_ROWS_BOTTOM as i32);
+        let min_count = biggest_y_used + (SCROLL_MODE_EXTRA_ROWS_BOTTOM as i32);
 
         while (self.landed_rows.len() as i32) < min_count {
             let y = self.get_scroll_count() + self.landed_rows.len();
@@ -358,7 +358,7 @@ impl Game {
                 false // Start with most of the playing area empty
             } else if y == self.get_height() - 1 {
                 true // But with one pre-filled row at the bottom
-            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill == 0 {
+            } else if self.scroll_data.as_ref().unwrap().rows_since_prefill == 0 {
                 /*
                 Previous row was prefilled. Add another prefilled row with probability p.
                 This way, expected value of number of rows added is
@@ -383,8 +383,8 @@ impl Game {
                 let expected_value_of_prefilled_count = 1.5 + s / 5000.0;
                 let p = 1.0 - (1.0 / expected_value_of_prefilled_count).sqrt();
                 rand::thread_rng().gen_bool(p)
-            } else if self.adventure_data.as_ref().unwrap().rows_since_prefill
-                == ADVENTURE_BLANKS_BETWEEN_PRE_FILLED_ROWS
+            } else if self.scroll_data.as_ref().unwrap().rows_since_prefill
+                == SCROLL_MODE_BLANKS_BETWEEN_PRE_FILLED_ROWS
             {
                 true
             } else {
@@ -392,9 +392,9 @@ impl Game {
             };
 
             if prefill {
-                self.adventure_data.as_mut().unwrap().rows_since_prefill = 0;
+                self.scroll_data.as_mut().unwrap().rows_since_prefill = 0;
             } else {
-                self.adventure_data.as_mut().unwrap().rows_since_prefill += 1;
+                self.scroll_data.as_mut().unwrap().rows_since_prefill += 1;
             }
 
             if prefill {
@@ -415,7 +415,7 @@ impl Game {
 
         let player_idx = self.players.len();
         let down_direction = match self.mode {
-            Mode::Traditional | Mode::Bottle | Mode::Adventure => (0, 1),
+            Mode::Traditional | Mode::Bottle | Mode::Scroll => (0, 1),
             Mode::Ring => {
                 /*
                 prefer opposite directions of existing players
@@ -477,7 +477,7 @@ impl Game {
                 }
             }
             Mode::Ring => self.clear_playing_area(player_idx),
-            Mode::Adventure => {
+            Mode::Scroll => {
                 if player_idx == 0 {
                     // First player
                     self.generate_rows();
@@ -502,7 +502,7 @@ impl Game {
         let i = i.unwrap();
 
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 let slice_x = self.get_width_per_player().unwrap() * i;
                 let old_width = self.get_width();
                 self.players.remove(i);
@@ -568,7 +568,7 @@ impl Game {
                     }
                 }
             }
-            Mode::Adventure => {
+            Mode::Scroll => {
                 // Same as traditional, but do not add score here
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
@@ -636,7 +636,7 @@ impl Game {
 
     pub fn remove_full_rows(&mut self, full: &[WorldPoint]) {
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 for y in 0..self.landed_rows.len() {
                     if full.contains(&(0, y as i16)) {
                         self.landed_rows[..(y + 1)].rotate_right(1);
@@ -734,7 +734,7 @@ impl Game {
     fn is_valid_falling_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
-            Mode::Traditional | Mode::Bottle | Mode::Adventure => 0,
+            Mode::Traditional | Mode::Bottle | Mode::Scroll => 0,
             Mode::Ring => -(RING_OUTER_RADIUS as i32),
         };
         if y < top_y {
@@ -747,9 +747,9 @@ impl Game {
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
         let (x, y) = point;
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 let w = self.get_width() as i16;
-                let h = self.landed_rows.len() as i16; // can be below view in adventure mode
+                let h = self.landed_rows.len() as i16; // can be below view in scroll mode
                 (0..w).contains(&x) && (0..h).contains(&y)
             }
             Mode::Bottle => {
@@ -1017,7 +1017,7 @@ impl Game {
             }
         }
 
-        if self.mode == Mode::Adventure {
+        if self.mode == Mode::Scroll {
             // Keep highest moving block visible
             let smallest_center_y = self
                 .players
@@ -1029,7 +1029,7 @@ impl Game {
                 .min()
                 .unwrap_or(-1);
 
-            if smallest_center_y > (ADVENTURE_BLOCK_MAX_SCREEN_Y as i32) {
+            if smallest_center_y > (SCROLL_MODE_BLOCK_MAX_SCREEN_Y as i32) {
                 self.scroll_down();
                 need_render = true;
             }
@@ -1039,8 +1039,8 @@ impl Game {
     }
 
     fn scroll_down(&mut self) {
-        assert!(self.mode == Mode::Adventure);
-        self.adventure_data.as_mut().unwrap().scroll_count += 1;
+        assert!(self.mode == Mode::Scroll);
+        self.scroll_data.as_mut().unwrap().scroll_count += 1;
         for player in &mut self.players {
             if let BlockOrTimer::Block(b) = &mut player.borrow_mut().block_or_timer {
                 b.center.1 -= 1;
@@ -1049,7 +1049,7 @@ impl Game {
 
         self.landed_rows.remove(0);
         self.generate_rows();
-        for row in &mut self.landed_rows[..ADVENTURE_ROWS_BLANKED_ON_SCROLL] {
+        for row in &mut self.landed_rows[..SCROLL_MODE_ROWS_BLANKED_ON_SCROLL] {
             *row = vec![None; row.len()];
         }
         self.add_score(10, true);
@@ -1400,7 +1400,7 @@ impl Game {
 
     fn clear_playing_area(&mut self, player_idx: usize) {
         match self.mode {
-            Mode::Traditional | Mode::Adventure => {
+            Mode::Traditional | Mode::Scroll => {
                 let w = self.get_width_per_player().unwrap();
                 let h = self.get_height();
                 let left = w * player_idx;

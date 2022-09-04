@@ -28,7 +28,7 @@ fn mode_to_string(mode: Mode) -> &'static str {
         Mode::Traditional => "traditional",
         Mode::Bottle => "bottle",
         Mode::Ring => "ring",
-        Mode::Adventure => "adventure",
+        Mode::Scroll => "scroll",
     }
 }
 
