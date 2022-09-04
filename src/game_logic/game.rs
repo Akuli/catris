@@ -146,11 +146,11 @@ In that case, the map will be generated enough for the lowest square of that blo
 */
 const SCROLL_MODE_EXTRA_ROWS_BOTTOM: usize = 5;
 
-// Various scroll mode parameters to tweak.
-// Please try to keep them all here in one place.
+// These parameters affect gameplay in scroll mode
 pub const SCROLL_MODE_ROWS_BLANKED_ON_SCROLL: usize = 10;
 const SCROLL_MODE_BLOCK_MAX_SCREEN_Y: usize = 14;
 const SCROLL_MODE_BLANKS_BETWEEN_PRE_FILLED_ROWS: usize = 3;
+const SCROLL_MODE_FIRST_PREFILLED_ROW_FROM_BOTTOM_OF_VIEW: usize = 2;
 
 struct ScrollModeData {
     scroll_count: usize,
@@ -354,10 +354,13 @@ impl Game {
 
         while (self.landed_rows.len() as i32) < min_count {
             let y = self.get_scroll_count() + self.landed_rows.len();
-            let prefill = if y < self.get_height() - 1 {
+            let first_prefill_y =
+                self.get_height() - SCROLL_MODE_FIRST_PREFILLED_ROW_FROM_BOTTOM_OF_VIEW;
+
+            let prefill = if y < first_prefill_y {
                 false // Start with most of the playing area empty
-            } else if y == self.get_height() - 1 {
-                true // But with one pre-filled row at the bottom
+            } else if y == first_prefill_y {
+                true // Add the first pre-filled row here
             } else if self.scroll_data.as_ref().unwrap().rows_since_prefill == 0 {
                 /*
                 Previous row was prefilled. Add another prefilled row with probability p.

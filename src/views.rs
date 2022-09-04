@@ -54,7 +54,7 @@ async fn prompt<F>(
 where
     F: FnMut(&str, &mut Client) -> Option<String>,
 {
-    let mut error = Some("".to_string());
+    let mut error: Option<String> = None;
     let mut current_text = "".to_string();
     let mut last_enter_press: Option<Instant> = None;
 
@@ -69,7 +69,7 @@ where
             render_data.cursor_pos = Some((x, 10));
             render_data.buffer.add_text_with_color(
                 2,
-                13,
+                12,
                 &error.clone().unwrap_or_default(),
                 Color::RED_FOREGROUND,
             );
