@@ -1,0 +1,10 @@
+https://en.wikipedia.org/wiki/VT52#Escape_sequences
+echo -e '\x1bHXXX'
+
+
+how to put X to top right corner:
+
+	>>> chr(32)
+	' '
+
+	$ echo -e '\x1bY  X'
