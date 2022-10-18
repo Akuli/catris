@@ -23,11 +23,10 @@ by sending special escape sequences that terminals respond to automatically.
 Currently [ANSI-compatible terminals](https://en.wikipedia.org/wiki/ANSI_escape_code)
 and [VT52-compatible terminals](https://en.wikipedia.org/wiki/VT52) are supported.
 
-The javascript code in `web-ui/` behaves like an ANSI-compatible terminal,
-so it interprets ANSI codes.
-This means that the javascript code must parse ANSI escape sequences,
-but this also simplifies the rust code
-because it needs to use ANSI codes with raw TCP connections anyway.
+The javascript code in `web-ui/` behaves like an ANSI-compatible terminal.
+This makes the rust code simpler and the javascript code more complicated,
+which is good because the javascript code is very simple and short
+compared to the rust program.
 
 When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
 On `catris.net`, it instead connects to port 443 (the default https port),
