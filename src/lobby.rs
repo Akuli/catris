@@ -60,10 +60,6 @@ impl Lobby {
         self.clients.len() == MAX_CLIENTS_PER_LOBBY
     }
 
-    pub fn game_is_full(&self, mode: Mode) -> bool {
-        self.get_player_count(mode) == mode.max_players()
-    }
-
     pub fn mark_changed(&self) {
         self.changed_sender.send(()).unwrap();
     }
@@ -142,11 +138,6 @@ impl Lobby {
         if last_player_removed {
             self.game_wrappers.remove(&mode);
         }
-        self.mark_changed();
-    }
-
-    pub fn remove_game(&mut self, mode: Mode) {
-        self.game_wrappers.remove(&mode);
         self.mark_changed();
     }
 }
