@@ -1,5 +1,6 @@
-use crate::ansi::KeyPress;
 use crate::connection::Receiver;
+use crate::escapes::KeyPress;
+use crate::escapes::TerminalType;
 use crate::lobby;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;
@@ -13,7 +14,7 @@ use std::sync::Mutex;
 use tokio::sync::Notify;
 
 #[cfg(test)]
-use crate::ansi::Color;
+use crate::escapes::Color;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 #[derive(Copy, Clone)]
@@ -36,11 +37,11 @@ pub struct Client {
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
 impl Client {
-    pub fn new(id: u64, receiver: Receiver) -> Client {
+    pub fn new(id: u64, receiver: Receiver, terminal_type: TerminalType) -> Client {
         Client {
             id,
             render_data: Arc::new(Mutex::new(RenderData {
-                buffer: RenderBuffer::new(),
+                buffer: RenderBuffer::new(terminal_type),
                 cursor_pos: None,
                 changed: Arc::new(Notify::new()),
                 force_redraw: false,

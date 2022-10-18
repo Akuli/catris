@@ -5,11 +5,15 @@ use crate::client::Client;
 use crate::client::ClientLogger;
 use crate::connection::get_websocket_proxy_ip;
 use crate::connection::initialize_connection;
+use crate::connection::Receiver;
 use crate::connection::Sender;
+use crate::escapes::KeyPress;
+use crate::escapes::TerminalType;
 use crate::ip_tracker::IpTracker;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
 use std::io;
+use std::io::ErrorKind;
 use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -21,9 +25,9 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use weak_table::WeakValueHashMap;
 
-mod ansi;
 mod client;
 mod connection;
+mod escapes;
 mod game_logic;
 mod game_wrapper;
 mod high_scores;
@@ -66,9 +70,10 @@ async fn handle_receiving(
 async fn handle_sending(
     sender: &mut Sender,
     render_data: Arc<Mutex<render::RenderData>>,
+    terminal_type: TerminalType,
 ) -> Result<(), io::Error> {
-    let mut last_render = RenderBuffer::new();
-    let mut current_render = RenderBuffer::new(); // Please get rid of this if copying turns out to be slow
+    let mut last_render = RenderBuffer::new(terminal_type);
+    let mut current_render = RenderBuffer::new(terminal_type); // Please get rid of this if copying turns out to be slow
     let change_notify = render_data.lock().unwrap().changed.clone();
 
     loop {
@@ -87,16 +92,112 @@ async fn handle_sending(
         // In the beginning of a connection, the buffer isn't ready yet
         if current_render.width != 0 && current_render.height != 0 {
             let to_send =
-                current_render.get_updates_as_ansi_codes(&last_render, cursor_pos, force_redraw);
+                current_render.get_updates_as_escape_codes(&last_render, cursor_pos, force_redraw);
             sender.send(to_send.as_bytes()).await?;
             current_render.copy_into(&mut last_render);
         }
     }
 }
 
+pub async fn detect_terminal_type(
+    sender: &mut Sender,
+    receiver: &mut Receiver,
+) -> Result<TerminalType, io::Error> {
+    let message = concat!(
+        "\r\n",
+        "Detecting the type of your terminal. If this fails, you probably\r\n",
+        "forgot to run \"stty raw\" before connecting (e.g. Linux and Mac).\r\n",
+        "If you have trouble connecting, please create an issue at:\r\n",
+        "\r\n",
+        "    https://github.com/Akuli/catris/ \r\n",
+        "\r\n",
+        "Currently ANSI terminals and VT52 terminals are supported.\r\n",
+        "\r\n",
+        // Send DSR (Device Status Report, aka query cursor location) for ansi terminals.
+        // Send ident (aka identify terminal type) for VT52 terminals.
+        // Both types of terminals respond without user input.
+        "\x1b[6n\x1bZ",
+    );
+    sender.send(message.as_bytes()).await?;
+
+    if matches!(
+        receiver.receive_key_press().await?,
+        KeyPress::Character('\x1b')
+    ) {
+        match receiver.receive_key_press().await? {
+            KeyPress::Character('/') => {
+                // VT5* terminal
+                if matches!(
+                    receiver.receive_key_press().await?,
+                    KeyPress::Character('K') | KeyPress::Character('L') | KeyPress::Character('Z')
+                ) {
+                    return Ok(TerminalType::VT52);
+                }
+            }
+            KeyPress::Character('[') => {
+                // ANSI terminal. Response to DSR ends with letter R.
+                // Length limit so client can't send a lot of garbage and consume server CPU
+                let mut n = 0;
+                while n < 10 {
+                    if matches!(
+                        receiver.receive_key_press().await?,
+                        KeyPress::Character('R')
+                    ) {
+                        return Ok(TerminalType::ANSI);
+                    }
+                    n += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    return Err(io::Error::new(
+        ErrorKind::ConnectionAborted,
+        "unable to detect terminal type",
+    ));
+}
+
+async fn handle_connection_until_error(
+    logger: ClientLogger,
+    socket: TcpStream,
+    source_ip: IpAddr,
+    lobbies: lobby::Lobbies,
+    used_names: Arc<Mutex<HashSet<String>>>,
+    ip_tracker: Arc<Mutex<IpTracker>>,
+    is_websocket: bool,
+) -> Result<(), io::Error> {
+    let (mut sender, mut receiver, _decrementer) =
+        initialize_connection(ip_tracker, logger, socket, source_ip, is_websocket).await?;
+
+    let terminal_type = timeout(
+        Duration::from_millis(1000),
+        detect_terminal_type(&mut sender, &mut receiver),
+    )
+    .await??;
+    logger.log(&format!("Terminal type detected: {:?}", terminal_type));
+
+    let client = Client::new(logger.client_id, receiver, terminal_type);
+    let render_data = client.render_data.clone();
+
+    let result = tokio::select! {
+        res = handle_receiving(client, lobbies, used_names) => res,
+        res = handle_sending(&mut sender, render_data, terminal_type) => res,
+    };
+
+    // Try to leave the terminal in a sane state
+    let cleanup = terminal_type.show_cursor().to_string()
+        + terminal_type.move_cursor_to_leftmost_column()
+        + terminal_type.clear_from_cursor_to_end_of_screen();
+    _ = timeout(Duration::from_millis(500), sender.send(cleanup.as_bytes())).await??;
+
+    assert!(result.is_err());
+    result
+}
+
 static CLIENT_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-pub async fn handle_connection(
+async fn handle_connection(
     socket: TcpStream,
     source_ip: IpAddr,
     lobbies: lobby::Lobbies,
@@ -115,31 +216,17 @@ pub async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
-    let error: io::Error =
-        match initialize_connection(ip_tracker, logger, socket, source_ip, is_websocket).await {
-            Ok((mut sender, receiver, _decrementer)) => {
-                let client = Client::new(client_id, receiver);
-                let render_data = client.render_data.clone();
-                let error = tokio::select! {
-                    res = handle_receiving(client, lobbies, used_names) => res.unwrap_err(),
-                    res = handle_sending(&mut sender, render_data) => res.unwrap_err(),
-                };
-
-                // Try to leave the terminal in a sane state
-                let cleanup_ansi_codes = ansi::SHOW_CURSOR.to_owned()
-                    + &ansi::move_cursor_horizontally(0)
-                    + ansi::CLEAR_FROM_CURSOR_TO_END_OF_SCREEN;
-                _ = timeout(
-                    Duration::from_millis(500),
-                    sender.send(cleanup_ansi_codes.as_bytes()),
-                )
-                .await;
-
-                error
-            }
-            Err(e) => e,
-        };
-
+    let error = handle_connection_until_error(
+        logger,
+        socket,
+        source_ip,
+        lobbies,
+        used_names,
+        ip_tracker,
+        is_websocket,
+    )
+    .await
+    .unwrap_err();
     logger.log(&format!("Disconnected: {}", error));
 }
 

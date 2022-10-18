@@ -185,6 +185,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    _sendCursorPosition() {
+      const row = this._cursorY + 1;
+      const col = this._cursorX + 1;
+      sendText(`\x1b[${row};${col}R`);
+    }
+
     _handleAnsiCode(ansiCode) {
       if (ansiCode === "\x1b[2J") {
         this._clear();
@@ -210,6 +216,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (colorInfo.bg) this.bgColor = colorInfo.bg;
       } else if (ansiCode == "\x1b[0m") {
         this._resetColors();
+      } else if (ansiCode == "\x1b[6n") {
+        this._sendCursorPosition();
       } else if (ansiCode.startsWith("\x1b[8;") && ansiCode.endsWith("t")) {
         const [height, width] = ansiCode.slice(4, -1).split(";").map(x => +x);
         this._resize(width, height);

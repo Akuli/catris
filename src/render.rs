@@ -1,9 +1,10 @@
-use crate::ansi;
-use crate::ansi::Color;
+use crate::escapes::Color;
+use crate::escapes::TerminalType;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
 pub struct RenderBuffer {
+    pub terminal_type: TerminalType,
     pub width: usize,
     pub height: usize,
     chars: Vec<Vec<char>>,
@@ -11,8 +12,9 @@ pub struct RenderBuffer {
 }
 
 impl RenderBuffer {
-    pub fn new() -> Self {
+    pub fn new(terminal_type: TerminalType) -> Self {
         Self {
+            terminal_type,
             width: 0,
             height: 0,
             chars: vec![],
@@ -141,25 +143,25 @@ impl RenderBuffer {
         let mut current_color = Color::DEFAULT;
         let mut result = "".to_string();
 
-        result.push_str(&ansi::resize_terminal(self.width, self.height));
-        result.push_str(ansi::CLEAR_SCREEN);
+        result.push_str(&self.terminal_type.resize(self.width, self.height));
+        result.push_str(self.terminal_type.clear());
         for y in 0..self.height {
-            result.push_str(&ansi::move_cursor(0, y));
+            result.push_str(&self.terminal_type.move_cursor(0, y));
             for x in 0..self.width {
-                if self.colors[y][x] != current_color {
+                if self.colors[y][x] != current_color && self.terminal_type.has_color() {
                     current_color = self.colors[y][x];
-                    result.push_str(&current_color.escape_sequence());
+                    result.push_str(&self.terminal_type.format_color(current_color));
                 }
                 result.push(self.chars[y][x]);
             }
         }
         if current_color != Color::DEFAULT {
-            result.push_str(ansi::RESET_COLORS);
+            result.push_str(self.terminal_type.reset_colors());
         }
         result
     }
 
-    fn get_updates_for_what_changed(
+    fn get_updates_for_changes_only(
         &self,
         old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
@@ -194,28 +196,28 @@ impl RenderBuffer {
                     cursor_at_xy = false;
                 } else {
                     if !cursor_at_xy {
-                        result.push_str(&ansi::move_cursor(x, y));
+                        result.push_str(&self.terminal_type.move_cursor(x, y));
                         cursor_at_xy = true;
                     }
-                    if self.colors[y][x] != current_color {
-                        result.push_str(&self.colors[y][x].escape_sequence());
+                    if self.colors[y][x] != current_color && self.terminal_type.has_color() {
+                        result.push_str(&self.terminal_type.format_color(self.colors[y][x]));
                         current_color = self.colors[y][x];
                     }
                     result.push(self.chars[y][x]);
                 }
             }
             if current_color != Color::DEFAULT {
-                result.push_str(ansi::RESET_COLORS);
+                result.push_str(&self.terminal_type.reset_colors());
             }
             if !cursor_at_xy {
-                result.push_str(&ansi::move_cursor(end, y));
+                result.push_str(&self.terminal_type.move_cursor(end, y));
             }
-            result.push_str(ansi::CLEAR_TO_END_OF_LINE);
+            result.push_str(&self.terminal_type.clear_from_cursor_to_end_of_line());
         }
         result
     }
 
-    pub fn get_updates_as_ansi_codes(
+    pub fn get_updates_as_escape_codes(
         &self,
         old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
@@ -224,17 +226,17 @@ impl RenderBuffer {
         let mut result = if self.width != old.width || self.height != old.height || force_redraw {
             self.clear_and_render_entire_screen()
         } else {
-            self.get_updates_for_what_changed(old, cursor_pos)
+            self.get_updates_for_changes_only(old, cursor_pos)
         };
 
         match cursor_pos {
             None => {
-                result.push_str(&ansi::move_cursor(0, self.height - 1));
-                result.push_str(ansi::HIDE_CURSOR);
+                result.push_str(&self.terminal_type.move_cursor(0, self.height - 1));
+                result.push_str(self.terminal_type.hide_cursor());
             }
             Some((x, y)) => {
-                result.push_str(&ansi::move_cursor(x, y));
-                result.push_str(ansi::SHOW_CURSOR);
+                result.push_str(&self.terminal_type.move_cursor(x, y));
+                result.push_str(self.terminal_type.show_cursor());
             }
         }
 

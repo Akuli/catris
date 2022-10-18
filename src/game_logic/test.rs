@@ -1,6 +1,7 @@
-use crate::ansi::Color;
-use crate::ansi::KeyPress;
 use crate::client::ClientLogger;
+use crate::escapes::Color;
+use crate::escapes::KeyPress;
+use crate::escapes::TerminalType;
 use crate::game_logic::blocks::BlockType;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::blocks::Shape;
@@ -20,7 +21,7 @@ fn square_content_to_string(
     content: SquareContent,
     falling_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
 ) -> String {
-    let mut buffer = RenderBuffer::new();
+    let mut buffer = RenderBuffer::new(TerminalType::ANSI);
     buffer.resize(80, 24); // smallest size allowed
     content.render(&mut buffer, 0, 0, falling_block_data, (0, 1));
     let chars = [buffer.get_char(0, 0), buffer.get_char(1, 0)];

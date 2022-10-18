@@ -1,5 +1,5 @@
-use crate::ansi::parse_key_press;
-use crate::ansi::KeyPress;
+use crate::escapes::parse_key_press;
+use crate::escapes::KeyPress;
 use crate::ip_tracker::ForgetClientOnDrop;
 use crate::ip_tracker::IpTracker;
 use crate::ClientLogger;
