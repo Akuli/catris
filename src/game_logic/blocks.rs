@@ -259,8 +259,18 @@ impl SquareContent {
             Self::Normal(chars_and_colors) => {
                 let (char1, color1) = chars_and_colors[0];
                 let (char2, color2) = chars_and_colors[1];
-                buffer.set_char_with_color(x, y, char1, color1);
-                buffer.set_char_with_color(x + 1, y, char2, color2);
+                if char1 == ' ' && char2 == ' ' && !buffer.terminal_type.has_color() {
+                    // Display blocks with "()" instead of colored spaces.
+                    //
+                    // Blocks cannot be created with different texts, because the same
+                    // block can be rendered on different types of terminals that various
+                    // players have.
+                    buffer.set_char(x, y, '(');
+                    buffer.set_char(x+1, y, ')');
+                } else {
+                    buffer.set_char_with_color(x, y, char1, color1);
+                    buffer.set_char_with_color(x + 1, y, char2, color2);
+                }
             }
             Self::Bomb { timer, .. } => {
                 let color = self.get_trace_color();

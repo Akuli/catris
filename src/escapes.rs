@@ -157,7 +157,18 @@ pub fn parse_key_press(data: &[u8]) -> Option<(KeyPress, usize)> {
         return None;
     }
 
-    // Arrow keys are 3 bytes each
+    // VT52 arrow keys: 2 bytes each
+    if data.len() >= 2 {
+        match &data[..2] {
+            b"\x1bA" => return Some((KeyPress::Up, 2)),
+            b"\x1bB" => return Some((KeyPress::Down, 2)),
+            b"\x1bC" => return Some((KeyPress::Right, 2)),
+            b"\x1bD" => return Some((KeyPress::Left, 2)),
+            _ => {}
+        }
+    }
+
+    // ANSI arrow keys: 3 bytes each
     if data.len() >= 3 {
         match &data[..3] {
             b"\x1b[A" => return Some((KeyPress::Up, 3)),
@@ -207,7 +218,11 @@ mod tests {
 
     #[test]
     fn test_parse_key_press() {
-        // incomplete ansi code
+        // arrow keys
+        assert_eq!(parse_key_press(b"\x1bBasd"), Some((KeyPress::Down, 2)));
+        assert_eq!(parse_key_press(b"\x1b[Basd"), Some((KeyPress::Down, 3)));
+
+        // arrow keys: incomplete/bad
         assert_eq!(parse_key_press(b""), None);
         assert_eq!(parse_key_press(b"\x1b"), None);
         assert_eq!(parse_key_press(b"\x1b["), None);

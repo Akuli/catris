@@ -324,15 +324,20 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             let buffer_y = (offset_y + y) as usize;
 
             if let Some(flash_bg) = game.flashing_points.get(&world_point) {
-                buffer.add_text_with_color(
-                    buffer_x,
-                    buffer_y,
-                    "  ",
-                    Color {
-                        fg: 0,
-                        bg: *flash_bg,
-                    },
-                );
+                if *flash_bg != 0 && !buffer.terminal_type.has_color() {
+                    // Use XX instead of colored spaces when colors are not available
+                    buffer.add_text(buffer_x, buffer_y, "XX");
+                } else {
+                    buffer.add_text_with_color(
+                        buffer_x,
+                        buffer_y,
+                        "  ",
+                        Color {
+                            fg: 0,
+                            bg: *flash_bg,
+                        },
+                    );
+                }
             } else if let Some((content, relative_coords, owner_idx)) =
                 game.get_falling_square(world_point)
             {
