@@ -229,10 +229,10 @@ impl Menu {
                     } else {
                         // Highlight selected menu item with ascii characters.
                         // The only option on VT52 terminals.
-                        buffer.add_centered_text(top_y + i, &format!("---> {:^27} <---", text));
+                        buffer.add_centered_text(top_y + i, &format!("---> {} <---", text));
                     }
                 } else {
-                    buffer.add_centered_text(top_y + i, &format!("{:^35}", text));
+                    buffer.add_centered_text(top_y + i, text);
                 }
             }
         }
