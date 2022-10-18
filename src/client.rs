@@ -14,7 +14,7 @@ use std::sync::Mutex;
 use tokio::sync::Notify;
 
 #[cfg(test)]
-use crate::ansi::Color;
+use crate::escapes::Color;
 
 // Even though you can create only one Client, it can be associated with multiple ClientLoggers
 #[derive(Copy, Clone)]
