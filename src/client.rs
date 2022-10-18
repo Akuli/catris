@@ -1,6 +1,6 @@
-use crate::escapes::TerminalType;
 use crate::connection::Receiver;
 use crate::escapes::KeyPress;
+use crate::escapes::TerminalType;
 use crate::lobby;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;

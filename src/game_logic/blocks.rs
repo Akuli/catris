@@ -266,7 +266,7 @@ impl SquareContent {
                     // block can be rendered on different types of terminals that various
                     // players have.
                     buffer.set_char(x, y, '(');
-                    buffer.set_char(x+1, y, ')');
+                    buffer.set_char(x + 1, y, ')');
                 } else {
                     buffer.set_char_with_color(x, y, char1, color1);
                     buffer.set_char_with_color(x + 1, y, char2, color2);
