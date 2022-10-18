@@ -146,7 +146,7 @@ You can then open `http://localhost:8000/` in your web browser.
 Other commands (these also run on GitHub Actions):
 - Formatter: `cargo fmt`
 - Linter: `cargo clippy`
-- VT52 terminal emulator: `xterm -ti vt52 -tn vt52`
+- Using `xterm` as a VT52 terminal emulator: `xterm -ti vt52 -tn vt52`
 
 
 ## Deploying
