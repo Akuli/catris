@@ -1,15 +1,42 @@
 use std::fmt::Write;
 
-pub const CLEAR_SCREEN: &str = "\x1b[2J";
-pub const CLEAR_TO_END_OF_LINE: &str = "\x1b[0K";
+
+pub enum TerminalMode { VT52, ANSI }
+impl TerminalMode {
+    pub fn resize(&self, width: usize, height: usize) -> String {
+        match self {
+            ANSI => format!("\x1b[8;{};{}t", height, width),            // https://apple.stackexchange.com/a/47841
+            VT52 => "".to_string(),
+        }
+    }
+
+    // Location of cursor after clearing depends on the terminal mode.
+    pub fn clear(&self) -> &str {
+        match self {
+            ANSI => "\x1b[2J", // clear without moving cursor
+            VT52 => "\x1bH\x1bJ",  // move cursor to top left + clear to end of screen
+        }
+    }
+
+    pub fn clear_from_cursor_to_end_of_line(&self) -> &str {
+        match self {
+            ANSI => "\x1b[0K",
+            VT52 => "\x1bK"
+        }
+    }
+
+    pub fn clear_from_cursor_to_end_of_screen(&self) -> &str {
+        
+    }
+}
+
+
 pub const CLEAR_FROM_CURSOR_TO_END_OF_SCREEN: &str = "\x1b[0J";
 pub const RESET_COLORS: &str = "\x1b[0m";
 pub const SHOW_CURSOR: &str = "\x1b[?25h";
 pub const HIDE_CURSOR: &str = "\x1b[?25l";
 
 pub fn resize_terminal(width: usize, height: usize) -> String {
-    // https://apple.stackexchange.com/a/47841
-    format!("\x1b[8;{};{}t", height, width)
 }
 
 pub fn move_cursor(x: usize, y: usize) -> String {
