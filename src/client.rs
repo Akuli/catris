@@ -1,5 +1,5 @@
-use crate::ansi::KeyPress;
 use crate::connection::Receiver;
+use crate::escapes::KeyPress;
 use crate::lobby;
 use crate::lobby::Lobbies;
 use crate::lobby::Lobby;

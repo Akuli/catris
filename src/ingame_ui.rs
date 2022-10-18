@@ -1,5 +1,5 @@
-use crate::ansi::Color;
 use crate::client::Client;
+use crate::escapes::Color;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;

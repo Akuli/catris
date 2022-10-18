@@ -1,4 +1,4 @@
-use crate::ansi::Color;
+use crate::escapes::Color;
 use crate::game_logic::BlockRelativeCoords;
 use crate::game_logic::PlayerPoint;
 use crate::render::RenderBuffer;

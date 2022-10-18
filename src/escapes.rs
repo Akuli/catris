@@ -1,50 +1,104 @@
 use std::fmt::Write;
 
+#[derive(Debug, Copy, Clone)]
+pub enum TerminalType {
+    ANSI, // Modern terminals https://en.wikipedia.org/wiki/ANSI_escape_code
+    VT52, // Older devices https://en.wikipedia.org/wiki/VT52
+}
 
-pub enum TerminalMode { VT52, ANSI }
-impl TerminalMode {
-    pub fn resize(&self, width: usize, height: usize) -> String {
-        match self {
-            ANSI => format!("\x1b[8;{};{}t", height, width),            // https://apple.stackexchange.com/a/47841
-            VT52 => "".to_string(),
-        }
-    }
-
+impl TerminalType {
     // Location of cursor after clearing depends on the terminal mode.
     pub fn clear(&self) -> &str {
         match self {
-            ANSI => "\x1b[2J", // clear without moving cursor
-            VT52 => "\x1bH\x1bJ",  // move cursor to top left + clear to end of screen
+            Self::ANSI => "\x1b[2J",    // clear without moving cursor
+            Self::VT52 => "\x1bH\x1bJ", // move cursor to top left + clear to end of screen
         }
     }
 
     pub fn clear_from_cursor_to_end_of_line(&self) -> &str {
         match self {
-            ANSI => "\x1b[0K",
-            VT52 => "\x1bK"
+            Self::ANSI => "\x1b[0K",
+            Self::VT52 => "\x1bK",
         }
     }
 
     pub fn clear_from_cursor_to_end_of_screen(&self) -> &str {
-        
+        match self {
+            Self::ANSI => "\x1b[0J",
+            Self::VT52 => "\x1bJ",
+        }
     }
-}
 
+    pub fn show_cursor(&self) -> &str {
+        match self {
+            Self::ANSI => "\x1b[?25h",
+            Self::VT52 => "\x1be", // extension, not all terminals support
+        }
+    }
 
-pub const CLEAR_FROM_CURSOR_TO_END_OF_SCREEN: &str = "\x1b[0J";
-pub const RESET_COLORS: &str = "\x1b[0m";
-pub const SHOW_CURSOR: &str = "\x1b[?25h";
-pub const HIDE_CURSOR: &str = "\x1b[?25l";
+    pub fn hide_cursor(&self) -> &str {
+        match self {
+            Self::ANSI => "\x1b[?25l",
+            Self::VT52 => "\x1bf", // extension, not all terminals support
+        }
+    }
 
-pub fn resize_terminal(width: usize, height: usize) -> String {
-}
+    pub fn resize(&self, width: usize, height: usize) -> String {
+        match self {
+            Self::ANSI => format!("\x1b[8;{};{}t", height, width), // https://apple.stackexchange.com/a/47841
+            Self::VT52 => "".to_string(),
+        }
+    }
 
-pub fn move_cursor(x: usize, y: usize) -> String {
-    format!("\x1b[{};{}H", y + 1, x + 1)
-}
+    pub fn move_cursor(&self, x: usize, y: usize) -> String {
+        match self {
+            Self::ANSI => format!("\x1b[{};{}H", y + 1, x + 1),
+            Self::VT52 => {
+                // Top left is "\x1bY  " where space is ascii character 32.
+                // Other locations increment the ascii character values.
+                if let Some(x_char) = char::from_u32((x as u32) + 32) {
+                    if let Some(y_char) = char::from_u32((y as u32) + 32) {
+                        return format!("\x1bY{}{}", y_char, x_char);
+                    }
+                }
+                "".to_string()
+            }
+        }
+    }
 
-pub fn move_cursor_horizontally(x: usize) -> String {
-    format!("\x1b[{}G", x + 1)
+    pub fn move_cursor_to_leftmost_column(&self) -> &str {
+        "\r"
+    }
+
+    pub fn has_color(&self) -> bool {
+        match self {
+            Self::ANSI => true,
+            Self::VT52 => false,
+        }
+    }
+
+    pub fn reset_colors(&self) -> &str {
+        match self {
+            Self::ANSI => "\x1b[0m",
+            Self::VT52 => "", // no colors
+        }
+    }
+
+    pub fn format_color(&self, color: Color) -> String {
+        match self {
+            Self::ANSI => {
+                let mut result = self.reset_colors().to_string();
+                if color.fg != 0 {
+                    let _ = write!(result, "\x1b[1;{}m", color.fg);
+                }
+                if color.bg != 0 {
+                    let _ = write!(result, "\x1b[1;{}m", color.bg);
+                }
+                result
+            }
+            Self::VT52 => "".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -52,7 +106,6 @@ pub struct Color {
     pub fg: u8,
     pub bg: u8,
 }
-
 impl Color {
     pub const DEFAULT: Color = Color { fg: 0, bg: 0 };
     pub const BLACK_ON_WHITE: Color = Color { fg: 30, bg: 47 };
@@ -74,17 +127,6 @@ impl Color {
     pub const MAGENTA_BACKGROUND: Color = Color { fg: 0, bg: 45 };
     pub const CYAN_BACKGROUND: Color = Color { fg: 0, bg: 46 };
     pub const WHITE_BACKGROUND: Color = Color { fg: 0, bg: 47 };
-
-    pub fn escape_sequence(self) -> String {
-        let mut result = RESET_COLORS.to_string();
-        if self.fg != 0 {
-            let _ = write!(result, "\x1b[1;{}m", self.fg);
-        }
-        if self.bg != 0 {
-            let _ = write!(result, "\x1b[1;{}m", self.bg);
-        }
-        result
-    }
 }
 
 #[derive(Debug, PartialEq)]

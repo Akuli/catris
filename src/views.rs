@@ -1,6 +1,6 @@
-use crate::ansi::Color;
-use crate::ansi::KeyPress;
 use crate::client::Client;
+use crate::escapes::Color;
+use crate::escapes::KeyPress;
 use crate::game_logic::game::Mode;
 use crate::game_wrapper;
 use crate::game_wrapper::GameStatus;

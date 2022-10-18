@@ -18,10 +18,16 @@ I bought `catris.net` from namecheap and connected it to a Linode server that ha
 
 The rust program listens on two TCP ports,
 54321 for websocket connections and 12345 for plain TCP connections (e.g. netcat).
-Both connections use [ANSI escape codes](https://en.wikipedia.org/wiki/ANSI_escape_code).
-This means that the javascript code in `web-ui/` must interpret ANSI codes,
-but on the other hand it also makes the rust code simpler,
-because it needs to use ANSI codes for raw TCP connections anyway.
+When a client connects, the server auto-detects what kind of terminal is used
+by sending special escape sequences that terminals respond to automatically.
+Currently [ANSI-compatible terminals](https://en.wikipedia.org/wiki/ANSI_escape_code)
+and [VT52-compatible terminals](https://en.wikipedia.org/wiki/VT52) are supported.
+
+The javascript code in `web-ui/` behaves like an ANSI-compatible terminal,
+so it interprets ANSI codes.
+This means that the javascript code must parse ANSI escape sequences,
+but this also simplifies the rust code
+because it needs to use ANSI codes with raw TCP connections anyway.
 
 When running locally, the javascript code in `web-ui/` connects a websocket to port 54321.
 On `catris.net`, it instead connects to port 443 (the default https port),
