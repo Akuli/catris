@@ -139,31 +139,30 @@ impl RenderBuffer {
         }
     }
 
-    fn clear_and_render_entire_screen(&self, terminal_type: TerminalType) -> String {
+    fn clear_and_render_entire_screen(&self) -> String {
         let mut current_color = Color::DEFAULT;
         let mut result = "".to_string();
 
-        result.push_str(&terminal_type.resize(self.width, self.height));
-        result.push_str(terminal_type.clear());
+        result.push_str(&self.terminal_type.resize(self.width, self.height));
+        result.push_str(self.terminal_type.clear());
         for y in 0..self.height {
-            result.push_str(&terminal_type.move_cursor(0, y));
+            result.push_str(&self.terminal_type.move_cursor(0, y));
             for x in 0..self.width {
-                if self.colors[y][x] != current_color && terminal_type.has_color() {
+                if self.colors[y][x] != current_color && self.terminal_type.has_color() {
                     current_color = self.colors[y][x];
-                    result.push_str(&terminal_type.format_color(current_color));
+                    result.push_str(&self.terminal_type.format_color(current_color));
                 }
                 result.push(self.chars[y][x]);
             }
         }
         if current_color != Color::DEFAULT {
-            result.push_str(terminal_type.reset_colors());
+            result.push_str(self.terminal_type.reset_colors());
         }
         result
     }
 
     fn get_updates_for_changes_only(
         &self,
-        terminal_type: TerminalType,
         old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
     ) -> String {
@@ -197,48 +196,47 @@ impl RenderBuffer {
                     cursor_at_xy = false;
                 } else {
                     if !cursor_at_xy {
-                        result.push_str(&terminal_type.move_cursor(x, y));
+                        result.push_str(&self.terminal_type.move_cursor(x, y));
                         cursor_at_xy = true;
                     }
-                    if self.colors[y][x] != current_color && terminal_type.has_color() {
-                        result.push_str(&terminal_type.format_color(self.colors[y][x]));
+                    if self.colors[y][x] != current_color && self.terminal_type.has_color() {
+                        result.push_str(&self.terminal_type.format_color(self.colors[y][x]));
                         current_color = self.colors[y][x];
                     }
                     result.push(self.chars[y][x]);
                 }
             }
             if current_color != Color::DEFAULT {
-                result.push_str(&terminal_type.reset_colors());
+                result.push_str(&self.terminal_type.reset_colors());
             }
             if !cursor_at_xy {
-                result.push_str(&terminal_type.move_cursor(end, y));
+                result.push_str(&self.terminal_type.move_cursor(end, y));
             }
-            result.push_str(&terminal_type.clear_from_cursor_to_end_of_line());
+            result.push_str(&self.terminal_type.clear_from_cursor_to_end_of_line());
         }
         result
     }
 
     pub fn get_updates_as_escape_codes(
         &self,
-        terminal_type: TerminalType,
         old: &RenderBuffer,
         cursor_pos: Option<(usize, usize)>,
         force_redraw: bool,
     ) -> String {
         let mut result = if self.width != old.width || self.height != old.height || force_redraw {
-            self.clear_and_render_entire_screen(terminal_type)
+            self.clear_and_render_entire_screen()
         } else {
-            self.get_updates_for_changes_only(terminal_type, old, cursor_pos)
+            self.get_updates_for_changes_only(old, cursor_pos)
         };
 
         match cursor_pos {
             None => {
-                result.push_str(&terminal_type.move_cursor(0, self.height - 1));
-                result.push_str(terminal_type.hide_cursor());
+                result.push_str(&self.terminal_type.move_cursor(0, self.height - 1));
+                result.push_str(self.terminal_type.hide_cursor());
             }
             Some((x, y)) => {
-                result.push_str(&terminal_type.move_cursor(x, y));
-                result.push_str(terminal_type.show_cursor());
+                result.push_str(&self.terminal_type.move_cursor(x, y));
+                result.push_str(self.terminal_type.show_cursor());
             }
         }
 
