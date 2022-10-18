@@ -220,8 +220,6 @@ pub enum Sender {
     RawTcp {
         write_half: OwnedWriteHalf,
     },
-    #[allow(dead_code)]
-    Dummy {}, // for testing
 }
 impl Sender {
     pub async fn send(&mut self, data: &[u8]) -> Result<(), io::Error> {
