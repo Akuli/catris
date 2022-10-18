@@ -232,7 +232,7 @@ impl Menu {
                         buffer.add_centered_text(top_y + i, &format!("---> {:^27} <---", text));
                     }
                 } else {
-                    buffer.add_centered_text(top_y + i, &format!("{:^35}", text));
+                    buffer.add_centered_text(top_y + i, text);
                 }
             }
         }
