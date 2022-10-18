@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 pub struct RenderBuffer {
+    pub terminal_type: TerminalType,
     pub width: usize,
     pub height: usize,
     chars: Vec<Vec<char>>,
@@ -11,8 +12,9 @@ pub struct RenderBuffer {
 }
 
 impl RenderBuffer {
-    pub fn new() -> Self {
+    pub fn new(terminal_type: TerminalType) -> Self {
         Self {
+            terminal_type,
             width: 0,
             height: 0,
             chars: vec![],

@@ -1,19 +1,19 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
-use crate::connection::Receiver;
-use crate::connection::Sender;
-use std::io;
-use std::io::ErrorKind;
 use crate::client::Client;
 use crate::client::ClientLogger;
 use crate::connection::get_websocket_proxy_ip;
 use crate::connection::initialize_connection;
-use crate::escapes::TerminalType;
+use crate::connection::Receiver;
+use crate::connection::Sender;
 use crate::escapes::KeyPress;
+use crate::escapes::TerminalType;
 use crate::ip_tracker::IpTracker;
 use crate::render::RenderBuffer;
 use std::collections::HashSet;
+use std::io;
+use std::io::ErrorKind;
 use std::net::IpAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -72,8 +72,8 @@ async fn handle_sending(
     render_data: Arc<Mutex<render::RenderData>>,
     terminal_type: TerminalType,
 ) -> Result<(), io::Error> {
-    let mut last_render = RenderBuffer::new();
-    let mut current_render = RenderBuffer::new(); // Please get rid of this if copying turns out to be slow
+    let mut last_render = RenderBuffer::new(terminal_type);
+    let mut current_render = RenderBuffer::new(terminal_type); // Please get rid of this if copying turns out to be slow
     let change_notify = render_data.lock().unwrap().changed.clone();
 
     loop {
@@ -181,7 +181,7 @@ async fn handle_connection_until_error(
     .await??;
     logger.log(&format!("Terminal type detected: {:?}", terminal_type));
 
-    let client = Client::new(logger.client_id, receiver);
+    let client = Client::new(logger.client_id, receiver, terminal_type);
     let render_data = client.render_data.clone();
 
     let result = tokio::select! {

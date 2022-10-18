@@ -1,3 +1,4 @@
+use crate::escapes::TerminalType;
 use crate::connection::Receiver;
 use crate::escapes::KeyPress;
 use crate::lobby;
@@ -36,11 +37,11 @@ pub struct Client {
     remove_name_on_disconnect_data: Option<(String, Arc<Mutex<HashSet<String>>>)>,
 }
 impl Client {
-    pub fn new(id: u64, receiver: Receiver) -> Client {
+    pub fn new(id: u64, receiver: Receiver, terminal_type: TerminalType) -> Client {
         Client {
             id,
             render_data: Arc::new(Mutex::new(RenderData {
-                buffer: RenderBuffer::new(),
+                buffer: RenderBuffer::new(terminal_type),
                 cursor_pos: None,
                 changed: Arc::new(Notify::new()),
                 force_redraw: false,

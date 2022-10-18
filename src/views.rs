@@ -112,6 +112,8 @@ where
                     last_enter_press = Some(Instant::now());
                     error = enter_pressed_callback(current_text.trim(), client);
                     if error == None {
+                        // On VT52, the enter press tends to leave ^M visible after typing name
+                        client.render_data.lock().unwrap().force_redraw = true;
                         return Ok(());
                     }
                 }
@@ -217,15 +219,20 @@ impl Menu {
     fn render(&self, buffer: &mut RenderBuffer, top_y: usize) {
         for (i, item) in self.items.iter().enumerate() {
             if let Some(text) = item {
-                let centered_text = format!("{:^35}", text);
                 if i == self.selected_index {
-                    buffer.add_centered_text_with_color(
-                        top_y + i,
-                        &centered_text,
-                        Color::BLACK_ON_WHITE,
-                    );
+                    if buffer.terminal_type.has_color() {
+                        buffer.add_centered_text_with_color(
+                            top_y + i,
+                            &format!("{:^35}", text),
+                            Color::BLACK_ON_WHITE,
+                        );
+                    } else {
+                        // Highlight selected menu item with ascii characters.
+                        // The only option on VT52 terminals.
+                        buffer.add_centered_text(top_y + i, &format!("---> {:^27} <---", text));
+                    }
                 } else {
-                    buffer.add_centered_text(top_y + i, &centered_text);
+                    buffer.add_centered_text(top_y + i, &format!("{:^35}", text));
                 }
             }
         }
