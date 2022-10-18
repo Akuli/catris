@@ -1,3 +1,5 @@
+xterm -ti vt52 -tn vt52
+
 https://en.wikipedia.org/wiki/VT52#Escape_sequences
 echo -e '\x1bHXXX'
 
@@ -8,3 +10,9 @@ how to put X to top right corner:
 	' '
 
 	$ echo -e '\x1bY  X'
+
+auto-detect terminal:
+
+	echo -e '\x1b[6n\x1bZ'
+		\x1b[6n (DSR) causes ANSI terminals to respond with ESC[<row>;<col>R
+		\x1bZ causes VT52 terminals to respond with ESC/{K,L,Z}
