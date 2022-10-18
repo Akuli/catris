@@ -112,7 +112,7 @@ where
                     last_enter_press = Some(Instant::now());
                     error = enter_pressed_callback(current_text.trim(), client);
                     if error == None {
-                        // On VT52, the enter press tends to leave ^M visible after typing name
+                        // With xterm emulating VT52, the enter press tends to leave ^M visible after typing name
                         client.render_data.lock().unwrap().force_redraw = true;
                         return Ok(());
                     }
