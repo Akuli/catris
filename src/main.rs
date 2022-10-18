@@ -220,7 +220,7 @@ async fn handle_connection(
         logger.log("New raw TCP connection");
     }
 
-    let error: io::Error = handle_connection_until_error(
+    let error = handle_connection_until_error(
         logger,
         socket,
         source_ip,
