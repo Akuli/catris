@@ -118,7 +118,7 @@ pub async fn detect_terminal_type(
         "Currently ANSI terminals and VT52 terminals are supported.\r\n",
         "\r\n",
         // Send DSR (Device Status Report, aka query cursor location) for ansi terminals.
-        // Send ident command (aka identify terminal type) for VT52 terminals.
+        // Send ident (aka identify terminal type) for VT52 terminals.
         // Both types of terminals respond without user input.
         "\x1b[6n\x1bZ",
     );
