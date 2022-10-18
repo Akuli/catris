@@ -229,7 +229,6 @@ impl Sender {
                 .await
                 .map_err(convert_error),
             Self::RawTcp { write_half } => write_half.write_all(data).await,
-            Self::Dummy {} => Ok(()),
         }
     }
 }
