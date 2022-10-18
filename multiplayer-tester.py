@@ -20,6 +20,7 @@ received = []
 def add_client(to_send):
     sock = socket.socket()
     sock.connect(("localhost", 12345))
+    sock.sendall(b"\x1b[1;1R")  # server detect this script as ANSI terminal
     sock.sendall(to_send)
     data = b""
     while not re.search(b"Nothing.*in.*hold.*press.*h", data):
