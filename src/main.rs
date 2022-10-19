@@ -105,13 +105,14 @@ pub async fn detect_terminal_type(
 ) -> Result<TerminalType, io::Error> {
     let message = concat!(
         "\r\n",
-        "Detecting the type of your terminal. If this fails, you probably\r\n",
-        "forgot to run \"stty raw\" before connecting (e.g. Linux and Mac).\r\n",
-        "If you have trouble connecting, please create an issue at:\r\n",
+        "Detecting the type of your terminal. If it doesn't happen automatically:\r\n",
         "\r\n",
-        "    https://github.com/Akuli/catris/ \r\n",
-        "\r\n",
-        "Currently ANSI terminals and VT52 terminals are supported.\r\n",
+        "  * If you use e.g. Linux or Mac, make sure you ran \"stty raw\"\r\n",
+        "    before connecting.\r\n",
+        "  * Press a if your terminal supports ANSI escape sequences.\r\n",
+        "  * Press v if you use a VT52 compatible terminal.\r\n",
+        "  * Create an issue at https://github.com/Akuli/catris/ if you have\r\n",
+        "    trouble connecting.\r\n",
         "\r\n",
         // Send DSR (Device Status Report, aka query cursor location) for ansi terminals.
         // Send ident (aka identify terminal type) for VT52 terminals.
@@ -120,36 +121,41 @@ pub async fn detect_terminal_type(
     );
     sender.send(message.as_bytes()).await?;
 
-    if matches!(
-        receiver.receive_key_press().await?,
-        KeyPress::Character('\x1b')
-    ) {
-        match receiver.receive_key_press().await? {
-            KeyPress::Character('/') => {
-                // VT5* terminal
-                if matches!(
-                    receiver.receive_key_press().await?,
-                    KeyPress::Character('K') | KeyPress::Character('L') | KeyPress::Character('Z')
-                ) {
-                    return Ok(TerminalType::VT52);
-                }
-            }
-            KeyPress::Character('[') => {
-                // ANSI terminal. Response to DSR ends with letter R.
-                // Length limit so client can't send a lot of garbage and consume server CPU
-                let mut n = 0;
-                while n < 10 {
+    match receiver.receive_key_press().await? {
+        KeyPress::Character('a') => return Ok(TerminalType::ANSI),
+        KeyPress::Character('v') => return Ok(TerminalType::VT52),
+        KeyPress::Character('\x1b') => {
+            // Escape character, probably in response to ANSI DSR or VT52 ident
+            match receiver.receive_key_press().await? {
+                KeyPress::Character('/') => {
+                    // VT5* ident. Next character distinguishes, VT50, VT52 etc
                     if matches!(
                         receiver.receive_key_press().await?,
-                        KeyPress::Character('R')
+                        KeyPress::Character('K')
+                            | KeyPress::Character('L')
+                            | KeyPress::Character('Z')
                     ) {
-                        return Ok(TerminalType::ANSI);
+                        return Ok(TerminalType::VT52);
                     }
-                    n += 1;
                 }
+                KeyPress::Character('[') => {
+                    // ANSI terminal. Response to DSR ends with letter R.
+                    // Length limit so client can't send a lot of garbage to consume server CPU.
+                    let mut n = 0;
+                    while n < 10 {
+                        if matches!(
+                            receiver.receive_key_press().await?,
+                            KeyPress::Character('R')
+                        ) {
+                            return Ok(TerminalType::ANSI);
+                        }
+                        n += 1;
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
+        _ => {}
     }
 
     return Err(io::Error::new(
@@ -171,7 +177,7 @@ async fn handle_connection_until_error(
         initialize_connection(ip_tracker, logger, socket, source_ip, is_websocket).await?;
 
     let terminal_type = timeout(
-        Duration::from_millis(1000),
+        Duration::from_secs(20),
         detect_terminal_type(&mut sender, &mut receiver),
     )
     .await??;
