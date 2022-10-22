@@ -1,5 +1,6 @@
 use crate::client::Client;
 use crate::escapes::Color;
+use crate::escapes::TerminalType;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
@@ -362,6 +363,7 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             if trace_points.contains(&world_point)
                 && buffer.get_char(buffer_x, buffer_y) == ' '
                 && buffer.get_char(buffer_x + 1, buffer_y) == ' '
+                && buffer.terminal_type != TerminalType::VT52
             {
                 buffer.add_text_with_foreground_color(buffer_x, buffer_y, "::", trace_color.fg);
             }
