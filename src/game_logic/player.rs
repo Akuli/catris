@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::wrap_around;
 use crate::game_logic::game::Mode;
@@ -27,7 +28,7 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
-    pub next_block: FallingBlock,
+    pub next_block_queue: VecDeque<FallingBlock>,  // Never empty
     pub block_in_hold: Option<FallingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1
@@ -49,7 +50,7 @@ impl Player {
             color: client_info.color,
             spawn_point,
             block_or_timer: BlockOrTimer::Block(first_block),
-            next_block: second_block,
+            next_block_queue: VecDeque::from([second_block]),
             block_in_hold: None,
             fast_down: false,
             down_direction,

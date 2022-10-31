@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
 use crate::game_logic::blocks::BlockType;
@@ -400,6 +401,15 @@ impl Game {
         }
 
         self.update_spawn_points();
+    }
+
+    fn maybe_add_special_block_to_random_player(&self) {
+        match BlockType::from_score(self.score) {
+            BlockType::Normal(_) => {}
+            special => {
+                self.players.choose(&mut rand::thread_rng()).unwrap().borrow_mut().next_block_queue.push_back(FallingBlock::new(special));
+            }
+        }
     }
 
     fn add_score(&mut self, mut add: usize, multi_player_compensate: bool) {
@@ -916,7 +926,7 @@ impl Game {
             if let BlockOrTimer::Block(b) = &mut player.block_or_timer {
                 handle_block(b);
             }
-            handle_block(&mut player.next_block);
+            handle_block(player.next_block_queue.front_mut().unwrap());  // animate next block
             if let Some(b) = &mut player.block_in_hold {
                 handle_block(b);
             }
@@ -979,7 +989,11 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                replace(&mut player.next_block, (self.block_factory)(self.score))
+                let block = player.next_block_queue.pop_front().unwrap();
+                if player.next_block_queue.is_empty() {
+                    player.next_block_queue.push_back((self.block_factory)(self.score));
+                }
+                block
             };
             block.spawn_at(player.spawn_point);
             block
@@ -997,6 +1011,7 @@ impl Game {
 
     fn new_block(&self, player_idx: usize) {
         self.new_block_possibly_from_hold(player_idx, false);
+        self.maybe_add_special_block_to_random_player();
     }
 
     fn hold_block(&self, player_idx: usize) -> bool {
