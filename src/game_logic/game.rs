@@ -322,7 +322,8 @@ impl Game {
             client_info,
             down_direction,
             self.mode,
-            || (self.block_factory)(self.score),
+            (self.block_factory)(self.score),
+            (self.block_factory)(self.score),
         )));
         self.update_spawn_points();
 
