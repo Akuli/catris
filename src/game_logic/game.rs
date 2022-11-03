@@ -141,7 +141,7 @@ pub struct Game {
     landed_rows: Vec<Vec<Option<SquareContent>>>,
     score: usize,
     bomb_id_counter: u64,
-    block_factory: fn(usize) -> FallingBlock,
+    block_factory: fn(BlockType) -> FallingBlock,
 }
 impl Game {
     pub fn new(mode: Mode) -> Self {
@@ -166,7 +166,7 @@ impl Game {
             landed_rows,
             score: 0,
             bomb_id_counter: 0,
-            block_factory: |score| FallingBlock::new(BlockType::from_score(score)),
+            block_factory: FallingBlock::new,
         }
     }
 
@@ -323,8 +323,8 @@ impl Game {
             client_info,
             down_direction,
             self.mode,
-            (self.block_factory)(self.score),
-            (self.block_factory)(self.score),
+            (self.block_factory)(BlockType::Normal),
+            (self.block_factory)(BlockType::Normal),
         )));
         self.update_spawn_points();
 
@@ -405,7 +405,7 @@ impl Game {
 
     fn maybe_add_special_block_to_random_player(&self) {
         match BlockType::from_score(self.score) {
-            BlockType::Normal(_) => {}
+            BlockType::Normal => {}
             special => {
                 self.players.choose(&mut rand::thread_rng()).unwrap().borrow_mut().next_block_queue.push_back(FallingBlock::new(special));
             }
@@ -991,7 +991,7 @@ impl Game {
             } else {
                 let block = player.next_block_queue.pop_front().unwrap();
                 if player.next_block_queue.is_empty() {
-                    player.next_block_queue.push_back((self.block_factory)(self.score));
+                    player.next_block_queue.push_back((self.block_factory)(BlockType::Normal));
                 }
                 block
             };
@@ -1021,7 +1021,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, (self.block_factory)(self.score))
+                replace(b, (self.block_factory)(BlockType::Normal))
             }
             _ => return false,
         };
