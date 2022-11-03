@@ -518,6 +518,19 @@ impl FallingBlock {
         }
     }
 
+    #[cfg(test)]
+    pub fn normal_from_shape(shape: Shape) -> FallingBlock {
+        let content = SquareContent::with_color(shape.color());
+        let coords = shape.coords().to_vec();
+        FallingBlock {
+            square_content: content,
+            center: (0, 0), // dummy value, should be changed when spawning the block
+            rotate_mode: choose_initial_rotate_mode(&coords, &content),
+            relative_coords: coords,
+            has_been_in_hold: false,
+        }
+    }
+
     pub fn spawn_at(&mut self, spawn_point: PlayerPoint) {
         // Position the block just above the spawn point
         let (spawn_x, spawn_y) = spawn_point;
@@ -614,7 +627,7 @@ mod tests {
         for _ in 0..50 {
             // Random-generate a long cursed I-block. Repeat a few times, in case only some of them are good.
             let block = loop {
-                let block = FallingBlock::new(BlockType::Cursed(Shape::I));
+                let block = FallingBlock::new(BlockType::Cursed);
                 if block.get_relative_coords().iter().all(|(_, y)| *y == 0) {
                     break block;
                 }

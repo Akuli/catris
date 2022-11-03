@@ -176,7 +176,7 @@ impl Game {
     }
 
     #[cfg(test)]
-    pub fn set_block_factory(&mut self, factory: fn(usize) -> FallingBlock) {
+    pub fn set_block_factory(&mut self, factory: fn(BlockType) -> FallingBlock) {
         self.block_factory = factory;
     }
 

@@ -106,8 +106,8 @@ fn dump_game_state(game: &Game) -> Vec<String> {
 fn create_game(mode: Mode, player_count: usize, shape: Shape) -> Game {
     let mut game = Game::new(mode);
     game.set_block_factory(match shape {
-        Shape::L => |_| FallingBlock::new(BlockType::Normal(Shape::L)),
-        Shape::S => |_| FallingBlock::new(BlockType::Normal(Shape::S)),
+        Shape::L => |_| FallingBlock::normal_from_shape(Shape::L),
+        Shape::S => |_| FallingBlock::normal_from_shape(Shape::S),
         _ => unimplemented!(),
     });
     for i in 0..player_count {
