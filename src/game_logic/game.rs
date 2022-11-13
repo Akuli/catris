@@ -404,20 +404,26 @@ impl Game {
     }
 
     fn maybe_add_special_block_to_random_player(&self) {
+        let queue = &mut self
+            .players
+            .choose(&mut rand::thread_rng())
+            .unwrap()
+            .borrow_mut()
+            .next_block_queue;
+
+        // Do not add a special block:
+        //  - when running tests (special blocks are unpredictable)
+        //  - if there's already ridiculously many (prevent a hypothetical out-of-memory attack)
+        if cfg!(test) || queue.len() > 10 {
+            return;
+        }
+
         match BlockType::from_score(self.score) {
             BlockType::Normal => {}
             special => {
-                let queue = &mut self
-                    .players
-                    .choose(&mut rand::thread_rng())
-                    .unwrap()
-                    .borrow_mut()
-                    .next_block_queue;
                 // Don't know how you could get so many special blocks
                 // that it fills the server's memory, but just in case...
-                if queue.len() < 10 {
-                    queue.push(FallingBlock::new(special));
-                }
+                queue.push(FallingBlock::new(special));
             }
         }
     }
@@ -1023,9 +1029,7 @@ impl Game {
 
     fn new_block(&self, player_idx: usize) {
         self.new_block_possibly_from_hold(player_idx, false);
-        if cfg!(not(test)) {
-            self.maybe_add_special_block_to_random_player();
-        }
+        self.maybe_add_special_block_to_random_player();
     }
 
     fn hold_block(&self, player_idx: usize) -> bool {
