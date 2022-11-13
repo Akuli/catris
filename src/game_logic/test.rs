@@ -1,4 +1,3 @@
-use crate::client::ClientLogger;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
 use crate::escapes::TerminalType;
@@ -115,9 +114,6 @@ fn create_game(mode: Mode, player_count: usize, shape: Shape) -> Game {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
     game
@@ -743,9 +739,6 @@ fn create_ring_game_with_drills() -> Game {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
     game
@@ -838,9 +831,6 @@ fn test_displaying_landed_drills() {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
 
