@@ -16,15 +16,8 @@ use tokio::sync::Notify;
 #[cfg(test)]
 use crate::escapes::Color;
 
-// Even though you can create only one Client, it can be associated with multiple ClientLoggers
-#[derive(Copy, Clone)]
-pub struct ClientLogger {
-    pub client_id: u64,
-}
-impl ClientLogger {
-    pub fn log(&self, message: &str) {
-        println!("[client {}] {}", self.client_id, message);
-    }
+pub fn log_for_client(client_id: u64, message: &str) {
+    println!("[client {}] {}", client_id, message);
 }
 
 pub struct Client {
@@ -89,10 +82,6 @@ impl Client {
         }
     }
 
-    pub fn logger(&self) -> ClientLogger {
-        ClientLogger { client_id: self.id }
-    }
-
     pub fn get_name(&self) -> Option<&str> {
         self.remove_name_on_disconnect_data
             .as_ref()
@@ -140,8 +129,8 @@ impl Client {
         let mut lobbies = lobbies.lock().unwrap();
         let id = lobby::generate_unused_id(&*lobbies);
         let mut lobby = Lobby::new(&id);
-        self.logger().log(&format!("Created lobby: {}", id));
-        lobby.add_client(self.logger(), self.get_name().unwrap());
+        log_for_client(self.id, &format!("Created lobby: {}", id));
+        lobby.add_client(self.id, self.get_name().unwrap());
 
         let lobby = Arc::new(Mutex::new(lobby));
         lobbies.insert(id, lobby.clone());
@@ -156,7 +145,7 @@ impl Client {
             if lobby.lobby_is_full() {
                 return false;
             }
-            lobby.add_client(self.logger(), self.get_name().unwrap());
+            lobby.add_client(self.id, self.get_name().unwrap());
         }
         assert!(self.lobby.is_none());
         self.lobby = Some(lobby);

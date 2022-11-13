@@ -1,3 +1,4 @@
+use crate::client::log_for_client;
 use crate::client::Client;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
@@ -296,9 +297,7 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
         Ok(lines) => lines,
         Err(e) if e.kind() == ErrorKind::NotFound => vec![],
         Err(e) => {
-            client
-                .logger()
-                .log(&format!("reading motd file failed: {:?}", e));
+            log_for_client(client.id, &format!("reading motd file failed: {:?}", e));
             vec![]
         }
     };
