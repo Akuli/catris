@@ -259,7 +259,9 @@ impl Game {
         let width = width as i32;
         let right = right as i32;
 
-        for player in &self.players {
+        let mut need_new_block = vec![];
+
+        for (player_idx, player) in self.players.iter().enumerate() {
             if let BlockOrTimer::Block(block) = &mut player.borrow_mut().block_or_timer {
                 let old_points = block.get_coords();
                 let mut new_points = vec![];
@@ -280,8 +282,17 @@ impl Game {
                     center_x = left;
                 }
 
-                block.set_player_coords(&new_points, (center_x, center_y));
+                if new_points.is_empty() {
+                    // Cannot call new_block() here because player is borrowed
+                    need_new_block.push(player_idx);
+                } else {
+                    block.set_player_coords(&new_points, (center_x, center_y));
+                }
             }
+        }
+
+        for i in need_new_block {
+            self.new_block(i);
         }
     }
 
@@ -1075,7 +1086,7 @@ impl Game {
                 player_coords = falling_block.get_coords();
                 world_coords = player_coords
                     .iter()
-                    .map(|p| player.player_to_world(*p))
+                    .map(|p| player.player_to_world(*p)) // Can't be done while holding mutable reference
                     .collect();
             }
 
