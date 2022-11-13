@@ -1023,7 +1023,9 @@ impl Game {
 
     fn new_block(&self, player_idx: usize) {
         self.new_block_possibly_from_hold(player_idx, false);
-        self.maybe_add_special_block_to_random_player();
+        if cfg!(not(test)) {
+            self.maybe_add_special_block_to_random_player();
+        }
     }
 
     fn hold_block(&self, player_idx: usize) -> bool {
