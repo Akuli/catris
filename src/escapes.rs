@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TerminalType {
-    ANSI, // Modern terminals https://en.wikipedia.org/wiki/ANSI_escape_code
+    Ansi, // Modern terminals https://en.wikipedia.org/wiki/ANSI_escape_code
     VT52, // Older devices https://en.wikipedia.org/wiki/VT52
 }
 
