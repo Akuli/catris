@@ -407,12 +407,17 @@ impl Game {
         match BlockType::from_score(self.score) {
             BlockType::Normal => {}
             special => {
-                self.players
+                let queue = &mut self
+                    .players
                     .choose(&mut rand::thread_rng())
                     .unwrap()
                     .borrow_mut()
-                    .next_block_queue
-                    .push_back(FallingBlock::new(special));
+                    .next_block_queue;
+                // Don't know how you could get so many special blocks
+                // that it fills the server's memory, but just in case...
+                if queue.len() < 10 {
+                    queue.push_back(FallingBlock::new(special));
+                }
             }
         }
     }
