@@ -126,7 +126,7 @@ impl Lobby {
         Some(wrapper)
     }
 
-    pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
+    fn leave_game(&mut self, client_id: u64, mode: Mode) {
         let logger = ClientLogger { client_id };
         logger.log(&format!("Leaving game: {:?}", mode));
 
