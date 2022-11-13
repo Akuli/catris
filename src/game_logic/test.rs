@@ -20,7 +20,7 @@ fn square_content_to_string(
     content: SquareContent,
     falling_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
 ) -> String {
-    let mut buffer = RenderBuffer::new(TerminalType::ANSI);
+    let mut buffer = RenderBuffer::new(TerminalType::Ansi);
     buffer.resize(80, 24); // smallest size allowed
     content.render(&mut buffer, 0, 0, falling_block_data, (0, 1));
     let chars = [buffer.get_char(0, 0), buffer.get_char(1, 0)];

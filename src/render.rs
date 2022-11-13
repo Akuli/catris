@@ -207,12 +207,12 @@ impl RenderBuffer {
                 }
             }
             if current_color != Color::DEFAULT {
-                result.push_str(&self.terminal_type.reset_colors());
+                result.push_str(self.terminal_type.reset_colors());
             }
             if !cursor_at_xy {
                 result.push_str(&self.terminal_type.move_cursor(end, y));
             }
-            result.push_str(&self.terminal_type.clear_from_cursor_to_end_of_line());
+            result.push_str(self.terminal_type.clear_from_cursor_to_end_of_line());
         }
         result
     }

@@ -10,49 +10,49 @@ impl TerminalType {
     // Location of cursor after clearing depends on the terminal mode.
     pub fn clear(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[2J",    // clear without moving cursor
+            Self::Ansi => "\x1b[2J",    // clear without moving cursor
             Self::VT52 => "\x1bH\x1bJ", // move cursor to top left + clear to end of screen
         }
     }
 
     pub fn clear_from_cursor_to_end_of_line(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[0K",
+            Self::Ansi => "\x1b[0K",
             Self::VT52 => "\x1bK",
         }
     }
 
     pub fn clear_from_cursor_to_end_of_screen(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[0J",
+            Self::Ansi => "\x1b[0J",
             Self::VT52 => "\x1bJ",
         }
     }
 
     pub fn show_cursor(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[?25h",
+            Self::Ansi => "\x1b[?25h",
             Self::VT52 => "\x1be", // extension, not all terminals support
         }
     }
 
     pub fn hide_cursor(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[?25l",
+            Self::Ansi => "\x1b[?25l",
             Self::VT52 => "\x1bf", // extension, not all terminals support
         }
     }
 
     pub fn resize(&self, width: usize, height: usize) -> String {
         match self {
-            Self::ANSI => format!("\x1b[8;{};{}t", height, width), // https://apple.stackexchange.com/a/47841
+            Self::Ansi => format!("\x1b[8;{};{}t", height, width), // https://apple.stackexchange.com/a/47841
             Self::VT52 => "".to_string(),
         }
     }
 
     pub fn move_cursor(&self, x: usize, y: usize) -> String {
         match self {
-            Self::ANSI => format!("\x1b[{};{}H", y + 1, x + 1),
+            Self::Ansi => format!("\x1b[{};{}H", y + 1, x + 1),
             Self::VT52 => {
                 // Top left is "\x1bY  " where space is ascii character 32.
                 // Other locations increment the ascii character values.
@@ -72,21 +72,21 @@ impl TerminalType {
 
     pub fn has_color(&self) -> bool {
         match self {
-            Self::ANSI => true,
+            Self::Ansi => true,
             Self::VT52 => false,
         }
     }
 
     pub fn reset_colors(&self) -> &str {
         match self {
-            Self::ANSI => "\x1b[0m",
+            Self::Ansi => "\x1b[0m",
             Self::VT52 => "", // no colors
         }
     }
 
     pub fn format_color(&self, color: Color) -> String {
         match self {
-            Self::ANSI => {
+            Self::Ansi => {
                 let mut result = self.reset_colors().to_string();
                 if color.fg != 0 {
                     let _ = write!(result, "\x1b[1;{}m", color.fg);
