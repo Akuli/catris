@@ -33,11 +33,10 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
 pub fn get_websocket_proxy_ip() -> Option<IpAddr> {
-    let string = env::var("CATRIS_WEBSOCKET_PROXY_IP").as_ref().unwrap_or("");
-    if string.is_empty() {
-        None
-    } else {
-        Some(string.parse().unwrap())
+    match env::var("CATRIS_WEBSOCKET_PROXY_IP").as_ref() {
+        Err(_) => None, // env var doesn't exist
+        Ok(s) if s.is_empty() => None,
+        Ok(s) => Some(s.parse().unwrap()),
     }
 }
 
