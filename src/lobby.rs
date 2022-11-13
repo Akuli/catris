@@ -109,9 +109,15 @@ impl Lobby {
             if !wrapper.game.lock().unwrap().add_player(client_info) {
                 return None;
             }
+            client_info
+                .logger
+                .log(&format!("Joining existing game: {:?}", mode));
             wrapper.mark_changed();
             wrapper.clone()
         } else {
+            client_info
+                .logger
+                .log(&format!("Creating and joining game: {:?}", mode));
             let mut game = Game::new(mode);
             let ok = game.add_player(client_info);
             assert!(ok);
@@ -125,7 +131,10 @@ impl Lobby {
         Some(wrapper)
     }
 
-    pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
+    fn leave_game(&mut self, client_id: u64, mode: Mode) {
+        let logger = ClientLogger { client_id };
+        logger.log(&format!("Leaving game: {:?}", mode));
+
         let last_player_removed = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             let mut game = wrapper.game.lock().unwrap();
             game.remove_player_if_exists(client_id);
