@@ -141,7 +141,7 @@ pub struct Game {
     landed_rows: Vec<Vec<Option<SquareContent>>>,
     score: usize,
     bomb_id_counter: u64,
-    block_factory: fn(BlockType) -> FallingBlock,
+    normal_block_factory: fn() -> FallingBlock,
 }
 impl Game {
     pub fn new(mode: Mode) -> Self {
@@ -166,7 +166,7 @@ impl Game {
             landed_rows,
             score: 0,
             bomb_id_counter: 0,
-            block_factory: FallingBlock::new,
+            normal_block_factory: || FallingBlock::new(BlockType::Normal),
         }
     }
 
@@ -176,8 +176,8 @@ impl Game {
     }
 
     #[cfg(test)]
-    pub fn set_block_factory(&mut self, factory: fn(BlockType) -> FallingBlock) {
-        self.block_factory = factory;
+    pub fn set_normal_block_factory(&mut self, factory: fn() -> FallingBlock) {
+        self.normal_block_factory = factory;
     }
 
     pub fn get_score(&self) -> usize {
@@ -323,8 +323,8 @@ impl Game {
             client_info,
             down_direction,
             self.mode,
-            (self.block_factory)(BlockType::Normal),
-            (self.block_factory)(BlockType::Normal),
+            (self.normal_block_factory)(),
+            (self.normal_block_factory)(),
         )));
         self.update_spawn_points();
 
@@ -1009,7 +1009,7 @@ impl Game {
                 if player.next_block_queue.is_empty() {
                     player
                         .next_block_queue
-                        .push((self.block_factory)(BlockType::Normal));
+                        .push((self.normal_block_factory)());
                 }
                 block
             };
@@ -1039,7 +1039,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, (self.block_factory)(BlockType::Normal))
+                replace(b, (self.normal_block_factory)())
             }
             _ => return false,
         };
