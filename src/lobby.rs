@@ -104,6 +104,7 @@ impl Lobby {
             .iter()
             .find(|info| info.client_id == client_id)
             .unwrap();
+        client_info.logger.log(&format!("Joining game: {:?}", mode));
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             if !wrapper.game.lock().unwrap().add_player(client_info) {
@@ -126,6 +127,9 @@ impl Lobby {
     }
 
     pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
+        let logger = ClientLogger { client_id };
+        logger.log(&format!("Leaving game: {:?}", mode));
+
         let last_player_removed = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             let mut game = wrapper.game.lock().unwrap();
             game.remove_player_if_exists(client_id);
