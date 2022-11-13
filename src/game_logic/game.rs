@@ -416,7 +416,7 @@ impl Game {
                 // Don't know how you could get so many special blocks
                 // that it fills the server's memory, but just in case...
                 if queue.len() < 10 {
-                    queue.push_back(FallingBlock::new(special));
+                    queue.push(FallingBlock::new(special));
                 }
             }
         }
@@ -936,7 +936,7 @@ impl Game {
             if let BlockOrTimer::Block(b) = &mut player.block_or_timer {
                 handle_block(b);
             }
-            handle_block(player.next_block_queue.front_mut().unwrap()); // animate next block
+            handle_block(&mut player.next_block_queue[0]); // animate next block
             if let Some(b) = &mut player.block_in_hold {
                 handle_block(b);
             }
@@ -999,11 +999,11 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                let block = player.next_block_queue.pop_front().unwrap();
+                let block = player.next_block_queue.remove(0);
                 if player.next_block_queue.is_empty() {
                     player
                         .next_block_queue
-                        .push_back((self.block_factory)(BlockType::Normal));
+                        .push((self.block_factory)(BlockType::Normal));
                 }
                 block
             };
