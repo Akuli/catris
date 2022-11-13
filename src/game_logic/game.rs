@@ -420,11 +420,7 @@ impl Game {
 
         match BlockType::from_score(self.score) {
             BlockType::Normal => {}
-            special => {
-                // Don't know how you could get so many special blocks
-                // that it fills the server's memory, but just in case...
-                queue.push(FallingBlock::new(special));
-            }
+            special => queue.push(FallingBlock::new(special)),
         }
     }
 
