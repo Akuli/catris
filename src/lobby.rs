@@ -104,15 +104,16 @@ impl Lobby {
             .iter()
             .find(|info| info.client_id == client_id)
             .unwrap();
-        client_info.logger.log(&format!("Joining game: {:?}", mode));
 
         let wrapper = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             if !wrapper.game.lock().unwrap().add_player(client_info) {
                 return None;
             }
+            client_info.logger.log(&format!("Joining existing game: {:?}", mode));
             wrapper.mark_changed();
             wrapper.clone()
         } else {
+            client_info.logger.log(&format!("Creating and joining game: {:?}", mode));
             let mut game = Game::new(mode);
             let ok = game.add_player(client_info);
             assert!(ok);
