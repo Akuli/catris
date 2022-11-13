@@ -21,22 +21,25 @@ pub enum Mode {
     Traditional,
     Bottle,
     Ring,
+    Opposite,
 }
 
 impl Mode {
-    pub const ALL_MODES: &'static [Mode] = &[Mode::Traditional, Mode::Bottle, Mode::Ring];
+    pub const ALL_MODES: &'static [Mode] =
+        &[Mode::Traditional, Mode::Bottle, Mode::Ring, Mode::Opposite];
 
     pub fn name(self) -> &'static str {
         match self {
             Mode::Traditional => "Traditional game",
             Mode::Bottle => "Bottle game",
             Mode::Ring => "Ring game",
+            Mode::Opposite => "Opposite game",
         }
     }
 
     pub fn max_players(self) -> usize {
         match self {
-            Mode::Traditional | Mode::Bottle => MAX_CLIENTS_PER_LOBBY,
+            Mode::Traditional | Mode::Bottle | Mode::Opposite => MAX_CLIENTS_PER_LOBBY,
             Mode::Ring => 4,
         }
     }
@@ -147,6 +150,7 @@ impl Game {
     pub fn new(mode: Mode) -> Self {
         let landed_rows = match mode {
             Mode::Traditional => vec![vec![]; 20],
+            Mode::Opposite => vec![vec![]; 24],
             Mode::Bottle => vec![vec![]; 21],
             Mode::Ring => {
                 let size = 2 * RING_OUTER_RADIUS + 1;
@@ -187,7 +191,8 @@ impl Game {
     pub fn get_width_per_player(&self) -> Option<usize> {
         match self.mode {
             Mode::Traditional if self.players.len() >= 2 => Some(7),
-            Mode::Traditional => Some(10),
+            Mode::Opposite if self.players.len() >= 3 => Some(7),
+            Mode::Traditional | Mode::Opposite => Some(10),
             Mode::Bottle | Mode::Ring => None,
         }
     }
@@ -198,6 +203,18 @@ impl Game {
             Mode::Traditional => self.get_width_per_player().unwrap() * self.players.len(),
             Mode::Bottle => BOTTLE_OUTER_WIDTH * self.players.len() - 1,
             Mode::Ring => self.landed_rows[0].len(),
+            Mode::Opposite => {
+                let mut top_count = 0;
+                let mut bottom_count = 0;
+                for player in self.players.iter() {
+                    match player.borrow().down_direction {
+                        (0, 1) => top_count += 1,
+                        (0, -1) => bottom_count += 1,
+                        _ => panic!(),
+                    }
+                }
+                self.get_width_per_player().unwrap() * top_count.max(bottom_count)
+            }
         }
     }
 
@@ -210,13 +227,16 @@ impl Game {
         match self.mode {
             Mode::Traditional | Mode::Bottle => (0, 0),
             Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
+            // TODO: For players on the negative side, rotate 180deg AND shift sideways accordingly.
+            // This seems easier than rotating around the center, because width can be odd.
+            Mode::Opposite => (0, (self.get_height() as i16) / 2),
         }
     }
 
     // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
     pub fn get_bounds_in_player_coords(&self) -> (i32, i32, i32, i32) {
         match self.mode {
-            Mode::Traditional | Mode::Bottle => {
+            Mode::Traditional | Mode::Bottle | Mode::Opposite => {
                 (0, self.get_width() as i32, 0, self.get_height() as i32)
             }
             Mode::Ring => {
@@ -233,6 +253,29 @@ impl Game {
                 for (player_idx, player) in self.players.iter().enumerate() {
                     let i = player_idx as i32;
                     player.borrow_mut().spawn_point = ((i * w) + (w / 2), 0);
+                }
+            }
+            Mode::Opposite => {
+                let mut top_players = vec![];
+                let mut bottom_players = vec![];
+                for player in self.players.iter() {
+                    match player.borrow().down_direction {
+                        (0, 1) => top_players.push(player),
+                        (0, -1) => bottom_players.push(player),
+                        _ => panic!(),
+                    }
+                }
+                for (offset, player) in top_players.iter().enumerate() {
+                    player.borrow_mut().spawn_point = (
+                        ((2 * offset + 1) * self.get_width() / (2 * top_players.len())) as i32,
+                        -(self.get_height() as i32),
+                    );
+                }
+                for (offset, player) in bottom_players.iter().enumerate() {
+                    player.borrow_mut().spawn_point = (
+                        ((2 * offset + 1) * self.get_width() / (2 * top_players.len())) as i32,
+                        -(self.get_height() as i32),
+                    );
                 }
             }
             Mode::Bottle => {
@@ -313,10 +356,27 @@ impl Game {
                     .find(|dir| !used.contains(dir))
                     .unwrap()
             }
+            Mode::Opposite => {
+                let mut top_count = 0;
+                let mut bottom_count = 0;
+                for player in self.players.iter() {
+                    match player.borrow().down_direction {
+                        (0, 1) => top_count += 1,
+                        (0, -1) => bottom_count += 1,
+                        _ => panic!(),
+                    }
+                }
+                if top_count > bottom_count {
+                    (0, -1)
+                } else {
+                    (0, 1)
+                }
+            }
         };
         let spawn_point = match self.mode {
             Mode::Traditional | Mode::Bottle => (0, 0), // dummy value to be changed soon
             Mode::Ring => (0, -(RING_OUTER_RADIUS as i32)),
+            Mode::Opposite => (0, -(self.landed_rows.len() as i32) / 2),
         };
         self.players.push(RefCell::new(Player::new(
             spawn_point,
@@ -330,7 +390,8 @@ impl Game {
 
         let w = self.get_width();
         match self.mode {
-            Mode::Traditional => {
+            // TODO: more special casing for Opposite?
+            Mode::Traditional | Mode::Opposite => {
                 for row in &mut self.landed_rows {
                     row.resize(w, None);
                 }
@@ -372,6 +433,7 @@ impl Game {
         let i = i.unwrap();
 
         match self.mode {
+            Mode::Opposite => todo!(),
             Mode::Traditional => {
                 let slice_x = self.get_width_per_player().unwrap() * i;
                 let old_width = self.get_width();
@@ -449,7 +511,7 @@ impl Game {
         let mut full_count_single_player = 0;
 
         match self.mode {
-            Mode::Traditional => {
+            Mode::Traditional | Mode::Opposite => {
                 for (y, row) in self.landed_rows.iter().enumerate() {
                     if !row.iter().any(|cell| cell.is_none()) {
                         full_count_everyone += 1;
@@ -523,6 +585,23 @@ impl Game {
                         self.landed_rows[..(y + 1)].rotate_right(1);
                         for cell in &mut self.landed_rows[0] {
                             *cell = None;
+                        }
+                    }
+                }
+            }
+            Mode::Opposite => {
+                for y in 0..self.landed_rows.len() {
+                    if full.contains(&(0, y as i16)) {
+                        if y < self.get_height() / 2 {
+                            self.landed_rows[..(y + 1)].rotate_right(1);
+                            for cell in &mut self.landed_rows[0] {
+                                *cell = None;
+                            }
+                        } else {
+                            self.landed_rows[y..].rotate_left(1);
+                            for cell in self.landed_rows.last_mut().unwrap() {
+                                *cell = None;
+                            }
                         }
                     }
                 }
@@ -615,7 +694,7 @@ impl Game {
     fn is_valid_falling_block_coords(&self, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
-            Mode::Traditional | Mode::Bottle => 0,
+            Mode::Traditional | Mode::Bottle | Mode::Opposite => 0,
             Mode::Ring => -(RING_OUTER_RADIUS as i32),
         };
         if y < top_y {
@@ -629,6 +708,11 @@ impl Game {
         let (x, y) = point;
         match self.mode {
             Mode::Traditional => {
+                let w = self.get_width() as i16;
+                let h = self.get_height() as i16;
+                (0..w).contains(&x) && (0..h).contains(&y)
+            }
+            Mode::Opposite => {
                 let w = self.get_width() as i16;
                 let h = self.get_height() as i16;
                 (0..w).contains(&x) && (0..h).contains(&y)
@@ -1281,6 +1365,7 @@ impl Game {
                     }
                 }
             }
+            Mode::Opposite => todo!(),
         }
     }
 }
