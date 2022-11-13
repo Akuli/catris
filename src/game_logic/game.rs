@@ -1003,9 +1003,7 @@ impl Game {
             } else {
                 let block = player.next_block_queue.remove(0);
                 if player.next_block_queue.is_empty() {
-                    player
-                        .next_block_queue
-                        .push((self.normal_block_factory)());
+                    player.next_block_queue.push((self.normal_block_factory)());
                 }
                 block
             };
