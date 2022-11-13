@@ -105,9 +105,9 @@ fn dump_game_state(game: &Game) -> Vec<String> {
 
 fn create_game(mode: Mode, player_count: usize, shape: Shape) -> Game {
     let mut game = Game::new(mode);
-    game.set_block_factory(match shape {
-        Shape::L => |_| FallingBlock::new(BlockType::Normal(Shape::L)),
-        Shape::S => |_| FallingBlock::new(BlockType::Normal(Shape::S)),
+    game.set_normal_block_factory(match shape {
+        Shape::L => || FallingBlock::normal_from_shape(Shape::L),
+        Shape::S => || FallingBlock::normal_from_shape(Shape::S),
         _ => unimplemented!(),
     });
     for i in 0..player_count {
@@ -737,7 +737,7 @@ fn test_rotating_s_blocks() {
 
 fn create_ring_game_with_drills() -> Game {
     let mut game = Game::new(Mode::Ring);
-    game.set_block_factory(|_| FallingBlock::new(BlockType::Drill));
+    game.set_normal_block_factory(|| FallingBlock::new(BlockType::Drill));
     for i in 0..3 {
         game.add_player(&ClientInfo {
             name: format!("Player {}", i),
@@ -832,7 +832,7 @@ fn test_displaying_and_animating_falling_drills() {
 #[test]
 fn test_displaying_landed_drills() {
     let mut game = Game::new(Mode::Ring);
-    game.set_block_factory(|_| FallingBlock::new(BlockType::Drill));
+    game.set_normal_block_factory(|| FallingBlock::new(BlockType::Drill));
     for i in 0..3 {
         game.add_player(&ClientInfo {
             name: format!("Player {}", i),

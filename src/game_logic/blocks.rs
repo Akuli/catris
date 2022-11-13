@@ -355,8 +355,8 @@ const DRILL_COORDS: &[BlockRelativeCoords] = &[
 
 #[derive(Copy, Clone)]
 pub enum BlockType {
-    Normal(Shape),
-    Cursed(Shape),
+    Normal,
+    Cursed,
     Drill,
     Bomb,
 }
@@ -364,17 +364,13 @@ pub enum BlockType {
 impl BlockType {
     pub fn from_score(score: usize) -> Self {
         let score_kilos = score as f32 / 1000.0;
-        let shape = *ALL_SHAPES.choose(&mut rand::thread_rng()).unwrap();
 
         let items = [
             // Weight x means it's x times as likely as normal block.
-            (BlockType::Normal(shape), 1.0),
+            (BlockType::Normal, 1.0),
             // Cursed blocks only appear at score>500 and then become very common.
             // The intent is to surprise new players.
-            (
-                BlockType::Cursed(shape),
-                (score_kilos - 0.5).max(0.0) / 20.0,
-            ),
+            (BlockType::Cursed, (score_kilos - 0.5).max(0.0) / 20.0),
             // Drills are rare, but always possible.
             // They're also very powerful when you happen to get one.
             (BlockType::Drill, score_kilos / 200.0),
@@ -478,11 +474,13 @@ impl FallingBlock {
         let mut coords;
 
         match block_type {
-            BlockType::Normal(shape) => {
+            BlockType::Normal => {
+                let shape = ALL_SHAPES.choose(&mut rand::thread_rng()).unwrap();
                 content = SquareContent::with_color(shape.color());
                 coords = shape.coords().to_vec();
             }
-            BlockType::Cursed(shape) => {
+            BlockType::Cursed => {
+                let shape = ALL_SHAPES.choose(&mut rand::thread_rng()).unwrap();
                 content = SquareContent::with_color(shape.color());
                 coords = shape.coords().to_vec();
                 add_extra_square(&mut coords);
@@ -508,6 +506,19 @@ impl FallingBlock {
             }
         }
 
+        FallingBlock {
+            square_content: content,
+            center: (0, 0), // dummy value, should be changed when spawning the block
+            rotate_mode: choose_initial_rotate_mode(&coords, &content),
+            relative_coords: coords,
+            has_been_in_hold: false,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn normal_from_shape(shape: Shape) -> FallingBlock {
+        let content = SquareContent::with_color(shape.color());
+        let coords = shape.coords().to_vec();
         FallingBlock {
             square_content: content,
             center: (0, 0), // dummy value, should be changed when spawning the block
@@ -613,7 +624,7 @@ mod tests {
         for _ in 0..50 {
             // Random-generate a long cursed I-block. Repeat a few times, in case only some of them are good.
             let block = loop {
-                let block = FallingBlock::new(BlockType::Cursed(Shape::I));
+                let block = FallingBlock::new(BlockType::Cursed);
                 if block.get_relative_coords().iter().all(|(_, y)| *y == 0) {
                     break block;
                 }

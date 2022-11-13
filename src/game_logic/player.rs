@@ -27,7 +27,7 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
-    pub next_block: FallingBlock,
+    pub next_block_queue: Vec<FallingBlock>, // Never empty
     pub block_in_hold: Option<FallingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1
@@ -40,15 +40,16 @@ impl Player {
         client_info: &ClientInfo,
         down_direction: WorldPoint,
         game_mode: Mode,
-        mut block_factory: impl FnMut() -> FallingBlock,
+        first_block: FallingBlock,
+        second_block: FallingBlock,
     ) -> Self {
         Self {
             client_id: client_info.client_id,
             name: client_info.name.to_string(),
             color: client_info.color,
             spawn_point,
-            block_or_timer: BlockOrTimer::Block(block_factory()),
-            next_block: block_factory(),
+            block_or_timer: BlockOrTimer::Block(first_block),
+            next_block_queue: vec![second_block],
             block_in_hold: None,
             fast_down: false,
             down_direction,

@@ -442,7 +442,7 @@ fn render_stuff_on_side(
         .find(|p| p.borrow().client_id == client.id)
         .unwrap()
         .borrow();
-    render_block(&player.next_block, buffer, x_offset, 8, "Next:");
+    render_block(&player.next_block_queue[0], buffer, x_offset, 8, "Next:");
 
     if let Some(block) = &player.block_in_hold {
         render_block(block, buffer, x_offset, 16, "Holding:");

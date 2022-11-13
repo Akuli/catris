@@ -10,6 +10,7 @@ use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
+use rand::seq::SliceRandom;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -140,7 +141,7 @@ pub struct Game {
     landed_rows: Vec<Vec<Option<SquareContent>>>,
     score: usize,
     bomb_id_counter: u64,
-    block_factory: fn(usize) -> FallingBlock,
+    normal_block_factory: fn() -> FallingBlock,
 }
 impl Game {
     pub fn new(mode: Mode) -> Self {
@@ -165,7 +166,7 @@ impl Game {
             landed_rows,
             score: 0,
             bomb_id_counter: 0,
-            block_factory: |score| FallingBlock::new(BlockType::from_score(score)),
+            normal_block_factory: || FallingBlock::new(BlockType::Normal),
         }
     }
 
@@ -175,8 +176,8 @@ impl Game {
     }
 
     #[cfg(test)]
-    pub fn set_block_factory(&mut self, factory: fn(usize) -> FallingBlock) {
-        self.block_factory = factory;
+    pub fn set_normal_block_factory(&mut self, factory: fn() -> FallingBlock) {
+        self.normal_block_factory = factory;
     }
 
     pub fn get_score(&self) -> usize {
@@ -322,7 +323,8 @@ impl Game {
             client_info,
             down_direction,
             self.mode,
-            || (self.block_factory)(self.score),
+            (self.normal_block_factory)(),
+            (self.normal_block_factory)(),
         )));
         self.update_spawn_points();
 
@@ -399,6 +401,27 @@ impl Game {
         }
 
         self.update_spawn_points();
+    }
+
+    fn maybe_add_special_block_to_random_player(&self) {
+        let queue = &mut self
+            .players
+            .choose(&mut rand::thread_rng())
+            .unwrap()
+            .borrow_mut()
+            .next_block_queue;
+
+        // Do not add a special block:
+        //  - when running tests (special blocks are unpredictable)
+        //  - if there's already ridiculously many (prevent a hypothetical out-of-memory attack)
+        if cfg!(test) || queue.len() > 10 {
+            return;
+        }
+
+        match BlockType::from_score(self.score) {
+            BlockType::Normal => {}
+            special => queue.push(FallingBlock::new(special)),
+        }
     }
 
     fn add_score(&mut self, mut add: usize, multi_player_compensate: bool) {
@@ -915,7 +938,7 @@ impl Game {
             if let BlockOrTimer::Block(b) = &mut player.block_or_timer {
                 handle_block(b);
             }
-            handle_block(&mut player.next_block);
+            handle_block(&mut player.next_block_queue[0]); // animate next block
             if let Some(b) = &mut player.block_in_hold {
                 handle_block(b);
             }
@@ -978,7 +1001,11 @@ impl Game {
             let mut block = if from_hold_if_possible && player.block_in_hold.is_some() {
                 replace(&mut player.block_in_hold, None).unwrap()
             } else {
-                replace(&mut player.next_block, (self.block_factory)(self.score))
+                let block = player.next_block_queue.remove(0);
+                if player.next_block_queue.is_empty() {
+                    player.next_block_queue.push((self.normal_block_factory)());
+                }
+                block
             };
             block.spawn_at(player.spawn_point);
             block
@@ -996,6 +1023,7 @@ impl Game {
 
     fn new_block(&self, player_idx: usize) {
         self.new_block_possibly_from_hold(player_idx, false);
+        self.maybe_add_special_block_to_random_player();
     }
 
     fn hold_block(&self, player_idx: usize) -> bool {
@@ -1005,7 +1033,7 @@ impl Game {
             BlockOrTimer::Block(b) if !b.has_been_in_hold => {
                 // Replace the block with a dummy value.
                 // It will be overwritten soon anyway.
-                replace(b, (self.block_factory)(self.score))
+                replace(b, (self.normal_block_factory)())
             }
             _ => return false,
         };
