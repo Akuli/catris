@@ -1,10 +1,10 @@
-use std::collections::VecDeque;
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::wrap_around;
 use crate::game_logic::game::Mode;
 use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
+use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum BlockOrTimer {
@@ -28,7 +28,7 @@ pub struct Player {
     pub color: u8,
     pub spawn_point: PlayerPoint,
     pub block_or_timer: BlockOrTimer,
-    pub next_block_queue: VecDeque<FallingBlock>,  // Never empty
+    pub next_block_queue: VecDeque<FallingBlock>, // Never empty
     pub block_in_hold: Option<FallingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1

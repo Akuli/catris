@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
 use crate::game_logic::blocks::BlockType;
@@ -11,6 +10,7 @@ use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
 use crate::lobby::MAX_CLIENTS_PER_LOBBY;
+use rand::seq::SliceRandom;
 use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::HashMap;
@@ -407,7 +407,12 @@ impl Game {
         match BlockType::from_score(self.score) {
             BlockType::Normal => {}
             special => {
-                self.players.choose(&mut rand::thread_rng()).unwrap().borrow_mut().next_block_queue.push_back(FallingBlock::new(special));
+                self.players
+                    .choose(&mut rand::thread_rng())
+                    .unwrap()
+                    .borrow_mut()
+                    .next_block_queue
+                    .push_back(FallingBlock::new(special));
             }
         }
     }
@@ -926,7 +931,7 @@ impl Game {
             if let BlockOrTimer::Block(b) = &mut player.block_or_timer {
                 handle_block(b);
             }
-            handle_block(player.next_block_queue.front_mut().unwrap());  // animate next block
+            handle_block(player.next_block_queue.front_mut().unwrap()); // animate next block
             if let Some(b) = &mut player.block_in_hold {
                 handle_block(b);
             }
@@ -991,7 +996,9 @@ impl Game {
             } else {
                 let block = player.next_block_queue.pop_front().unwrap();
                 if player.next_block_queue.is_empty() {
-                    player.next_block_queue.push_back((self.block_factory)(BlockType::Normal));
+                    player
+                        .next_block_queue
+                        .push_back((self.block_factory)(BlockType::Normal));
                 }
                 block
             };

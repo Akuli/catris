@@ -370,10 +370,7 @@ impl BlockType {
             (BlockType::Normal, 1.0),
             // Cursed blocks only appear at score>500 and then become very common.
             // The intent is to surprise new players.
-            (
-                BlockType::Cursed,
-                (score_kilos - 0.5).max(0.0) / 20.0,
-            ),
+            (BlockType::Cursed, (score_kilos - 0.5).max(0.0) / 20.0),
             // Drills are rare, but always possible.
             // They're also very powerful when you happen to get one.
             (BlockType::Drill, score_kilos / 200.0),
