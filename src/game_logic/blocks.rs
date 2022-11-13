@@ -557,7 +557,10 @@ impl FallingBlock {
         self.add_center(&self.relative_coords)
     }
 
+    // Make sure to never set the coords to empty.
+    // An empty block doesn't make sense, and players should just get a new block instead.
     pub fn set_player_coords(&mut self, coords: &[PlayerPoint], new_center: PlayerPoint) {
+        assert!(coords.len() != 0);
         self.center = new_center;
         let (cx, cy) = new_center;
         self.relative_coords = coords
