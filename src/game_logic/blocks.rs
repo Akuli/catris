@@ -558,7 +558,7 @@ impl FallingBlock {
     }
 
     pub fn set_player_coords(&mut self, coords: &[PlayerPoint], new_center: PlayerPoint) {
-        assert!(coords.len() != 0);  // instead of making empty block, just give a new block to the player
+        assert!(coords.len() != 0); // instead of making empty block, just give a new block to the player
         self.center = new_center;
         let (cx, cy) = new_center;
         self.relative_coords = coords
