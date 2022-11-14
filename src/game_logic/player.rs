@@ -87,14 +87,14 @@ impl Player {
         let x = x as i16;
         let y = y as i16;
         let (down_x, down_y) = self.down_direction;
+
         // a couple ways to derive this: complex number multiplication, rotation matrices
         // to check, it should return the point unchanged when down_direction is the usual (0,1)
         // also, rotating (x,y) or (down_x,down_y) should rotate the result similarly
         let rotated_x = x * down_y + y * down_x;
         let rotated_y = -x * down_x + y * down_y;
+
         let (offset_x, offset_y) = self.local_center_as_world_point();
-        let result = (offset_x + rotated_x, offset_y + rotated_y);
-        //println!("player_to_world({:?}) --> {:?}", point, result);
-        result
+        (offset_x + rotated_x, offset_y + rotated_y)
     }
 }

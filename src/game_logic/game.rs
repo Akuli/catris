@@ -55,6 +55,36 @@ fn circle(center: WorldPoint, radius: f32) -> Vec<WorldPoint> {
     result
 }
 
+// The square is centered around the middle of ring game, and in world coordinates
+fn square(r: i16) -> Vec<WorldPoint> {
+    let mut result = vec![(-r, -r), (-r, r), (r, -r), (r, r)];
+    for i in (-r + 1)..r {
+        result.push((-r, i));
+        result.push((r, i));
+        result.push((i, -r));
+        result.push((i, r));
+    }
+    result
+        .iter()
+        .map(|(x, y)| (RING_OUTER_RADIUS as i16 + x, RING_OUTER_RADIUS as i16 + y))
+        .collect()
+}
+
+// Idea: Move towards the center of ring mode game, at most one unit in x and one in y.
+// Only corner points (at 45deg from center) move in both x and y directions.
+fn towards_ring_mode_center(point: WorldPoint) -> WorldPoint {
+    let (mut x, mut y) = point;
+    let rx = x - RING_OUTER_RADIUS;
+    let ry = y - RING_OUTER_RADIUS;
+    if rx.abs() >= ry.abs() {
+        x -= rx.signum();
+    }
+    if ry.abs() >= rx.abs() {
+        y -= ry.signum();
+    }
+    (x, y)
+}
+
 pub const BOTTLE_MAP: &[&str] = &[
     r"    |xxxxxxxxxx|    ",
     r"    |xxxxxxxxxx|    ",
@@ -486,18 +516,12 @@ impl Game {
             }
             Mode::Ring => {
                 for r in (RING_INNER_RADIUS as i16 + 1)..=RING_OUTER_RADIUS {
-                    let mut ring = HashSet::new();
-                    for i in (-r)..=r {
-                        let mid = RING_OUTER_RADIUS;
-                        ring.insert((mid - r, mid + i));
-                        ring.insert((mid + r, mid + i));
-                        ring.insert((mid + i, mid - r));
-                        ring.insert((mid + i, mid + r));
-                    }
-
-                    if ring.iter().all(|p| self.get_landed_square(*p).is_some()) {
+                    if square(r)
+                        .iter()
+                        .all(|p| self.get_landed_square(*p).is_some())
+                    {
                         full_count_everyone += 1;
-                        full_points.extend(ring);
+                        full_points.extend(square(r));
                     }
                 }
             }
@@ -571,48 +595,30 @@ impl Game {
                     full_radiuses[max(x_offset, y_offset) as usize] = true;
                 }
 
-                // removing a ring shifts outer radiuses, so go inwards
+                // Removing a ring shifts outer radiuses, so remove outermost rings first.
                 for (r, is_full) in full_radiuses.iter().enumerate().rev() {
                     if !is_full {
                         continue;
                     }
-
                     let r = r as i16;
-                    #[allow(non_snake_case)]
-                    let R = RING_OUTER_RADIUS;
 
-                    // clear destination radius where outer blocks will go
-                    // moving the squares doesn't overwrite, if source (outer) square is None
-                    for i in (-r)..=r {
-                        self.set_landed_square((R - r, R + i), None);
-                        self.set_landed_square((R + r, R + i), None);
-                        self.set_landed_square((R + i, R - r), None);
-                        self.set_landed_square((R + i, R + r), None);
+                    // Delete the squares that flashed
+                    for point in square(r) {
+                        self.set_landed_square(point, None)
                     }
-                    for dest_r in r..R {
-                        let source_r = dest_r + 1;
-                        for i in (-source_r + 1)..source_r {
-                            self.move_landed_square((R - source_r, R + i), (R - dest_r, R + i));
-                            self.move_landed_square((R + source_r, R + i), (R + dest_r, R + i));
-                            self.move_landed_square((R + i, R - source_r), (R + i, R - dest_r));
-                            self.move_landed_square((R + i, R + source_r), (R + i, R + dest_r));
+
+                    // Shift outer squares inwards
+                    for source_r in (r + 1)..=RING_OUTER_RADIUS {
+                        for source in square(source_r) {
+                            let dest = towards_ring_mode_center(source);
+                            let square = self.get_landed_square(source);
+                            // Don't move blanks and replace non-blanks.
+                            // This makes a difference in corners where multiple places merge.
+                            if square.is_some() {
+                                self.set_landed_square(source, None);
+                                self.set_landed_square(dest, square);
+                            }
                         }
-                        self.move_landed_square(
-                            (R - source_r, R - source_r),
-                            (R - dest_r, R - dest_r),
-                        );
-                        self.move_landed_square(
-                            (R - source_r, R + source_r),
-                            (R - dest_r, R + dest_r),
-                        );
-                        self.move_landed_square(
-                            (R + source_r, R - source_r),
-                            (R + dest_r, R - dest_r),
-                        );
-                        self.move_landed_square(
-                            (R + source_r, R + source_r),
-                            (R + dest_r, R + dest_r),
-                        );
                     }
                 }
             }
@@ -707,14 +713,6 @@ impl Game {
     pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         let (x, y) = point;
         self.landed_rows[y as usize][x as usize] = value;
-    }
-
-    fn move_landed_square(&mut self, from: WorldPoint, to: WorldPoint) {
-        let value_to_move = self.get_landed_square(from);
-        self.set_landed_square(from, None);
-        if value_to_move.is_some() {
-            self.set_landed_square(to, value_to_move);
-        }
     }
 
     pub fn get_any_square(
