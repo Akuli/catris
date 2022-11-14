@@ -123,7 +123,7 @@ pub const RING_MAP: &[&str] = &[
     "             '.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'             ",
     "               'o------------------------------------------o'               ",
 ];
-pub const RING_OUTER_RADIUS: usize = 18;
+pub const RING_OUTER_RADIUS: i16 = 18;
 pub const RING_INNER_RADIUS: usize = 3;
 
 pub fn wrap_around(mode: Mode, y: &mut i32) {
@@ -149,7 +149,7 @@ impl Game {
             Mode::Traditional => vec![vec![]; 20],
             Mode::Bottle => vec![vec![]; 21],
             Mode::Ring => {
-                let size = 2 * RING_OUTER_RADIUS + 1;
+                let size = (2 * RING_OUTER_RADIUS + 1) as usize;
                 let mut rows = vec![];
                 for _ in 0..size {
                     let mut row = vec![];
@@ -203,14 +203,6 @@ impl Game {
 
     pub fn get_height(&self) -> usize {
         self.landed_rows.len()
-    }
-
-    // Where is world coordinate (0,0) in the landed_rows array?
-    fn get_center_offset(&self) -> (i16, i16) {
-        match self.mode {
-            Mode::Traditional | Mode::Bottle => (0, 0),
-            Mode::Ring => (RING_OUTER_RADIUS as i16, RING_OUTER_RADIUS as i16),
-        }
     }
 
     // for the ui, returns (x_min, x_max+1, y_min, y_max+1)
@@ -493,13 +485,14 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                for r in (RING_INNER_RADIUS as i16 + 1)..=(RING_OUTER_RADIUS as i16) {
-                    let mut ring = vec![(-r, -r), (-r, r), (r, -r), (r, r)];
-                    for i in (-r + 1)..r {
-                        ring.push((-r, i));
-                        ring.push((r, i));
-                        ring.push((i, -r));
-                        ring.push((i, r));
+                for r in (RING_INNER_RADIUS as i16 + 1)..=RING_OUTER_RADIUS {
+                    let mut ring = HashSet::new();
+                    for i in (-r)..=r {
+                        let mid = RING_OUTER_RADIUS;
+                        ring.insert((mid - r, mid + i));
+                        ring.insert((mid + r, mid + i));
+                        ring.insert((mid + i, mid - r));
+                        ring.insert((mid + i, mid + r));
                     }
 
                     if ring.iter().all(|p| self.get_landed_square(*p).is_some()) {
@@ -567,40 +560,59 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                let mut counts = vec![0; RING_OUTER_RADIUS + 1];
                 for (x, y) in full {
                     self.set_landed_square((*x, *y), None);
-                    counts[max(x.abs(), y.abs()) as usize] += 1;
+                }
+
+                let mut full_radiuses = vec![false; RING_OUTER_RADIUS as usize + 1];
+                for (x, y) in full {
+                    let x_offset = (x - RING_OUTER_RADIUS).abs();
+                    let y_offset = (y - RING_OUTER_RADIUS).abs();
+                    full_radiuses[max(x_offset, y_offset) as usize] = true;
                 }
 
                 // removing a ring shifts outer radiuses, so go inwards
-                for (r, count) in counts.iter().enumerate().rev() {
-                    if r == 0 || *count != 8 * r {
+                for (r, is_full) in full_radiuses.iter().enumerate().rev() {
+                    if !is_full {
                         continue;
                     }
+
                     let r = r as i16;
+                    #[allow(non_snake_case)]
+                    let R = RING_OUTER_RADIUS;
 
                     // clear destination radius where outer blocks will go
                     // moving the squares doesn't overwrite, if source (outer) square is None
                     for i in (-r)..=r {
-                        self.set_landed_square((-r, i), None);
-                        self.set_landed_square((r, i), None);
-                        self.set_landed_square((i, -r), None);
-                        self.set_landed_square((i, r), None);
+                        self.set_landed_square((R - r, R + i), None);
+                        self.set_landed_square((R + r, R + i), None);
+                        self.set_landed_square((R + i, R - r), None);
+                        self.set_landed_square((R + i, R + r), None);
                     }
-
-                    for dest_r in r..(RING_OUTER_RADIUS as i16) {
+                    for dest_r in r..R {
                         let source_r = dest_r + 1;
                         for i in (-source_r + 1)..source_r {
-                            self.move_landed_square((-source_r, i), (-dest_r, i));
-                            self.move_landed_square((source_r, i), (dest_r, i));
-                            self.move_landed_square((i, -source_r), (i, -dest_r));
-                            self.move_landed_square((i, source_r), (i, dest_r));
+                            self.move_landed_square((R - source_r, R + i), (R - dest_r, R + i));
+                            self.move_landed_square((R + source_r, R + i), (R + dest_r, R + i));
+                            self.move_landed_square((R + i, R - source_r), (R + i, R - dest_r));
+                            self.move_landed_square((R + i, R + source_r), (R + i, R + dest_r));
                         }
-                        self.move_landed_square((-source_r, -source_r), (-dest_r, -dest_r));
-                        self.move_landed_square((-source_r, source_r), (-dest_r, dest_r));
-                        self.move_landed_square((source_r, -source_r), (dest_r, -dest_r));
-                        self.move_landed_square((source_r, source_r), (dest_r, dest_r));
+                        self.move_landed_square(
+                            (R - source_r, R - source_r),
+                            (R - dest_r, R - dest_r),
+                        );
+                        self.move_landed_square(
+                            (R - source_r, R + source_r),
+                            (R - dest_r, R + dest_r),
+                        );
+                        self.move_landed_square(
+                            (R + source_r, R - source_r),
+                            (R + dest_r, R - dest_r),
+                        );
+                        self.move_landed_square(
+                            (R + source_r, R + source_r),
+                            (R + dest_r, R + dest_r),
+                        );
                     }
                 }
             }
@@ -623,7 +635,7 @@ impl Game {
         }
     }
 
-    fn is_valid_falling_block_coords(&self, point: PlayerPoint) -> bool {
+    fn is_valid_falling_block_coords(&self, player_idx: usize, point: PlayerPoint) -> bool {
         let (x, mut y) = point;
         let top_y = match self.mode {
             Mode::Traditional | Mode::Bottle => 0,
@@ -633,7 +645,7 @@ impl Game {
             y = top_y;
         }
         wrap_around(self.mode, &mut y);
-        self.is_valid_landed_block_coords((x as i16, y as i16))
+        self.is_valid_landed_block_coords(self.players[player_idx].borrow().player_to_world((x, y)))
     }
 
     pub fn is_valid_landed_block_coords(&self, point: WorldPoint) -> bool {
@@ -658,13 +670,11 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                if max(x.abs(), y.abs()) > (RING_OUTER_RADIUS as i16) {
+                let r = RING_OUTER_RADIUS;
+                if !(0..=2 * r).contains(&x) || !(0..=2 * r).contains(&y) {
                     return false;
                 }
-                let map_x = 2 * (x + (RING_OUTER_RADIUS as i16)) as usize + 1;
-                let map_y = (y + (RING_OUTER_RADIUS as i16)) as usize + 1;
-                let line = RING_MAP[map_y as usize].as_bytes();
-                line[map_x as usize] == b'x'
+                RING_MAP[y as usize + 1].as_bytes()[2 * x as usize + 1] == b'x'
             }
         }
     }
@@ -691,14 +701,12 @@ impl Game {
 
     pub fn get_landed_square(&self, point: WorldPoint) -> Option<SquareContent> {
         let (x, y) = point;
-        let (offset_x, offset_y) = self.get_center_offset();
-        self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize]
+        self.landed_rows[y as usize][x as usize]
     }
 
     pub fn set_landed_square(&mut self, point: WorldPoint, value: Option<SquareContent>) {
         let (x, y) = point;
-        let (offset_x, offset_y) = self.get_center_offset();
-        self.landed_rows[(y + offset_y) as usize][(x + offset_x) as usize] = value;
+        self.landed_rows[y as usize][x as usize] = value;
     }
 
     fn move_landed_square(&mut self, from: WorldPoint, to: WorldPoint) {
@@ -737,7 +745,7 @@ impl Game {
         };
 
         let can_rotate = coords.iter().all(|p| {
-            let stays_in_bounds = self.is_valid_falling_block_coords(*p);
+            let stays_in_bounds = self.is_valid_falling_block_coords(player_idx, *p);
             let goes_on_top_of_something = self
                 .get_any_square(player.borrow().player_to_world(*p), Some(player_idx))
                 .is_some();
@@ -771,7 +779,7 @@ impl Game {
             };
 
             coords.iter().all(|p| {
-                let stays_in_bounds = self.is_valid_falling_block_coords(*p);
+                let stays_in_bounds = self.is_valid_falling_block_coords(player_idx, *p);
                 stays_in_bounds && {
                     let p = player.borrow().player_to_world(*p);
                     if let Some(goes_on_top_of) = self.get_any_square(p, Some(player_idx)) {
@@ -813,7 +821,7 @@ impl Game {
                 let (x, mut y) = *p;
                 y += 1;
 
-                let stays_in_bounds = self.is_valid_falling_block_coords((x, y));
+                let stays_in_bounds = self.is_valid_falling_block_coords(player_idx, (x, y));
                 stays_in_bounds && {
                     let world_point = player.borrow().player_to_world((x, y));
                     if let Some(goes_on_top_of) = self.get_any_square(world_point, Some(player_idx))
@@ -1121,10 +1129,9 @@ impl Game {
             self.new_block(player_idx);
         }
 
-        let (offset_x, offset_y) = self.get_center_offset();
         for (y, row) in self.landed_rows.iter_mut().enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let point = (x as i16 - offset_x, y as i16 - offset_y);
+                let point = (x as i16, y as i16);
                 if let Some(content) = cell {
                     if !f(point, content, None) {
                         *cell = None;

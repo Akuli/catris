@@ -1,6 +1,7 @@
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::wrap_around;
 use crate::game_logic::game::Mode;
+use crate::game_logic::game::RING_OUTER_RADIUS;
 use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
@@ -73,6 +74,13 @@ impl Player {
         }
     }
 
+    fn local_center_as_world_point(&self) -> WorldPoint {
+        match self.game_mode {
+            Mode::Traditional | Mode::Bottle => (0, 0),
+            Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
+        }
+    }
+
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, mut y) = point;
         wrap_around(self.game_mode, &mut y);
@@ -82,6 +90,11 @@ impl Player {
         // a couple ways to derive this: complex number multiplication, rotation matrices
         // to check, it should return the point unchanged when down_direction is the usual (0,1)
         // also, rotating (x,y) or (down_x,down_y) should rotate the result similarly
-        (x * down_y + y * down_x, -x * down_x + y * down_y)
+        let rotated_x = x * down_y + y * down_x;
+        let rotated_y = -x * down_x + y * down_y;
+        let (offset_x, offset_y) = self.local_center_as_world_point();
+        let result = (offset_x + rotated_x, offset_y + rotated_y);
+        //println!("player_to_world({:?}) --> {:?}", point, result);
+        result
     }
 }
