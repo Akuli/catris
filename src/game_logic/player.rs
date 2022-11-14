@@ -74,7 +74,7 @@ impl Player {
         }
     }
 
-    fn local_center_as_world_point(&self) -> WorldPoint {
+    fn local_origin_as_world_point(&self) -> WorldPoint {
         match self.game_mode {
             Mode::Traditional | Mode::Bottle => (0, 0),
             Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
@@ -94,7 +94,7 @@ impl Player {
         let rotated_x = x * down_y + y * down_x;
         let rotated_y = -x * down_x + y * down_y;
 
-        let (offset_x, offset_y) = self.local_center_as_world_point();
+        let (offset_x, offset_y) = self.local_origin_as_world_point();
         (offset_x + rotated_x, offset_y + rotated_y)
     }
 }
