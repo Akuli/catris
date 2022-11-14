@@ -123,7 +123,7 @@ pub async fn detect_terminal_type(
     sender.send(message.as_bytes()).await?;
 
     match receiver.receive_key_press().await? {
-        KeyPress::Character('a') => return Ok(TerminalType::ANSI),
+        KeyPress::Character('a') => return Ok(TerminalType::Ansi),
         KeyPress::Character('v') => return Ok(TerminalType::VT52),
         KeyPress::Character('\x1b') => {
             // Escape character, probably in response to ANSI DSR or VT52 ident
@@ -148,7 +148,7 @@ pub async fn detect_terminal_type(
                             receiver.receive_key_press().await?,
                             KeyPress::Character('R')
                         ) {
-                            return Ok(TerminalType::ANSI);
+                            return Ok(TerminalType::Ansi);
                         }
                         n += 1;
                     }
@@ -159,10 +159,10 @@ pub async fn detect_terminal_type(
         _ => {}
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         ErrorKind::ConnectionAborted,
         "unable to detect terminal type",
-    ));
+    ))
 }
 
 async fn handle_connection_until_error(
