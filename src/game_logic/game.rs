@@ -584,8 +584,8 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                for (x, y) in full {
-                    self.set_landed_square((*x, *y), None);
+                for &point in full {
+                    self.set_landed_square(point, None);
                 }
 
                 let mut full_radiuses = vec![false; RING_OUTER_RADIUS as usize + 1];

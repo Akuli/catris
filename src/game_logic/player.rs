@@ -74,19 +74,16 @@ impl Player {
         }
     }
 
-    fn local_origin_as_world_point(&self) -> WorldPoint {
-        match self.game_mode {
-            Mode::Traditional | Mode::Bottle => (0, 0),
-            Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
-        }
-    }
-
     pub fn player_to_world(&self, point: PlayerPoint) -> WorldPoint {
         let (x, mut y) = point;
         wrap_around(self.game_mode, &mut y);
         let x = x as i16;
         let y = y as i16;
         let (down_x, down_y) = self.down_direction;
+        let (offset_x, offset_y) = match self.game_mode {
+            Mode::Traditional | Mode::Bottle => (0, 0),
+            Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
+        };
 
         // a couple ways to derive this: complex number multiplication, rotation matrices
         // to check, it should return the point unchanged when down_direction is the usual (0,1)
@@ -94,7 +91,6 @@ impl Player {
         let rotated_x = x * down_y + y * down_x;
         let rotated_y = -x * down_x + y * down_y;
 
-        let (offset_x, offset_y) = self.local_origin_as_world_point();
         (offset_x + rotated_x, offset_y + rotated_y)
     }
 }
