@@ -66,7 +66,7 @@ fn square(r: i16) -> Vec<WorldPoint> {
     }
     result
         .iter()
-        .map(|(x, y)| (RING_OUTER_RADIUS as i16 + x, RING_OUTER_RADIUS as i16 + y))
+        .map(|(x, y)| (RING_OUTER_RADIUS + x, RING_OUTER_RADIUS + y))
         .collect()
 }
 
