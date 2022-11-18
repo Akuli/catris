@@ -22,22 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+      with:
+        # https://github.com/marketplace/actions/add-commit#working-with-prs
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.ref }}
     - uses: ATiltedTree/setup-rust@v1
       with:
         rust-version: stable
         components: rustfmt
     - run: cargo fmt
-    - name: Add, commit, push
-      if: github.event_name == 'pull_request'
-      run: |
-        set -x
-        git config user.name github_actions.yml
-        git config user.email '<>'
-        if ! git diff --exit-code; then
-          git add src
-          git commit -m "Run cargo fmt"
-          git push ${{ github.event.pull_request.head.repo.git_url }} HEAD:${{ github.event.pull_request.head.ref }}
-        fi
+    - if: github.event_name == 'pull_request'
+      uses: EndBug/add-and-commit@v9
+      with:
+        add: src
+        default_author: github_actions
     - run: git diff --exit-code
 #  clippy:
 #    runs-on: ubuntu-latest
