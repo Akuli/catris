@@ -30,12 +30,13 @@ jobs:
     - name: Add, commit, push
       if: github.event_name == 'pull_request'
       run: |
+        set -x
         git config user.name github_actions.yml
         git config user.email '<>'
         git add src
         if ! git diff --exit-code; then
           git commit -m "Run cargo fmt"
-          git push ${{ github.event.pull_request.head.repo.full_name }} HEAD:${{ github.event.pull_request.head.ref }}
+          git push ${{ github.event.pull_request.head.repo.url }} HEAD:${{ github.event.pull_request.head.ref }}
         fi
     - run: git diff --exit-code
 #  clippy:
