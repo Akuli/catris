@@ -35,8 +35,8 @@ jobs:
         set -x
         git config user.name github_actions.yml
         git config user.email '<>'
-        git add src
         if ! git diff --exit-code; then
+          git add src
           git commit -m "Run cargo fmt"
           git push ${{ github.event.pull_request.head.repo.url }} HEAD:${{ github.event.pull_request.head.ref }}
         fi
