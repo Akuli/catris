@@ -676,10 +676,9 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                let r = RING_OUTER_RADIUS;
-                if !(0..=2 * r).contains(&x) || !(0..=2 * r).contains(&y) {
-                    return false;
-                }
+                let size = 2*RING_OUTER_RADIUS+1;
+                (0..size).contains(&x) && (0..size).contains(&y)
+                && 
                 RING_MAP[y as usize + 1].as_bytes()[2 * x as usize + 1] == b'x'
             }
         }
