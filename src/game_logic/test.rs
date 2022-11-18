@@ -372,10 +372,11 @@ fn test_bottle_clearing() {
 #[test]
 fn test_ring_mode_clearing() {
     let mut game = create_game(Mode::Ring, 2, Shape::L);
-    for x in (RING_OUTER_RADIUS - 6)..=(RING_OUTER_RADIUS + 6) {
-        for y in (RING_OUTER_RADIUS - 6)..=(RING_OUTER_RADIUS + 6) {
-            if game.is_valid_landed_block_coords((x, y))
-                && (x, y) != (RING_OUTER_RADIUS + 5, RING_OUTER_RADIUS - 2)
+    for x in -6..=6 {
+        for y in -6..=6 {
+            let point = (x + RING_OUTER_RADIUS, y + RING_OUTER_RADIUS);
+            if game.is_valid_landed_block_coords(point)
+                && (x, y) != (5, -2)
             {
                 game.set_landed_square(
                     (x, y),
