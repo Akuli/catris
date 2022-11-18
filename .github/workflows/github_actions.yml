@@ -26,7 +26,9 @@ jobs:
       with:
         rust-version: stable
         components: rustfmt
+    - run: git status
     - run: cargo fmt
+    - run: git status
     - name: Add, commit, push
       if: github.event_name == 'pull_request'
       run: |
