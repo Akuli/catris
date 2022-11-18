@@ -38,7 +38,7 @@ jobs:
         if ! git diff --exit-code; then
           git add src
           git commit -m "Run cargo fmt"
-          git push ${{ github.event.pull_request.head.repo.url }} HEAD:${{ github.event.pull_request.head.ref }}
+          git push ${{ github.event.pull_request.head.repo.git_url }} HEAD:${{ github.event.pull_request.head.ref }}
         fi
     - run: git diff --exit-code
 #  clippy:
