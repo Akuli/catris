@@ -379,7 +379,7 @@ fn test_ring_mode_clearing() {
                 && (x, y) != (5, -2)
             {
                 game.set_landed_square(
-                    (x, y),
+                    point,
                     Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
                 );
             }
