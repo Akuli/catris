@@ -154,7 +154,7 @@ pub const RING_MAP: &[&str] = &[
     "               'o------------------------------------------o'               ",
 ];
 pub const RING_OUTER_RADIUS: i16 = 18;
-pub const RING_INNER_RADIUS: usize = 3;
+const RING_INNER_RADIUS: i16 = 3;
 
 pub fn wrap_around(mode: Mode, y: &mut i32) {
     if mode == Mode::Ring && *y > 0 {
@@ -515,7 +515,7 @@ impl Game {
                 }
             }
             Mode::Ring => {
-                for r in (RING_INNER_RADIUS as i16 + 1)..=RING_OUTER_RADIUS {
+                for r in (RING_INNER_RADIUS + 1)..=RING_OUTER_RADIUS {
                     if square(r)
                         .iter()
                         .all(|p| self.get_landed_square(*p).is_some())
