@@ -17,7 +17,8 @@ impl TerminalType {
 
     pub fn clear_from_cursor_to_end_of_line(&self) -> &str {
         match self {
-            Self::Ansi => "\x1b[0K", Self::VT52 => "\x1bK",
+            Self::Ansi => "\x1b[0K",
+            Self::VT52 => "\x1bK",
         }
     }
 
