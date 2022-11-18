@@ -10,7 +10,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: ATiltedTree/setup-rust@v1
       with:
         # In case this fails in the future: "rustc --version" says 1.60.0 to me.
@@ -21,7 +21,7 @@ jobs:
   cargo-fmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: ATiltedTree/setup-rust@v1
       with:
         rust-version: stable
@@ -33,7 +33,7 @@ jobs:
 #  clippy:
 #    runs-on: ubuntu-latest
 #    steps:
-#    - uses: actions/checkout@v2
+#    - uses: actions/checkout@v3
 #    - uses: ATiltedTree/setup-rust@v1
 #      with:
 #        rust-version: stable
@@ -42,7 +42,7 @@ jobs:
   eslint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: actions/setup-node@v2
       with:
         node-version: '18'
