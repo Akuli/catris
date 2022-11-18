@@ -1129,9 +1129,8 @@ impl Game {
 
         for (y, row) in self.landed_rows.iter_mut().enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let point = (x as i16, y as i16);
                 if let Some(content) = cell {
-                    if !f(point, content, None) {
+                    if !f((x as i16, y as i16), content, None) {
                         *cell = None;
                     }
                 }
