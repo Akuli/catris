@@ -375,9 +375,7 @@ fn test_ring_mode_clearing() {
     for x in -6..=6 {
         for y in -6..=6 {
             let point = (x + RING_OUTER_RADIUS, y + RING_OUTER_RADIUS);
-            if game.is_valid_landed_block_coords(point)
-                && (x, y) != (5, -2)
-            {
+            if game.is_valid_landed_block_coords(point) && (x, y) != (5, -2) {
                 game.set_landed_square(
                     point,
                     Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
