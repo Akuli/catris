@@ -27,9 +27,17 @@ jobs:
         rust-version: stable
         components: rustfmt
     - run: cargo fmt
-    - uses: EndBug/add-and-commit@v9
-      with:
-        default_author: github_actions
+    - name: Add, commit, push
+      if: github.event_name == 'pull_request'
+      run: |
+        git config user.name github_actions.yml
+        git config user.email '<>'
+        git add src
+        if ! git diff --exit-code; then
+          git commit -m "Run cargo fmt"
+          git push ${{ github.event.pull_request.head.repo.full_name }} HEAD:${{ github.event.pull_request.head.ref }}
+        fi
+    - run: git diff --exit-code
 #  clippy:
 #    runs-on: ubuntu-latest
 #    steps:
