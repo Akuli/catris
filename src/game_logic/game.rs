@@ -612,7 +612,7 @@ impl Game {
                         for source in square(source_r) {
                             let dest = towards_ring_mode_center(source);
                             let square = self.get_landed_square(source);
-                            // Don't move blanks and replace non-blanks.
+                            // Don't replace already moved non-blanks with blanks.
                             // This makes a difference in corners where multiple places merge.
                             if square.is_some() {
                                 self.set_landed_square(source, None);
