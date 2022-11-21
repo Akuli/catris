@@ -1,5 +1,4 @@
-use crate::client;
-use crate::client::ClientLogger;
+use crate::client::log_for_client;
 use crate::game_logic::game::Game;
 use crate::game_logic::game::Mode;
 use crate::game_wrapper;
@@ -14,7 +13,6 @@ use weak_table::WeakValueHashMap;
 
 pub struct ClientInfo {
     pub client_id: u64,
-    pub logger: ClientLogger,
     pub name: String,
     pub color: u8,
 }
@@ -64,21 +62,24 @@ impl Lobby {
         self.changed_sender.send(()).unwrap();
     }
 
-    pub fn add_client(&mut self, logger: client::ClientLogger, name: &str) {
+    pub fn add_client(&mut self, client_id: u64, name: &str) {
+        log_for_client(
+            client_id,
+            &format!(
+                "Joining lobby with {} existing clients: {}",
+                self.clients.len(),
+                self.id
+            ),
+        );
+
         assert!(!self.lobby_is_full());
-        logger.log(&format!(
-            "Joining lobby with {} existing clients: {}",
-            self.clients.len(),
-            self.id
-        ));
         let used_colors: Vec<u8> = self.clients.iter().map(|c| c.color).collect();
         let unused_color = *ALL_COLORS
             .iter()
             .find(|color| !used_colors.contains(*color))
             .unwrap();
         self.clients.push(ClientInfo {
-            client_id: logger.client_id,
-            logger,
+            client_id,
             name: name.to_string(),
             color: unused_color,
         });
@@ -86,14 +87,12 @@ impl Lobby {
     }
 
     pub fn remove_client(&mut self, client_id: u64) {
+        log_for_client(client_id, &format!("Leaving lobby: {}", self.id));
         let i = self
             .clients
             .iter()
             .position(|c| c.client_id == client_id)
             .unwrap();
-        self.clients[i]
-            .logger
-            .log(&format!("Leaving lobby: {}", self.id));
         self.clients.remove(i);
         self.mark_changed();
     }
@@ -109,9 +108,11 @@ impl Lobby {
             if !wrapper.game.lock().unwrap().add_player(client_info) {
                 return None;
             }
+            log_for_client(client_id, &format!("Joining existing game: {:?}", mode));
             wrapper.mark_changed();
             wrapper.clone()
         } else {
+            log_for_client(client_id, &format!("Creating and joining game: {:?}", mode));
             let mut game = Game::new(mode);
             let ok = game.add_player(client_info);
             assert!(ok);
@@ -125,7 +126,8 @@ impl Lobby {
         Some(wrapper)
     }
 
-    pub fn leave_game(&mut self, client_id: u64, mode: Mode) {
+    fn leave_game(&mut self, client_id: u64, mode: Mode) {
+        log_for_client(client_id, &format!("Leaving game: {:?}", mode));
         let last_player_removed = if let Some(wrapper) = self.game_wrappers.get(&mode) {
             let mut game = wrapper.game.lock().unwrap();
             game.remove_player_if_exists(client_id);

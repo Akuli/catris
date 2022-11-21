@@ -1,4 +1,3 @@
-use crate::client::ClientLogger;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
 use crate::escapes::TerminalType;
@@ -21,7 +20,7 @@ fn square_content_to_string(
     content: SquareContent,
     falling_block_data: Option<(BlockRelativeCoords, (i8, i8))>,
 ) -> String {
-    let mut buffer = RenderBuffer::new(TerminalType::ANSI);
+    let mut buffer = RenderBuffer::new(TerminalType::Ansi);
     buffer.resize(80, 24); // smallest size allowed
     content.render(&mut buffer, 0, 0, falling_block_data, (0, 1));
     let chars = [buffer.get_char(0, 0), buffer.get_char(1, 0)];
@@ -75,7 +74,7 @@ fn dump_game_state(game: &Game) -> Vec<String> {
             if !game.is_valid_landed_block_coords(point) {
                 row.push_str("..");
             } else if let Some((content, relative_coords, player_idx)) =
-                game.get_falling_square((x as i16, y as i16))
+                game.get_falling_square(point)
             {
                 let (down_x, down_y) = game.players[player_idx].borrow().down_direction;
                 let text = square_content_to_string(
@@ -87,7 +86,7 @@ fn dump_game_state(game: &Game) -> Vec<String> {
                 } else {
                     row.push_str(&text);
                 }
-            } else if let Some(content) = game.get_landed_square((x as i16, y as i16)) {
+            } else if let Some(content) = game.get_landed_square(point) {
                 let text = square_content_to_string(content, None);
                 if text == "  " {
                     row.push_str("LL");
@@ -115,9 +114,6 @@ fn create_game(mode: Mode, player_count: usize, shape: Shape) -> Game {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
     game
@@ -378,9 +374,10 @@ fn test_ring_mode_clearing() {
     let mut game = create_game(Mode::Ring, 2, Shape::L);
     for x in -6..=6 {
         for y in -6..=6 {
-            if game.is_valid_landed_block_coords((x, y)) && (x, y) != (5, -2) {
+            let point = (x + RING_OUTER_RADIUS, y + RING_OUTER_RADIUS);
+            if game.is_valid_landed_block_coords(point) && (x, y) != (5, -2) {
                 game.set_landed_square(
-                    (x, y),
+                    point,
                     Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
                 );
             }
@@ -389,11 +386,11 @@ fn test_ring_mode_clearing() {
 
     // These unrelated squares would be deleted if the clears were done in the wrong order
     game.set_landed_square(
-        (6, -7),
+        (RING_OUTER_RADIUS + 6, RING_OUTER_RADIUS - 7),
         Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
     );
     game.set_landed_square(
-        (0, -7),
+        (RING_OUTER_RADIUS, RING_OUTER_RADIUS - 7),
         Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
     );
 
@@ -465,9 +462,10 @@ fn test_ring_mode_double_clear() {
     let mut game = create_game(Mode::Ring, 2, Shape::L);
     for x in -5..=5 {
         for y in -5..=5 {
-            if game.is_valid_landed_block_coords((x, y)) && (x.abs() != 5 || y.abs() != 5) {
+            let point = (x + RING_OUTER_RADIUS, y + RING_OUTER_RADIUS);
+            if game.is_valid_landed_block_coords(point) && (x.abs() != 5 || y.abs() != 5) {
                 game.set_landed_square(
-                    (x, y),
+                    point,
                     Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
                 );
             }
@@ -475,10 +473,10 @@ fn test_ring_mode_double_clear() {
     }
 
     // bigger part of corner missing in top left, shouldn't affect anything
-    game.set_landed_square((-4, -5), None);
+    game.set_landed_square((RING_OUTER_RADIUS - 4, RING_OUTER_RADIUS - 5), None);
     // also check how this square moves during the clears
     game.set_landed_square(
-        (5, -6),
+        (RING_OUTER_RADIUS + 5, RING_OUTER_RADIUS - 6),
         Some(SquareContent::with_color(Color::YELLOW_FOREGROUND)),
     );
 
@@ -743,9 +741,6 @@ fn create_ring_game_with_drills() -> Game {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
     game
@@ -838,16 +833,13 @@ fn test_displaying_landed_drills() {
             name: format!("Player {}", i),
             client_id: i as u64,
             color: Color::RED_FOREGROUND.fg,
-            logger: ClientLogger {
-                client_id: i as u64,
-            },
         });
     }
 
     // Make sure that drills show up correctly once landed
     let has_landed_squares = |game: &Game| {
-        let r = RING_OUTER_RADIUS as i16;
-        (-r..=r).any(|x| (-r..=r).any(|y| game.get_landed_square((x, y)).is_some()))
+        let size = 2 * RING_OUTER_RADIUS + 1;
+        (0..size).any(|x| (0..size).any(|y| game.get_landed_square((x, y)).is_some()))
     };
 
     let mut dump_before_land = vec![];

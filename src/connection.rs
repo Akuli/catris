@@ -2,7 +2,6 @@ use crate::escapes::parse_key_press;
 use crate::escapes::KeyPress;
 use crate::ip_tracker::ForgetClientOnDrop;
 use crate::ip_tracker::IpTracker;
-use crate::ClientLogger;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
 use futures_util::SinkExt;
@@ -34,11 +33,10 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
 pub fn get_websocket_proxy_ip() -> Option<IpAddr> {
-    let string = env::var("CATRIS_WEBSOCKET_PROXY_IP").unwrap_or("".to_string());
-    if string.is_empty() {
-        None
-    } else {
-        Some(string.parse().unwrap())
+    match env::var("CATRIS_WEBSOCKET_PROXY_IP").as_ref() {
+        Err(_) => None, // env var doesn't exist
+        Ok(s) if s.is_empty() => None,
+        Ok(s) => Some(s.parse().unwrap()),
     }
 }
 
@@ -168,22 +166,19 @@ impl Receiver {
     }
 
     pub async fn receive_key_press(&mut self) -> Result<KeyPress, io::Error> {
-        match self {
-            Self::Test(string) => {
-                if string == "BLOCK" {
-                    loop {
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
+        if let Self::Test(string) = self {
+            if string == "BLOCK" {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
-                return match parse_key_press(string.as_bytes()) {
-                    Some((key, bytes_used)) => {
-                        *string = string[bytes_used..].to_string();
-                        Ok(key)
-                    }
-                    None => Err(connection_closed_error()),
-                };
             }
-            _ => {}
+            return match parse_key_press(string.as_bytes()) {
+                Some((key, bytes_used)) => {
+                    *string = string[bytes_used..].to_string();
+                    Ok(key)
+                }
+                None => Err(connection_closed_error()),
+            };
         }
 
         loop {
@@ -265,7 +260,7 @@ In another terminal:
 You should see the dummy IP 12.34.56.78 printed.
 */
 struct CheckRealIpCallback {
-    logger: ClientLogger,
+    client_id: u64,
     ip_tracker: Arc<Mutex<IpTracker>>,
     decrementers: Vec<ForgetClientOnDrop>,
 }
@@ -292,7 +287,7 @@ impl Callback for &mut CheckRealIpCallback {
             })?;
 
         self.decrementers.push(
-            IpTracker::track(self.ip_tracker.clone(), ip, self.logger).map_err(|_| {
+            IpTracker::track(self.ip_tracker.clone(), ip, self.client_id).map_err(|_| {
                 http::Response::builder()
                     .status(StatusCode::TOO_MANY_REQUESTS)
                     .body(None)
@@ -305,7 +300,7 @@ impl Callback for &mut CheckRealIpCallback {
 
 pub async fn initialize_connection(
     ip_tracker: Arc<Mutex<IpTracker>>,
-    logger: ClientLogger,
+    client_id: u64,
     socket: TcpStream,
     source_ip: IpAddr,
     is_websocket: bool,
@@ -326,15 +321,15 @@ pub async fn initialize_connection(
     let sender;
     let receiver;
 
-    let mut decrementer: Option<ForgetClientOnDrop>;
-    if is_websocket && get_websocket_proxy_ip().is_some() {
-        // Websocket connections should go through nginx and arrive to this process from the proxy ip.
-        // The actual client IP is in X-Real-IP header.
-        decrementer = None; // created later
-    } else {
-        // Client connects to rust program directly. Log and limit access with source ip.
-        decrementer = Some(IpTracker::track(ip_tracker.clone(), source_ip, logger)?);
-    }
+    let mut decrementer: Option<ForgetClientOnDrop> =
+        if is_websocket && get_websocket_proxy_ip().is_some() {
+            // Websocket connections should go through nginx and arrive to this process from the proxy ip.
+            // The actual client IP is in X-Real-IP header.
+            None // created later
+        } else {
+            // Client connects to rust program directly. Log and limit access with source ip.
+            Some(IpTracker::track(ip_tracker.clone(), source_ip, client_id)?)
+        };
 
     let recv_state = ReceiveState {
         buffer: VecDeque::new(),
@@ -356,8 +351,8 @@ pub async fn initialize_connection(
         if get_websocket_proxy_ip().is_some() {
             let mut cb = CheckRealIpCallback {
                 decrementers: vec![],
-                ip_tracker: ip_tracker,
-                logger: logger,
+                ip_tracker,
+                client_id,
             };
             ws = tokio_tungstenite::accept_hdr_async_with_config(socket, &mut cb, Some(config))
                 .await

@@ -1,4 +1,4 @@
-use crate::ClientLogger;
+use crate::client::log_for_client;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::io;
@@ -14,7 +14,7 @@ pub struct IpTracker {
 }
 
 pub struct ForgetClientOnDrop {
-    logger: ClientLogger,
+    client_id: u64,
     ip: IpAddr,
     ip_tracker: Arc<Mutex<IpTracker>>,
 }
@@ -31,8 +31,10 @@ impl Drop for ForgetClientOnDrop {
         }
 
         let total: usize = tracker.client_counts_by_ip.values().sum();
-        self.logger
-            .log(&format!("There are now {} connected clients", total));
+        log_for_client(
+            self.client_id,
+            &format!("There are now {} connected clients", total),
+        );
     }
 }
 
@@ -47,7 +49,7 @@ impl IpTracker {
     pub fn track(
         tracker_arcmutex: Arc<Mutex<IpTracker>>,
         ip: IpAddr,
-        logger: ClientLogger,
+        client_id: u64,
     ) -> Result<ForgetClientOnDrop, io::Error> {
         {
             let mut tracker = tracker_arcmutex.lock().unwrap();
@@ -64,10 +66,13 @@ impl IpTracker {
                 .filter(|(_, recent_ip)| *recent_ip == ip)
                 .count();
             if n >= 5 {
-                logger.log(&format!(
-                    "This is the {}th connection from IP address {} within the last minute",
-                    n, ip
-                ));
+                log_for_client(
+                    client_id,
+                    &format!(
+                        "This is the {}th connection from IP address {} within the last minute",
+                        n, ip
+                    ),
+                );
             }
 
             let old_count = *tracker.client_counts_by_ip.get(&ip).unwrap_or(&0);
@@ -83,13 +88,16 @@ impl IpTracker {
             tracker.client_counts_by_ip.insert(ip, old_count + 1);
 
             let total: usize = tracker.client_counts_by_ip.values().sum();
-            logger.log(&format!("There are now {} connected clients", total));
+            log_for_client(
+                client_id,
+                &format!("There are now {} connected clients", total),
+            );
         }
 
         Ok(ForgetClientOnDrop {
             ip,
             ip_tracker: tracker_arcmutex,
-            logger,
+            client_id,
         })
     }
 }

@@ -1,8 +1,8 @@
 #[macro_use(lazy_static)]
 extern crate lazy_static;
 
+use crate::client::log_for_client;
 use crate::client::Client;
-use crate::client::ClientLogger;
 use crate::connection::get_websocket_proxy_ip;
 use crate::connection::initialize_connection;
 use crate::connection::Receiver;
@@ -43,9 +43,10 @@ async fn handle_receiving(
     used_names: Arc<Mutex<HashSet<String>>>,
 ) -> Result<(), io::Error> {
     views::ask_name(&mut client, used_names).await?;
-    client
-        .logger()
-        .log(&format!("Name asking done: {}", client.get_name().unwrap()));
+    log_for_client(
+        client.id,
+        &format!("Name asking done: {}", client.get_name().unwrap()),
+    );
 
     let want_new_lobby = views::ask_if_new_lobby(&mut client).await?;
     if want_new_lobby {
@@ -122,7 +123,7 @@ pub async fn detect_terminal_type(
     sender.send(message.as_bytes()).await?;
 
     match receiver.receive_key_press().await? {
-        KeyPress::Character('a') => return Ok(TerminalType::ANSI),
+        KeyPress::Character('a') => return Ok(TerminalType::Ansi),
         KeyPress::Character('v') => return Ok(TerminalType::VT52),
         KeyPress::Character('\x1b') => {
             // Escape character, probably in response to ANSI DSR or VT52 ident
@@ -147,7 +148,7 @@ pub async fn detect_terminal_type(
                             receiver.receive_key_press().await?,
                             KeyPress::Character('R')
                         ) {
-                            return Ok(TerminalType::ANSI);
+                            return Ok(TerminalType::Ansi);
                         }
                         n += 1;
                     }
@@ -158,14 +159,14 @@ pub async fn detect_terminal_type(
         _ => {}
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         ErrorKind::ConnectionAborted,
         "unable to detect terminal type",
-    ));
+    ))
 }
 
 async fn handle_connection_until_error(
-    logger: ClientLogger,
+    client_id: u64,
     socket: TcpStream,
     source_ip: IpAddr,
     lobbies: lobby::Lobbies,
@@ -174,16 +175,19 @@ async fn handle_connection_until_error(
     is_websocket: bool,
 ) -> Result<(), io::Error> {
     let (mut sender, mut receiver, _decrementer) =
-        initialize_connection(ip_tracker, logger, socket, source_ip, is_websocket).await?;
+        initialize_connection(ip_tracker, client_id, socket, source_ip, is_websocket).await?;
 
     let terminal_type = timeout(
         Duration::from_secs(20),
         detect_terminal_type(&mut sender, &mut receiver),
     )
     .await??;
-    logger.log(&format!("Terminal type detected: {:?}", terminal_type));
+    log_for_client(
+        client_id,
+        &format!("Terminal type detected: {:?}", terminal_type),
+    );
 
-    let client = Client::new(logger.client_id, receiver, terminal_type);
+    let client = Client::new(client_id, receiver, terminal_type);
     let render_data = client.render_data.clone();
 
     let result = tokio::select! {
@@ -215,15 +219,14 @@ async fn handle_connection(
     // not sure what ordering to use, so choosing the one with most niceness guarantees
     let client_id = CLIENT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-    let logger = ClientLogger { client_id };
     if is_websocket {
-        logger.log("New websocket connection");
+        log_for_client(client_id, "New websocket connection");
     } else {
-        logger.log("New raw TCP connection");
+        log_for_client(client_id, "New raw TCP connection");
     }
 
     let error = handle_connection_until_error(
-        logger,
+        client_id,
         socket,
         source_ip,
         lobbies,
@@ -233,7 +236,7 @@ async fn handle_connection(
     )
     .await
     .unwrap_err();
-    logger.log(&format!("Disconnected: {}", error));
+    log_for_client(client_id, &format!("Disconnected: {}", error));
 }
 
 #[tokio::main]

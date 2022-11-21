@@ -1,3 +1,4 @@
+use crate::client::log_for_client;
 use crate::client::Client;
 use crate::escapes::Color;
 use crate::escapes::KeyPress;
@@ -296,9 +297,7 @@ pub async fn ask_if_new_lobby(client: &mut Client) -> Result<bool, io::Error> {
         Ok(lines) => lines,
         Err(e) if e.kind() == ErrorKind::NotFound => vec![],
         Err(e) => {
-            client
-                .logger()
-                .log(&format!("reading motd file failed: {:?}", e));
+            log_for_client(client.id, &format!("reading motd file failed: {:?}", e));
             vec![]
         }
     };
@@ -1042,7 +1041,7 @@ mod test {
         let mut client = Client::new(
             123,
             Receiver::Test("WindowsUsesCRLF\r\n".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
             .await
@@ -1055,7 +1054,7 @@ mod test {
         let mut client = Client::new(
             123,
             Receiver::Test("Oops\n".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_err());
@@ -1070,7 +1069,7 @@ mod test {
         let mut client = Client::new(
             123,
             Receiver::Test("linux_usr\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
             .await
@@ -1083,7 +1082,7 @@ mod test {
         let mut client = Client::new(
             123,
             Receiver::Test("VeryVeryLongNameGoesHere\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
             .await
@@ -1099,7 +1098,7 @@ mod test {
     async fn test_empty_name() {
         for input in ["\r", "    \r"] {
             let mut client =
-                Client::new(123, Receiver::Test(input.to_string()), TerminalType::ANSI);
+                Client::new(123, Receiver::Test(input.to_string()), TerminalType::Ansi);
             let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
             assert!(result.is_err());
             assert_eq!(client.get_name(), None);
@@ -1111,7 +1110,7 @@ mod test {
 
     #[tokio::test]
     async fn test_invalid_character_in_name() {
-        let mut client = Client::new(123, Receiver::Test(":]\r".to_string()), TerminalType::ANSI);
+        let mut client = Client::new(123, Receiver::Test(":]\r".to_string()), TerminalType::Ansi);
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_err());
         assert_eq!(client.get_name(), None);
@@ -1127,7 +1126,7 @@ mod test {
         let mut alice = Client::new(
             1,
             Receiver::Test("my NAME\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut alice, names.clone()).await;
         assert!(result.is_ok());
@@ -1137,7 +1136,7 @@ mod test {
         let mut bob = Client::new(
             123,
             Receiver::Test("MY name\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_err());
@@ -1150,7 +1149,7 @@ mod test {
         bob = Client::new(
             123,
             Receiver::Test("MY name\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut bob, names.clone()).await;
         assert!(result.is_ok());
@@ -1184,7 +1183,7 @@ mod test {
         let mut client = Client::new(
             123,
             Receiver::Test("John7\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         tokio::fs::write("catris_motd.txt", "Hello World\nSecond line of text\n")
             .await
@@ -1213,7 +1212,7 @@ mod test {
                 )
                 .to_string(),
             ),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
@@ -1238,7 +1237,7 @@ mod test {
         let mut client = Client::new(
             1,
             Receiver::Test("Alice\rq\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
@@ -1253,7 +1252,7 @@ mod test {
         let mut client = Client::new(
             2,
             Receiver::Test("Bob\r\rq\r".to_string()),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
@@ -1276,7 +1275,7 @@ mod test {
         let mut client = Client::new(
             client_id,
             Receiver::Test(format!("{}\r{}\r", name, id_to_enter)),
-            TerminalType::ANSI,
+            TerminalType::Ansi,
         );
         let result = ask_name(&mut client, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
@@ -1289,7 +1288,7 @@ mod test {
         let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
 
         // Alice makes a new lobby
-        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()), TerminalType::ANSI);
+        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()), TerminalType::Ansi);
         let result = ask_name(&mut alice, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
         alice.make_lobby(lobbies.clone());
@@ -1336,7 +1335,7 @@ mod test {
     async fn test_lobby_full() {
         let lobbies = Arc::new(Mutex::new(WeakValueHashMap::new()));
 
-        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()), TerminalType::ANSI);
+        let mut alice = Client::new(1, Receiver::Test("Alice\r".to_string()), TerminalType::Ansi);
         let result = ask_name(&mut alice, Arc::new(Mutex::new(HashSet::new()))).await;
         assert!(result.is_ok());
         alice.make_lobby(lobbies.clone());
@@ -1377,7 +1376,7 @@ mod test {
                 // Other clients skip the game choosing menu in this test
                 format!("Client {}\r{}\rR", i, lobby_id.as_ref().unwrap())
             };
-            let mut client = Client::new(i, Receiver::Test(text), TerminalType::ANSI);
+            let mut client = Client::new(i, Receiver::Test(text), TerminalType::Ansi);
 
             ask_name(&mut client, Arc::new(Mutex::new(HashSet::new())))
                 .await
@@ -1449,7 +1448,7 @@ mod test {
             },
         ];
 
-        let mut client = Client::new(1, Receiver::Test("\r".to_string()), TerminalType::ANSI);
+        let mut client = Client::new(1, Receiver::Test("\r".to_string()), TerminalType::Ansi);
 
         let status = GameStatus::GameOver(HighScoresStatus::Loaded(HighScoresForGame {
             this_game_result,
