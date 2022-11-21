@@ -179,7 +179,7 @@ impl Game {
     pub fn new(mode: Mode) -> Self {
         let landed_rows = match mode {
             Mode::Traditional => vec![vec![]; 20],
-            Mode::Opposite => vec![vec![]; 24],
+            Mode::Opposite => vec![vec![]; 19],
             Mode::Bottle => vec![vec![]; 21],
             Mode::Ring => {
                 let size = (2 * RING_OUTER_RADIUS + 1) as usize;
@@ -283,17 +283,15 @@ impl Game {
                         _ => panic!(),
                     }
                 }
-                for (offset, player) in top_players.iter().enumerate() {
-                    player.borrow_mut().spawn_point = (
-                        ((2 * offset + 1) * self.get_width() / (2 * top_players.len())) as i32,
-                        -(self.get_height() as i32),
-                    );
+                // Spawn y is defined (along with deciding the direction) when adding player.
+                // We only need to set x.
+                for (i, player) in top_players.iter().enumerate() {
+                    player.borrow_mut().spawn_point.0 =
+                        ((2 * i + 1) * self.get_width() / (2 * top_players.len())) as i32;
                 }
-                for (offset, player) in bottom_players.iter().enumerate() {
-                    player.borrow_mut().spawn_point = (
-                        ((2 * offset + 1) * self.get_width() / (2 * top_players.len())) as i32,
-                        -(self.get_height() as i32),
-                    );
+                for (i, player) in bottom_players.iter().rev().enumerate() {
+                    player.borrow_mut().spawn_point.0 =
+                        ((2 * i + 1) * self.get_width() / (2 * bottom_players.len())) as i32;
                 }
             }
             Mode::Bottle => {
@@ -405,12 +403,35 @@ impl Game {
         let spawn_point = match self.mode {
             Mode::Traditional | Mode::Bottle => (0, 0), // dummy value to be changed soon
             Mode::Ring => (0, -(RING_OUTER_RADIUS as i32)),
-            Mode::Opposite => (0, -(self.landed_rows.len() as i32) / 2),
+            Mode::Opposite => {
+                if down_direction == (0, 1) {
+                    (0, 0)
+                } else {
+                    (0, self.landed_rows.len() as i32)
+                }
+            }
         };
+        let center_of_local_coordinates = match self.mode {
+            Mode::Traditional | Mode::Bottle => (0, 0),
+            Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
+            Mode::Opposite => {
+                if down_direction == (0, 1) {
+                    (0, 0)
+                } else {
+                    (self.get_width() as i16, self.get_height() as i16)
+                }
+            }
+        };
+
+        dbg!(down_direction);
+        dbg!(spawn_point);
+        dbg!(center_of_local_coordinates);
+
         self.players.push(RefCell::new(Player::new(
             spawn_point,
             client_info,
             down_direction,
+            center_of_local_coordinates,
             self.mode,
             (self.normal_block_factory)(),
             (self.normal_block_factory)(),

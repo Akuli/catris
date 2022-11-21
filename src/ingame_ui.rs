@@ -16,24 +16,27 @@ use std::cmp::max;
 
 #[allow(clippy::too_many_arguments)]
 fn render_name_lines(
-    players: &[RefCell<Player>],
+    players: &[&RefCell<Player>],
     highlight_client_id: u64,
     buffer: &mut RenderBuffer,
     x_offset: usize,
-    width_per_player: usize,
+    widths: &[usize],
     name_y: usize,
     line_y: usize,
     o_ends: bool,
 ) {
-    for (i, player) in players.iter().enumerate() {
-        let left = x_offset + (i * width_per_player);
-        let right = left + width_per_player;
-        let text = player.borrow().get_name_string(width_per_player);
+    assert!(players.len() == widths.len());
+
+    for (i, (&width, player)) in widths.iter().zip(players).enumerate() {
+        let mut left: usize = widths[..i].iter().sum();
+        left += x_offset;
+        let right = left + width;
+        let text = player.borrow().get_name_string(width);
         let color = Color {
             fg: player.borrow().color,
             bg: 0,
         };
-        let free_space = width_per_player - text.chars().count();
+        let free_space = width - text.chars().count();
         buffer.add_text_with_color(left + (free_space / 2), name_y, &text, color);
 
         let line_character = if player.borrow().client_id == highlight_client_id {
@@ -178,22 +181,9 @@ fn prepare_player_for_ring_game_rendering(
         .unwrap_or_else(|| ("".to_string(), Color::DEFAULT))
 }
 
-fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
-    // TODO: special-casing for Opposite mode
-    match game.mode {
-        Mode::Traditional | Mode::Opposite => {
+fn render_simple_walls(game: &Game, buffer: &mut RenderBuffer) {
             buffer.set_char(0, 1, 'o');
             buffer.set_char(2 * game.get_width() + 1, 1, 'o');
-            render_name_lines(
-                &game.players,
-                client_id,
-                buffer,
-                1,
-                2 * game.get_width_per_player().unwrap(),
-                0,
-                1,
-                false,
-            );
 
             for y in 2..(2 + game.get_height()) {
                 buffer.set_char(0, y, '|');
@@ -206,6 +196,65 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
             for x in 1..(2 * game.get_width() + 1) {
                 buffer.set_char(x, bottom_y, '-');
             }
+}
+
+fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
+    match game.mode {
+        Mode::Traditional => {
+            render_simple_walls(game, buffer);
+            render_name_lines(
+                &game.players.iter().map(|p| p).collect::<Vec<_>>(),
+                client_id,
+                buffer,
+                1,
+                &vec![2 * game.get_width_per_player().unwrap() ; game.players.len()],
+                0,
+                1,
+                false,
+            );
+
+        }
+        Mode::Opposite => {
+            render_simple_walls(game, buffer);
+
+            let mut top_players = vec![];
+            let mut bottom_players = vec![]
+            ;
+            for player in &game.players {
+                match player.borrow().down_direction {
+                    (0,1)=>top_players.push(player),
+                    (0,-1)=>bottom_players.push(player),
+                    _=>panic!(),
+                }
+            }
+
+            // Divide the space evenly for all top and bottom players.
+            let top_widths: Vec<usize> = (0..top_players.len()).map(|i| i * game.get_width() / top_players.len()).collect();
+            let bottom_widths: Vec<usize> = (0..bottom_players.len()).map(|i| i * game.get_width() / bottom_players.len()).collect();
+
+            // TODO: handle all players on same side better
+            if !top_widths.is_empty(){
+            render_name_lines(
+                &top_players,
+                client_id,
+                buffer,
+                1,
+                &top_widths,
+                0,
+                1,
+                false,
+            );}
+            if !top_widths.is_empty(){
+            render_name_lines(
+                &bottom_players,
+                client_id,
+                buffer,
+                1,
+                &bottom_widths,
+                0,
+                1,
+                false,
+            );}
         }
         Mode::Bottle => {
             for (player_idx, player) in game.players.iter().enumerate() {
@@ -229,11 +278,11 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 }
             }
             render_name_lines(
-                &game.players,
+                &game.players.iter().map(|p| p).collect::<Vec<_>>(),
                 client_id,
                 buffer,
                 0,
-                BOTTLE_MAP[0].len(),
+                &vec![BOTTLE_MAP[0].len() ; game.players.len()],
                 BOTTLE_MAP.len() + 1,
                 BOTTLE_MAP.len(),
                 true,
@@ -374,8 +423,9 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     let (extra_w, extra_h) = match game.mode {
-        Mode::Traditional | Mode::Opposite => (2, 3), // 3 = player names, dashes below them, dashes at bottom
-        Mode::Bottle | Mode::Ring => (2, 2),
+        Mode::Traditional => (2, 3), // 3 = player names, dashes below them, dashes at bottom
+        Mode::Bottle | Mode::Ring => (2, 2),  // border on each side
+        Mode::Opposite => (2, 4),  // 4 = names and dashes on top and bottom
     };
     (game.get_width() * 2 + extra_w, game.get_height() + extra_h)
 }

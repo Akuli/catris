@@ -1,7 +1,6 @@
 use crate::game_logic::blocks::FallingBlock;
 use crate::game_logic::game::wrap_around;
 use crate::game_logic::game::Mode;
-use crate::game_logic::game::RING_OUTER_RADIUS;
 use crate::game_logic::PlayerPoint;
 use crate::game_logic::WorldPoint;
 use crate::lobby::ClientInfo;
@@ -32,6 +31,7 @@ pub struct Player {
     pub block_in_hold: Option<FallingBlock>,
     pub fast_down: bool,
     pub down_direction: WorldPoint, // this vector always has length 1
+    pub center_of_local_coordinates: WorldPoint,
     game_mode: Mode,
 }
 
@@ -40,6 +40,7 @@ impl Player {
         spawn_point: PlayerPoint,
         client_info: &ClientInfo,
         down_direction: WorldPoint,
+        center_of_local_coordinates: WorldPoint,
         game_mode: Mode,
         first_block: FallingBlock,
         second_block: FallingBlock,
@@ -54,6 +55,7 @@ impl Player {
             block_in_hold: None,
             fast_down: false,
             down_direction,
+            center_of_local_coordinates,
             game_mode,
         }
     }
@@ -80,10 +82,7 @@ impl Player {
         let x = x as i16;
         let y = y as i16;
         let (down_x, down_y) = self.down_direction;
-        let (offset_x, offset_y) = match self.game_mode {
-            Mode::Traditional | Mode::Bottle => (0, 0),
-            Mode::Ring => (RING_OUTER_RADIUS, RING_OUTER_RADIUS),
-        };
+        let (offset_x, offset_y) = self.center_of_local_coordinates;
 
         // a couple ways to derive this: complex number multiplication, rotation matrices
         // to check, it should return the point unchanged when down_direction is the usual (0,1)
