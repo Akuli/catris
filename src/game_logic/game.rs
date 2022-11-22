@@ -404,6 +404,7 @@ impl Game {
             Mode::Traditional | Mode::Bottle => (0, 0), // dummy value to be changed soon
             Mode::Ring => (0, -(RING_OUTER_RADIUS as i32)),
             Mode::Opposite => {
+                // zero x coordinate will be updated later
                 if down_direction == (0, 1) {
                     (0, 0)
                 } else {
@@ -422,10 +423,6 @@ impl Game {
                 }
             }
         };
-
-        dbg!(down_direction);
-        dbg!(spawn_point);
-        dbg!(center_of_local_coordinates);
 
         self.players.push(RefCell::new(Player::new(
             spawn_point,

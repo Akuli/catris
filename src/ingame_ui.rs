@@ -20,41 +20,35 @@ fn render_name_lines(
     highlight_client_id: u64,
     buffer: &mut RenderBuffer,
     x_offset: usize,
-    widths: &[usize],
+    total_width: usize,
     name_y: usize,
     line_y: usize,
     o_ends: bool,
 ) {
-    assert!(players.len() == widths.len());
+    for (i, player) in players.iter().enumerate() {
+        // Split total width evenly among each player
+        let left = x_offset + total_width * i / players.len();
+        let right = x_offset + total_width * (i + 1) / players.len();
 
-    for (i, (&width, player)) in widths.iter().zip(players).enumerate() {
-        let mut left: usize = widths[..i].iter().sum();
-        left += x_offset;
-        let right = left + width;
-        let text = player.borrow().get_name_string(width);
+        let text = player.borrow().get_name_string(right - left);
+        let free_space = right - left - text.chars().count();
+
         let color = Color {
             fg: player.borrow().color,
             bg: 0,
         };
-        let free_space = width - text.chars().count();
         buffer.add_text_with_color(left + (free_space / 2), name_y, &text, color);
 
-        let line_character = if player.borrow().client_id == highlight_client_id {
-            "="
-        } else {
-            "-"
-        };
-
-        if o_ends {
-            buffer.add_text_with_color(left, line_y, "o", color);
-            buffer.add_text_with_color(right - 1, line_y, "o", color);
-            for x in (left + 1)..(right - 1) {
-                buffer.add_text_with_color(x, line_y, line_character, color);
-            }
-        } else {
-            for x in left..right {
-                buffer.add_text_with_color(x, line_y, line_character, color);
-            }
+        let highlight = player.borrow().client_id == highlight_client_id;
+        for x in left..right {
+            let character = if o_ends && (x == left || x == right - 1) {
+                "o"
+            } else if highlight {
+                "="
+            } else {
+                "-"
+            };
+            buffer.add_text_with_color(x, line_y, character, color);
         }
     }
 }
@@ -182,20 +176,20 @@ fn prepare_player_for_ring_game_rendering(
 }
 
 fn render_simple_walls(game: &Game, buffer: &mut RenderBuffer) {
-            buffer.set_char(0, 1, 'o');
-            buffer.set_char(2 * game.get_width() + 1, 1, 'o');
+    buffer.set_char(0, 1, 'o');
+    buffer.set_char(2 * game.get_width() + 1, 1, 'o');
 
-            for y in 2..(2 + game.get_height()) {
-                buffer.set_char(0, y, '|');
-                buffer.set_char(2 * game.get_width() + 1, y, '|');
-            }
+    for y in 2..(2 + game.get_height()) {
+        buffer.set_char(0, y, '|');
+        buffer.set_char(2 * game.get_width() + 1, y, '|');
+    }
 
-            let bottom_y = 2 + game.get_height();
-            buffer.set_char(0, bottom_y, 'o');
-            buffer.set_char(2 * game.get_width() + 1, bottom_y, 'o');
-            for x in 1..(2 * game.get_width() + 1) {
-                buffer.set_char(x, bottom_y, '-');
-            }
+    let bottom_y = 2 + game.get_height();
+    buffer.set_char(0, bottom_y, 'o');
+    buffer.set_char(2 * game.get_width() + 1, bottom_y, 'o');
+    for x in 1..(2 * game.get_width() + 1) {
+        buffer.set_char(x, bottom_y, '-');
+    }
 }
 
 fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
@@ -207,54 +201,36 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 client_id,
                 buffer,
                 1,
-                &vec![2 * game.get_width_per_player().unwrap() ; game.players.len()],
+                2 * game.get_width(),
                 0,
                 1,
                 false,
             );
-
         }
         Mode::Opposite => {
             render_simple_walls(game, buffer);
 
+            let my_direction = game.players.iter().find(|p| p.borrow().client_id == client_id).unwrap().borrow().down_direction;
+
             let mut top_players = vec![];
-            let mut bottom_players = vec![]
-            ;
+            let mut bottom_players = vec![];
             for player in &game.players {
-                match player.borrow().down_direction {
-                    (0,1)=>top_players.push(player),
-                    (0,-1)=>bottom_players.push(player),
-                    _=>panic!(),
+                if player.borrow().down_direction == my_direction {
+                    top_players.push(player);
+                } else {
+                    bottom_players.push(player);
                 }
             }
 
-            // Divide the space evenly for all top and bottom players.
-            let top_widths: Vec<usize> = (0..top_players.len()).map(|i| i * game.get_width() / top_players.len()).collect();
-            let bottom_widths: Vec<usize> = (0..bottom_players.len()).map(|i| i * game.get_width() / bottom_players.len()).collect();
+            if my_direction == (0, -1) {
+                top_players.reverse();
+                bottom_players.reverse();
+            }
 
-            // TODO: handle all players on same side better
-            if !top_widths.is_empty(){
-            render_name_lines(
-                &top_players,
-                client_id,
-                buffer,
-                1,
-                &top_widths,
-                0,
-                1,
-                false,
-            );}
-            if !top_widths.is_empty(){
-            render_name_lines(
-                &bottom_players,
-                client_id,
-                buffer,
-                1,
-                &bottom_widths,
-                0,
-                1,
-                false,
-            );}
+            // TODO: handle all players on same side better?
+            let w = game.get_width();
+            render_name_lines(&top_players, client_id, buffer, 1, 2 * w, 0, 1, false);
+            render_name_lines(&bottom_players, client_id, buffer, 1, 2 * w, game.get_height() + 3, game.get_height() + 2, false);
         }
         Mode::Bottle => {
             for (player_idx, player) in game.players.iter().enumerate() {
@@ -282,7 +258,7 @@ fn render_walls(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
                 client_id,
                 buffer,
                 0,
-                &vec![BOTTLE_MAP[0].len() ; game.players.len()],
+                BOTTLE_MAP[0].len(),
                 BOTTLE_MAP.len() + 1,
                 BOTTLE_MAP.len(),
                 true,
@@ -424,8 +400,8 @@ fn render_blocks(game: &Game, buffer: &mut RenderBuffer, client_id: u64) {
 fn get_size_without_stuff_on_side(game: &Game) -> (usize, usize) {
     let (extra_w, extra_h) = match game.mode {
         Mode::Traditional => (2, 3), // 3 = player names, dashes below them, dashes at bottom
-        Mode::Bottle | Mode::Ring => (2, 2),  // border on each side
-        Mode::Opposite => (2, 4),  // 4 = names and dashes on top and bottom
+        Mode::Bottle | Mode::Ring => (2, 2), // border on each side
+        Mode::Opposite => (2, 4),    // 4 = names and dashes on top and bottom
     };
     (game.get_width() * 2 + extra_w, game.get_height() + extra_h)
 }
