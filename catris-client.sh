@@ -113,7 +113,7 @@ function receive() {
 function receive_binary_frame_to_stdout() {
     # See "5.2. Base Framing Protocol" in RFC6455
 
-    # bits 0-7: binary 10000100 = hex 0x82
+    # bits 0-7: binary 10000010 = hex 0x82
     #   1       the last frame of a chunk of binary
     #   000     reserved bits
     #   0010    opcode 2 (bytes frame)
