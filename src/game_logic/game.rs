@@ -175,7 +175,7 @@ pub struct Game {
 impl Game {
     pub fn new(mode: Mode) -> Self {
         let landed_rows = match mode {
-            Mode::Traditional => vec![vec![]; 20],
+            Mode::Traditional => vec![vec![]; 25],
             Mode::Bottle => vec![vec![]; 21],
             Mode::Ring => {
                 let size = (2 * RING_OUTER_RADIUS + 1) as usize;
