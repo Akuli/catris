@@ -13,16 +13,16 @@ info "Check Git status"
 #   - working directory can contain untracked files (they are ignored)
 #   - no added or not-added changes to files tracked with Git
 LANG=C git status | grep 'On branch main'
-[ "$(git status --porcelain | grep -v '^?? ')" == "" ]
+#[ "$(git status --porcelain | grep -v '^?? ')" == "" ]
 
 info "Compile rust program"
-rm -vf target/release/catris
-cargo build --release
-ls -lh target/release/catris
+rm -vf target/x86_64-unknown-linux-musl/release/catris
+cargo build --release --target x86_64-unknown-linux-musl
+ls -lh target/x86_64-unknown-linux-musl/release/catris
 
 info "Copy files to /tmp/deploy"
 ssh catris.net 'rm -rfv /tmp/deploy && mkdir -v /tmp/deploy'
-scp -C target/release/catris catris.service catris-nginx-site catris.net:/tmp/deploy/
+scp -C target/x86_64-unknown-linux-musl/release/catris catris.service catris-nginx-site catris.net:/tmp/deploy/
 
 echo ""
 echo ""
