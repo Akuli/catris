@@ -13,7 +13,7 @@ info "Check Git status"
 #   - working directory can contain untracked files (they are ignored)
 #   - no added or not-added changes to files tracked with Git
 LANG=C git status | grep 'On branch main'
-#[ "$(git status --porcelain | grep -v '^?? ')" == "" ]
+[ "$(git status --porcelain | grep -v '^?? ')" == "" ]
 
 info "Compile rust program"
 rm -vf target/x86_64-unknown-linux-musl/release/catris
