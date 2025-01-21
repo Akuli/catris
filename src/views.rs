@@ -920,7 +920,10 @@ async fn show_high_scores_after_game(
 
             render_data
                 .buffer
-                .add_centered_text(19, "Press Enter to continue...");
+                .add_centered_text(19, "High scores older than 90 days are not shown.");
+            render_data
+                .buffer
+                .add_centered_text(20, "Press Enter to continue...");
             render_data.changed.notify_one();
         }
 
@@ -953,7 +956,7 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
     let (sender, mut receiver) = watch::channel(HighScoresStatus::Loading);
     tokio::spawn(game_wrapper::handle_loading_all_high_scores(sender));
 
-    let bottom_text_y = 21;
+    let bottom_text_y = 22;
     let mut mode = Mode::ALL_MODES[0];
     let mut loading_task_done = false;
 
@@ -1001,6 +1004,10 @@ pub async fn show_all_high_scores(client: &mut Client) -> Result<(), io::Error> 
                 }
                 status => render_exceptional_high_scores_status(&mut render_data.buffer, status),
             }
+
+            render_data
+                .buffer
+                .add_centered_text(bottom_text_y-1, "High scores older than 90 days are not shown.");
 
             render_data
                 .buffer
