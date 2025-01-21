@@ -122,11 +122,26 @@ fn append_result_to_file(filename: &str, result: &GameResult) -> Result<(), AnyE
     Ok(())
 }
 
+fn high_score_is_too_old(timestamp: Option<DateTime<Utc>>) -> bool {
+    match timestamp {
+        Some(t) => {
+            let now = Utc::now();
+            let ninety_days_ago = now - chrono::Duration::days(90);
+            t < ninety_days_ago
+        }
+        None => true, // missing timestamps are a legacy thing, must be very old
+    }
+}
+
 // returns Some(i) when high_scores[i] is the newly added game result
 fn add_game_result_if_high_score(
     high_scores: &mut Vec<GameResult>,
     result: GameResult,
 ) -> Option<usize> {
+    if high_score_is_too_old(result.timestamp) {
+        return None;
+    }
+
     // i is location in high scores list, initially top
     // Bring it down until list remains sorted
     let mut i = 0;
@@ -341,23 +356,37 @@ mod test {
             .unwrap()
             .to_string();
 
-        fs::write(
-            &filename,
-            concat!(
-                "catris high scores file v4\n",
-                "traditional\t-\t33\t44\tAlice\tBob\tCharlie\n",
-                "traditional\tABZ019\t55\t66\t#HashTag#\n",
-                "traditional\tABZ019\t4000\t123\tGood player\n",
-                "   # comment line \n",
-                "  ",
-                "",
-                "#traditional\t-\t55\t66\tThis is skipped\n",
-                "# --- upgraded from v3 to v4 ---\n",
-                "bottle\t-\t77\t88\tBottleFoo\n",
-                "traditional\t2022-07-02T23:57:22+00:00\t11\t22.75\tSinglePlayer\n",
+        let current_timestamp = Utc::now().to_rfc3339();
+        let lines = [
+            "catris high scores file v4",
+            &format!(
+                "traditional\t{}\t33\t44\tAlice\tBob\tCharlie",
+                current_timestamp
             ),
-        )
-        .unwrap();
+            &format!("traditional\t{}\t55\t66\t#HashTag#", current_timestamp),
+            &format!("traditional\t{}\t4000\t123\tGood player", current_timestamp),
+            "   # comment line ",
+            "  ",
+            "",
+            &format!(
+                "#traditional\t{}\t55\t66\tThis is skipped",
+                current_timestamp
+            ),
+            "# --- upgraded from v3 to v4 ---",
+            &format!("bottle\t{}\t77\t88\tBottleFoo", current_timestamp),
+            &format!(
+                "traditional\t{}\t11\t22.75\tSinglePlayer",
+                current_timestamp
+            ),
+            // Lines below are ignored because the timestamp is really old or
+            // missing. If the timestamp is missing, it is either "-" or a
+            // lobby ID, and this indicates that the high score is very old
+            // because catris has had timestamps for years.
+            "traditional\t2022-07-02T23:57:22+00:00\t9999\t123\tGrampa Joe",
+            "traditional\t-\t9999\t123\tGrampa Joe",
+            "traditional\tABC123\t9999\t123\tGrampa Joe",
+        ];
+        fs::write(&filename, lines.join("\n")).unwrap();
 
         let mut result = read_matching_high_scores(&filename, Mode::Traditional, false).unwrap();
         assert_eq!(
@@ -369,14 +398,22 @@ mod test {
                     score: 4000,
                     duration: Duration::from_secs(123),
                     players: vec!["Good player".to_string()],
-                    timestamp: None,
+                    timestamp: Some(
+                        DateTime::parse_from_rfc3339(&current_timestamp)
+                            .unwrap()
+                            .into()
+                    ),
                 },
                 GameResult {
                     mode: Mode::Traditional,
                     score: 55,
                     duration: Duration::from_secs(66),
                     players: vec!["#HashTag#".to_string()],
-                    timestamp: None,
+                    timestamp: Some(
+                        DateTime::parse_from_rfc3339(&current_timestamp)
+                            .unwrap()
+                            .into()
+                    ),
                 },
                 GameResult {
                     mode: Mode::Traditional,
@@ -384,7 +421,7 @@ mod test {
                     duration: Duration::from_secs_f32(22.75),
                     players: vec!["SinglePlayer".to_string()],
                     timestamp: Some(
-                        DateTime::parse_from_rfc3339("2022-07-02T23:57:22+00:00")
+                        DateTime::parse_from_rfc3339(&current_timestamp)
                             .unwrap()
                             .into()
                     ),
@@ -397,7 +434,7 @@ mod test {
             score: 3000,
             duration: Duration::from_secs_f32(123.45),
             players: vec!["Second Place".to_string()],
-            timestamp: None,
+            timestamp: Some(Utc::now()),
         };
         let index = add_game_result_if_high_score(&mut result, second_place_result.clone());
         assert_eq!(result.len(), 4);
@@ -417,7 +454,11 @@ mod test {
                     "Bob".to_string(),
                     "Charlie".to_string()
                 ],
-                timestamp: None,
+                timestamp: Some(
+                    DateTime::parse_from_rfc3339(&current_timestamp)
+                        .unwrap()
+                        .into()
+                ),
             }]
         );
     }
