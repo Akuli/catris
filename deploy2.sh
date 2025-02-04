@@ -22,7 +22,7 @@ ls -lh target/x86_64-unknown-linux-musl/release/catris
 
 info "Copy files to /tmp/deploy"
 ssh catris.net 'rm -rfv /tmp/deploy && mkdir -v /tmp/deploy'
-scp -C target/x86_64-unknown-linux-musl/release/catris catris.service catris-nginx-site catris.net:/tmp/deploy/
+scp -C target/x86_64-unknown-linux-musl/release/catris catris.service catris.net:/tmp/deploy/
 
 echo ""
 echo ""
@@ -47,7 +47,6 @@ command='
 && sudo cp /tmp/deploy/catris.service /etc/systemd/system/catris.service
 && sudo systemctl daemon-reload
 && sudo systemctl start catris
-&& sudo cp /tmp/deploy/catris-nginx-site /etc/nginx/sites-available/catris-nginx-site
 && sudo systemctl restart nginx
 '
 # Normalize whitespace
