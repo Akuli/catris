@@ -844,6 +844,18 @@ impl Game {
         return vec![];
     }
 
+    /*
+    TODO: This does not do the right thing in the following corner case:
+    1. A fast-down block moves down. (fast=true)
+    2. A fast-down block moves off to the side, so that it is below a non-fast-down block.
+    3. A non-fast-down block attempts to move down. (fast=false)
+
+    Expected result: unclear how this should be resolved
+    Actual result:   non-fast-down block cannot move and lands to its current location
+
+    Easiest fix is probably creating a "shadow" below slow blocks, so that fast blocks
+    cannot move there...
+    */
     pub fn move_blocks_down(&mut self, fast: bool) -> bool {
         let mut drill_indexes = vec![];
         let mut other_indexes = vec![];
